@@ -1,0 +1,33 @@
+flowchart LR
+    subgraph INPUTS
+        I1[KeyEvent]
+        I2[modes: Vec String]
+        I3[Config]
+    end
+
+    subgraph InputPipeline
+        KC[KeyChord::from_event]
+        REG[InputRegistry]
+        SEQ[ChordSequenceTracker]
+        PROC[process]
+        
+        KC --> PROC
+        REG --> PROC
+        SEQ --> PROC
+    end
+
+    subgraph OUTPUTS
+        O1[Execute ResolvedAction enum]
+        O2[Type KeyChord]
+        O3[Wait hints]
+        O4[Cancel]
+    end
+
+    I1 --> KC
+    I2 --> PROC
+    I3 --> REG
+    
+    PROC --> O1
+    PROC --> O2
+    PROC --> O3
+    PROC --> O4

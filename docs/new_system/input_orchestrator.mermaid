@@ -1,0 +1,36 @@
+flowchart TB
+    KE[KeyEvent] --> IP[InputPipeline]
+    IP -->|PipelineResponse| IO[InputOrchestrator]
+
+    %% Exception: bracketed paste is Event::Paste(String), not KeyEvent.
+    %% It bypasses this flow and is handled at the UI boundary.
+    PASTE[Event::Paste] -.-> UIEX[UI paste exception]
+
+    subgraph IO[InputOrchestrator]
+        PR[PipelineResponse]
+        CHECK{Is CommandExecute?}
+        DIRECT[Use PipelineResponse directly]
+        GETCMD[Get command_input from state]
+        CP[CommandPipeline.process]
+        CR{CommandResponse}
+        RESOLVED[ResolvedAction]
+        INC[CommandIncomplete]
+        UNK[CommandUnknown]
+        EXIT[ExitCommandMode]
+
+        PR --> CHECK
+        CHECK -->|No| DIRECT
+        CHECK -->|Yes| GETCMD
+        GETCMD --> CP
+        CP --> CR
+        CR -->|Execute| RESOLVED
+        CR -->|Incomplete| INC
+        CR -->|Unknown| UNK
+        CR -->|Empty| EXIT
+    end
+
+    DIRECT --> AD[ActionDecider]
+    RESOLVED --> AD
+    INC --> AD
+    UNK --> AD
+    EXIT --> AD

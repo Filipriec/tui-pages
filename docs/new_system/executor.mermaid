@@ -1,0 +1,37 @@
+flowchart TB
+    subgraph INPUTS[Inputs]
+        AR[ActionResolution]
+    end
+
+    AR --> MATCH
+
+    subgraph EXECUTOR[ActionExecutor]
+        MATCH{Resolution type}
+
+        MATCH -->|CanvasLogic| RC[route_canvas]
+        MATCH -->|PageLogic| RP[route_page]
+        MATCH -->|GlobalLogic| RG[route_global]
+        MATCH -->|Type| RT[route_type]
+
+        RC --> ED[FormEditor.execute]
+        RT --> EV[Editor.handle_key_event]
+
+        RP --> BTN{Button Select?}
+        BTN -->|Yes| HB[handle_button]
+        BTN -->|No| HA[handle_action]
+
+        HB --> OA1[Option AppAction]
+        HA --> OA2[Option AppAction]
+
+        OA1 --> CONV[app_action_to_event]
+        OA2 --> CONV
+
+        RG --> OE[Option AppEvent]
+        CONV --> OE2[Option AppEvent]
+    end
+
+    OE --> APPLY[apply_event]
+    OE2 --> APPLY
+
+    APPLY --> NC[NavigationCoordinator]
+    NC --> SYNC[Buffer + Router + FocusManager]

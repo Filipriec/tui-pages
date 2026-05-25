@@ -1,0 +1,47 @@
+flowchart TB
+    subgraph EVENTS[Navigation Events]
+        NE1[NavigateTo]
+        NE2[NextBuffer]
+        NE3[PreviousBuffer]
+        NE4[CloseBuffer]
+    end
+
+    EVENTS --> MATCH
+
+    subgraph NC[NavigationCoordinator]
+        MATCH{Event type}
+
+        MATCH -->|NavigateTo| NT[navigate_to]
+        MATCH -->|Next/Prev| SB[switch_buffer]
+        MATCH -->|Close| CB[close_buffer]
+    end
+
+    subgraph SYNC[Atomic State Sync]
+        S1[Update BufferState]
+        S2[Sync Router]
+        S3[Register FocusManager]
+    end
+
+    NT --> S1
+    SB --> S1
+    CB --> S1
+
+    S1 --> S2
+    S2 --> S3
+
+    subgraph HELPERS[Helpers]
+        H1[sync_router_to_view]
+        H2[get_focus_targets_for_view]
+    end
+
+    S2 -.-> H1
+    S3 -.-> H2
+
+    subgraph RESULT[Result]
+        R1[Navigated]
+        R2[Switched]
+        R3[Closed]
+        R4[NoChange]
+    end
+
+    S3 --> RESULT

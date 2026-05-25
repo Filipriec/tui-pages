@@ -1,0 +1,32 @@
+flowchart TB
+    KE[KeyEvent] --> IP[InputPipeline]
+    IP -->|PipelineResponse| IO[InputOrchestrator]
+
+    %% Exception: bracketed paste is delivered by crossterm as Event::Paste(String),
+    %% not KeyEvent, so it is handled at the UI boundary and applied directly to
+    %% the active Canvas-backed overlay input.
+    PASTE[Event::Paste] -.-> UIEX[UI paste exception path]
+    UIEX -.-> GLOBAL
+
+    IO --> AD[ActionDecider]
+    IO --> FM[FocusManager]
+
+    IO -.->|if CommandExecute| CP[CommandPipeline]
+    CP -->|Resolved / Incomplete / Exit| AD
+
+    FM -->|FocusTarget| AD
+    AD -->|ActionResolution| EX[Executor]
+
+    EX -->|CanvasLogic| CANVAS[Active Editor]
+    EX -->|PageLogic| PAGE[Active Page]
+    EX -->|GlobalLogic| GLOBAL[Sidebar / System]
+
+    subgraph FOCUSABLE[Focusable Components]
+        SIDEBAR[Sidebar]
+        LOGIN[LoginPage]
+        FORM[FormPage]
+        ADMIN[AdminPage]
+    end
+
+    FOCUSABLE -->|register_targets on load| FM
+    FM -->|is_focused query| FOCUSABLE

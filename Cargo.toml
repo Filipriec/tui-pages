@@ -1,0 +1,17 @@
+[package]
+name = "tui-pages"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Reusable input, focus, action routing, and navigation primitives for TUI applications."
+
+[dependencies]
+crossterm = "0.28"
+serde = { version = "1", features = ["derive"], optional = true }
+tracing = "0.1"
+
+[features]
+default = []
+serde = ["dep:serde"]
+
+[workspace]
