@@ -1,5 +1,5 @@
 [package]
-name = "demo"
+name = "full"
 version = "0.1.0"
 edition = "2021"
 
@@ -10,5 +10,3 @@ tui-pages = { path = "../.." }
 crossterm = "0.28"
 ratatui = "0.28"
 anyhow = "1"
-serde = { version = "1", features = ["derive"] }
-toml = "0.8"
