@@ -13,9 +13,13 @@ impl KeyChord {
     }
 
     pub fn from_event(event: &KeyEvent) -> Self {
+        let mut modifiers = event.modifiers;
+        if event.code == KeyCode::BackTab {
+            modifiers -= KeyModifiers::SHIFT;
+        }
         Self {
             code: event.code,
-            modifiers: event.modifiers,
+            modifiers,
         }
     }
 

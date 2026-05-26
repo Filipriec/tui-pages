@@ -57,5 +57,11 @@ pub fn parse_key(token: &str) -> Option<KeyChord> {
         }
     };
 
+    let (code, modifiers) = if code == KeyCode::Tab && modifiers.contains(KeyModifiers::SHIFT) {
+        (KeyCode::BackTab, modifiers - KeyModifiers::SHIFT)
+    } else {
+        (code, modifiers)
+    };
+
     Some(KeyChord::new(code, modifiers))
 }
