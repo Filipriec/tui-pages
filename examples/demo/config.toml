@@ -1,0 +1,20 @@
+[keybindings]
+quit = ["ctrl+q", "ctrl+c", "esc"]
+
+focus_next = ["tab"]
+focus_prev = ["shift+tab", "ctrl+p"]
+move_up = ["up", "k"]
+move_down = ["down", "j"]
+select = ["enter"]
+
+home = ["1"]
+options = ["2"]
+details = ["3"]
+
+previous_buffer = ["["]
+next_buffer = ["]"]
+
+split_pane = ["v"]
+next_pane = ["p"]
+previous_pane = ["shift+p"]
+close_pane = ["x"]

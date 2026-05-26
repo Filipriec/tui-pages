@@ -1,76 +1,81 @@
-//! Demo showcasing tui-pages features with ratatui.
-//!
-//! This example demonstrates:
-//! - Mode-based keybindings (normal, insert, global)
-//! - Focus navigation between interactive elements
-//! - Command palette with fuzzy matching
-//! - Multi-key chord sequences (e.g., "Ctrl+x s")
-//! - Buffer/view history with back navigation
+mod config;
+mod pages;
 
 use anyhow::Result;
-use crossterm::event::MouseEvent;
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
-
 use tui_pages::{
-    modes, ActionContext, ActionOutcome, FocusIntent, FocusTarget, KeyChord, PageSpec,
-    TuiActionHandler, TuiEffect, TuiPages, TuiPagesOutput, TuiPagesStatus,
+    modes, ActionContext, ActionOutcome, FocusIntent, FocusTarget, PageFocusBuilder, PageSpec,
+    PaneSplit, TuiActionHandler, TuiEffect, TuiPages,
 };
 
-mod pages;
+const OPTION_SECTION: usize = 0;
+const OPTIONS: [&str; 4] = ["Fast path", "Detailed view", "Keep pane", "Show message"];
+const BUTTONS: usize = 3;
 
-// ============================================================================
-// Application Types
-// ============================================================================
-
-/// All views/screens in the demo app.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AppView {
+enum AppView {
     Home,
-    Settings,
-    Form,
-    Info,
+    Options,
+    Details,
 }
 
-/// All actions the app can handle.
-///
-/// Using an enum keeps actions type-safe and exhaustive.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AppAction {
-    // Focus navigation
+enum AppAction {
     FocusNext,
     FocusPrev,
-    Activate,
-    // View navigation
-    GoHome,
-    GoSettings,
-    GoForm,
-    GoInfo,
-    GoBack,
-    // Commands
-    Save,
+    MoveUp,
+    MoveDown,
+    Select,
+    Home,
+    Options,
+    Details,
+    NextBuffer,
+    PreviousBuffer,
+    SplitPane,
+    NextPane,
+    PreviousPane,
+    ClosePane,
     Quit,
-    // Special
-    ToggleCommandPalette,
 }
 
-/// App-wide state.
-#[derive(Debug, Default)]
-pub struct AppState {
-    pub saved: bool,
-    pub form_name: String,
-    pub form_email: String,
-    pub command_mode: bool,
-    pub message: Option<String>,
+#[derive(Debug)]
+struct AppState {
+    selected_option: usize,
+    message: String,
 }
 
-// ============================================================================
-// Action Handler
-// ============================================================================
+impl Default for AppState {
+    fn default() -> Self {
+        Self {
+            selected_option: 0,
+            message: "Use 1/2/3 to open pages, [/] to switch buffers, v/p/x for panes.".into(),
+        }
+    }
+}
 
-pub(crate) struct Handler;
+struct Handler;
+
+type DemoTui = TuiPages<
+    AppView,
+    AppAction,
+    AppState,
+    fn(&AppView, &AppState, Option<&FocusTarget>) -> PageSpec,
+    Handler,
+>;
+
+fn page_spec(_view: &AppView, _state: &AppState, _focus: Option<&FocusTarget>) -> PageSpec {
+    let mut focus = PageFocusBuilder::new().section(OPTION_SECTION);
+    for index in 0..BUTTONS {
+        focus = focus.button(index);
+    }
+
+    PageSpec::new()
+        .focus_targets(focus.build())
+        .modes(vec![modes::GENERAL, modes::GLOBAL])
+}
 
 impl TuiActionHandler<AppView, AppAction, AppState> for Handler {
     type Error = std::convert::Infallible;
@@ -81,254 +86,142 @@ impl TuiActionHandler<AppView, AppAction, AppState> for Handler {
         ctx: ActionContext<AppView>,
         state: &mut AppState,
     ) -> Result<ActionOutcome<AppView>, Self::Error> {
-        use TuiEffect::*;
+        let outcome = match action {
+            AppAction::FocusNext => move_top_level(ctx.focus, FocusIntent::Next),
+            AppAction::FocusPrev => move_top_level(ctx.focus, FocusIntent::Prev),
+            AppAction::MoveUp => move_inside_section(ctx.focus, FocusIntent::Prev),
+            AppAction::MoveDown => move_inside_section(ctx.focus, FocusIntent::Next),
+            AppAction::Select => select_focused(ctx, state),
+            AppAction::Home => ActionOutcome::effect(TuiEffect::Navigate(AppView::Home)),
+            AppAction::Options => ActionOutcome::effect(TuiEffect::Navigate(AppView::Options)),
+            AppAction::Details => ActionOutcome::effect(TuiEffect::Navigate(AppView::Details)),
+            AppAction::NextBuffer => ActionOutcome::effect(TuiEffect::NextBuffer),
+            AppAction::PreviousBuffer => ActionOutcome::effect(TuiEffect::PreviousBuffer),
+            AppAction::SplitPane => ActionOutcome::effect(TuiEffect::SplitPane(PaneSplit::Vertical)),
+            AppAction::NextPane => ActionOutcome::effect(TuiEffect::NextPane),
+            AppAction::PreviousPane => ActionOutcome::effect(TuiEffect::PreviousPane),
+            AppAction::ClosePane => ActionOutcome::effect(TuiEffect::ClosePane),
+            AppAction::Quit => ActionOutcome::effect(TuiEffect::Quit),
+        };
 
-        match action {
-            // Focus actions
-            AppAction::FocusNext => {
-                return Ok(ActionOutcome::effect(Focus(FocusIntent::Next)));
-            }
-            AppAction::FocusPrev => {
-                return Ok(ActionOutcome::effect(Focus(FocusIntent::Prev)));
-            }
-            AppAction::Activate => {
-                // Trigger behavior based on current focus target
-                match ctx.focus {
-                    Some(FocusTarget::Button(0)) => {
-                        if ctx.current_view == AppView::Home {
-                            return Ok(ActionOutcome::effect(Navigate(AppView::Settings)));
-                        }
-                    }
-                    Some(FocusTarget::Button(1)) => {
-                        if ctx.current_view == AppView::Home {
-                            return Ok(ActionOutcome::effect(Navigate(AppView::Form)));
-                        }
-                    }
-                    Some(FocusTarget::Button(2)) => {
-                        if ctx.current_view == AppView::Home {
-                            return Ok(ActionOutcome::effect(Focus(FocusIntent::Open(
-                                FocusTarget::Overlay(tui_pages::focus::OverlayKind::CommandBar),
-                            ))));
-                        }
-                    }
-                    _ => {}
-                }
-                return Ok(ActionOutcome::none());
-            }
-
-            // View navigation
-            AppAction::GoHome => return Ok(ActionOutcome::effect(Navigate(AppView::Home))),
-            AppAction::GoSettings => return Ok(ActionOutcome::effect(Navigate(AppView::Settings))),
-            AppAction::GoForm => return Ok(ActionOutcome::effect(Navigate(AppView::Form))),
-            AppAction::GoInfo => return Ok(ActionOutcome::effect(Navigate(AppView::Info))),
-
-            // Buffer/history navigation
-            AppAction::GoBack => {
-                return Ok(ActionOutcome::effect(PreviousBuffer));
-            }
-
-            // Commands
-            AppAction::Save => {
-                state.saved = true;
-                state.message = Some("Saved!".to_string());
-                return Ok(ActionOutcome::effect(RefreshPage));
-            }
-            AppAction::Quit => {
-                return Ok(ActionOutcome::effect(Quit));
-            }
-
-            // Special
-            AppAction::ToggleCommandPalette => {
-                state.command_mode = !state.command_mode;
-                return Ok(ActionOutcome::effect(Focus(FocusIntent::Toggle(
-                    FocusTarget::Overlay(tui_pages::focus::OverlayKind::CommandBar),
-                ))));
-            }
-        }
-    }
-
-    fn handle_text(
-        &mut self,
-        chord: KeyChord,
-        _ctx: ActionContext<AppView>,
-        state: &mut AppState,
-    ) -> Result<ActionOutcome<AppView>, Self::Error> {
-        // Collect text input for form fields
-        if let crossterm::event::KeyCode::Char(c) = chord.code {
-            state.form_name.push(c);
-        }
-        Ok(ActionOutcome::none())
+        Ok(outcome)
     }
 }
 
-// ============================================================================
-// Page Specifications
-// ============================================================================
+fn move_top_level(focus: Option<FocusTarget>, direction: FocusIntent) -> ActionOutcome<AppView> {
+    if matches!(focus, Some(FocusTarget::SectionItem { .. })) {
+        return ActionOutcome::effects([
+            TuiEffect::Focus(FocusIntent::LeaveSection),
+            TuiEffect::Focus(direction),
+        ]);
+    }
 
-fn page_spec(view: &AppView, _state: &AppState, _focus: Option<&FocusTarget>) -> PageSpec {
-    match view {
-        AppView::Home => PageSpec::new()
-            .focus_targets(vec![
-                FocusTarget::Button(0),
-                FocusTarget::Button(1),
-                FocusTarget::Button(2),
-            ])
-            .modes(vec![modes::GENERAL, modes::GLOBAL]),
+    ActionOutcome::effect(TuiEffect::Focus(direction))
+}
 
-        AppView::Settings => PageSpec::new()
-            .focus_targets(vec![
-                FocusTarget::Button(0),
-                FocusTarget::Button(1),
-                FocusTarget::Section(0),
-            ])
-            .modes(vec![modes::GENERAL, modes::GLOBAL]),
+fn move_inside_section(focus: Option<FocusTarget>, direction: FocusIntent) -> ActionOutcome<AppView> {
+    if matches!(focus, Some(FocusTarget::SectionItem { .. })) {
+        return ActionOutcome::effect(TuiEffect::Focus(direction));
+    }
 
-        AppView::Form => PageSpec::new()
-            .focus_targets(vec![
-                FocusTarget::Button(0),
-                FocusTarget::Button(1),
-            ])
-            .modes(vec![modes::GENERAL, modes::NORMAL, modes::GLOBAL])
-            .accepts_text_input(true),
+    ActionOutcome::none()
+}
 
-        AppView::Info => PageSpec::new()
-            .focus_targets(vec![
-                FocusTarget::Button(0),
-                FocusTarget::Button(1),
-            ])
-            .modes(vec![modes::GENERAL, modes::GLOBAL]),
+fn select_focused(ctx: ActionContext<AppView>, state: &mut AppState) -> ActionOutcome<AppView> {
+    match ctx.focus {
+        Some(FocusTarget::Section(OPTION_SECTION)) => {
+            ActionOutcome::effect(TuiEffect::Focus(FocusIntent::EnterSection {
+                item_count: OPTIONS.len(),
+            }))
+        }
+        Some(FocusTarget::SectionItem {
+            section: OPTION_SECTION,
+            item,
+        }) => {
+            state.selected_option = item;
+            state.message = format!("Selected option: {}", OPTIONS[item]);
+            ActionOutcome::effect(TuiEffect::RefreshPage)
+        }
+        Some(FocusTarget::Button(0)) => ActionOutcome::effect(TuiEffect::Navigate(AppView::Home)),
+        Some(FocusTarget::Button(1)) => {
+            ActionOutcome::effect(TuiEffect::Navigate(AppView::Options))
+        }
+        Some(FocusTarget::Button(2)) => {
+            ActionOutcome::effect(TuiEffect::Navigate(AppView::Details))
+        }
+        _ => {
+            state.message = format!("Nothing to select on {:?}", ctx.current_view);
+            ActionOutcome::effect(TuiEffect::RefreshPage)
+        }
     }
 }
 
-// ============================================================================
-// TUI Setup
-// ============================================================================
-
-pub(crate) type Tui = TuiPages<
-    AppView,
-    AppAction,
-    AppState,
-    fn(&AppView, &AppState, Option<&FocusTarget>) -> PageSpec,
-    Handler,
->;
-
-fn build_tui() -> Tui {
-    TuiPages::builder(AppView::Home)
+fn build_tui(config: &config::Keybindings) -> DemoTui {
+    let mut builder = TuiPages::builder(AppView::Home)
         .pages(page_spec as fn(&AppView, &AppState, Option<&FocusTarget>) -> PageSpec)
-        .handler(Handler)
-        // General mode bindings
-        .bind(modes::GENERAL, "tab", AppAction::FocusNext)
-        .bind(modes::GENERAL, "shift+tab", AppAction::FocusPrev)
-        .bind(modes::GENERAL, "enter", AppAction::Activate)
-        .bind(modes::GENERAL, "space", AppAction::Activate)
-        .bind(modes::GENERAL, "h", AppAction::GoHome)
-        .bind(modes::GENERAL, "s", AppAction::GoSettings)
-        .bind(modes::GENERAL, "f", AppAction::GoForm)
-        .bind(modes::GENERAL, "?", AppAction::ToggleCommandPalette)
-        // Normal mode (vim-like)
-        .bind(modes::NORMAL, "j", AppAction::FocusNext)
-        .bind(modes::NORMAL, "k", AppAction::FocusPrev)
-        // Global bindings work in any mode
-        .bind(modes::GLOBAL, "ctrl+q", AppAction::Quit)
-        .bind(modes::GLOBAL, "escape", AppAction::GoBack)
-        .bind(modes::GLOBAL, "ctrl+h", AppAction::GoHome)
-        // Commands
-        .command("Save", ["save", "s"], AppAction::Save)
-        .command("Quit", ["quit", "q"], AppAction::Quit)
-        .command("Settings", ["settings"], AppAction::GoSettings)
-        .command("Form", ["form"], AppAction::GoForm)
-        .command("Info", ["info"], AppAction::GoInfo)
-        .build()
+        .handler(Handler);
+
+    builder = bind_all(builder, modes::GENERAL, &config.focus_next, AppAction::FocusNext);
+    builder = bind_all(builder, modes::GENERAL, &config.focus_prev, AppAction::FocusPrev);
+    builder = bind_all(builder, modes::GENERAL, &config.move_up, AppAction::MoveUp);
+    builder = bind_all(builder, modes::GENERAL, &config.move_down, AppAction::MoveDown);
+    builder = bind_all(builder, modes::GENERAL, &config.select, AppAction::Select);
+    builder = bind_all(builder, modes::GENERAL, &config.home, AppAction::Home);
+    builder = bind_all(builder, modes::GENERAL, &config.options, AppAction::Options);
+    builder = bind_all(builder, modes::GENERAL, &config.details, AppAction::Details);
+    builder = bind_all(builder, modes::GENERAL, &config.previous_buffer, AppAction::PreviousBuffer);
+    builder = bind_all(builder, modes::GENERAL, &config.next_buffer, AppAction::NextBuffer);
+    builder = bind_all(builder, modes::GENERAL, &config.split_pane, AppAction::SplitPane);
+    builder = bind_all(builder, modes::GENERAL, &config.next_pane, AppAction::NextPane);
+    builder = bind_all(builder, modes::GENERAL, &config.previous_pane, AppAction::PreviousPane);
+    builder = bind_all(builder, modes::GENERAL, &config.close_pane, AppAction::ClosePane);
+    builder = bind_all(builder, modes::GLOBAL, &config.quit, AppAction::Quit);
+
+    builder.build()
 }
 
-// ============================================================================
-// Main Event Loop
-// ============================================================================
+fn bind_all<Pages, Handler>(
+    mut builder: tui_pages::TuiPagesBuilder<AppView, AppAction, AppState, (), (), Pages, Handler>,
+    mode: tui_pages::ModeId,
+    bindings: &[String],
+    action: AppAction,
+) -> tui_pages::TuiPagesBuilder<AppView, AppAction, AppState, (), (), Pages, Handler> {
+    for binding in bindings {
+        builder = builder.bind(mode.clone(), binding, action);
+    }
+    builder
+}
 
 fn main() -> Result<()> {
-    // Setup terminal
+    let config = config::Config::load();
+
     enable_raw_mode()?;
     crossterm::execute!(std::io::stderr(), EnterAlternateScreen)?;
 
     let backend = CrosstermBackend::new(std::io::stderr());
     let mut terminal = Terminal::new(backend)?;
+    let mut state = AppState::default();
+    let mut tui = build_tui(&config.keybindings);
+    tui.refresh_page(&state);
 
-    // Create app state and TUI runtime
-    let mut app_state = AppState::default();
-    let mut tui = build_tui();
-
-    // Main event loop
     loop {
-        // Render
-        terminal.draw(|f| {
-            let area = f.area();
-            pages::render(f, area, &tui, &app_state);
-        })?;
+        terminal.draw(|frame| pages::render(frame, &tui, &state))?;
 
-        // Handle input
-        let event = crossterm::event::read()?;
-
-        match event {
+        match crossterm::event::read()? {
             crossterm::event::Event::Key(key) => {
-                let output = tui.handle_key(key, &mut app_state)?;
-
-                if handle_output(output, &mut app_state) {
+                if tui.handle_key(key, &mut state)?.quit_requested {
                     break;
                 }
             }
-            crossterm::event::Event::Mouse(mouse) => {
-                handle_mouse(mouse, &mut app_state, &mut tui);
-            }
-            crossterm::event::Event::Resize(_, _) => {
-                // Ratatui auto-handles resize in draw closure
-            }
-            crossterm::event::Event::FocusGained
+            crossterm::event::Event::Mouse(_) => tui.refresh_page(&state),
+            crossterm::event::Event::Resize(_, _)
+            | crossterm::event::Event::FocusGained
             | crossterm::event::Event::FocusLost
             | crossterm::event::Event::Paste(_) => {}
         }
     }
 
-    // Cleanup
     disable_raw_mode()?;
     crossterm::execute!(std::io::stderr(), LeaveAlternateScreen)?;
-
-    println!("\nThanks for using tui-pages demo!");
-
     Ok(())
-}
-
-fn handle_output(output: TuiPagesOutput<AppAction>, state: &mut AppState) -> bool {
-    match output.status {
-        TuiPagesStatus::ActionHandled => {
-            if output.quit_requested {
-                return true;
-            }
-        }
-        TuiPagesStatus::CommandIncomplete(hints) => {
-            state.message = Some(format!(
-                "Possible: {}",
-                hints.iter()
-                    .map(|h| h.alias.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ));
-        }
-        TuiPagesStatus::CommandUnknown => {
-            state.message = Some("Unknown command. Press ? for palette.".to_string());
-        }
-        TuiPagesStatus::Waiting(_hints) => {
-            // Visual feedback for chord waiting handled in render
-        }
-        TuiPagesStatus::CommandEmpty => {
-            state.command_mode = false;
-        }
-        _ => {}
-    }
-
-    false
-}
-
-fn handle_mouse(_mouse: MouseEvent, state: &mut AppState, tui: &mut Tui) {
-    // Mouse handling would go here
-    tui.refresh_page(state);
 }
