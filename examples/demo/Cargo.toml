@@ -1,0 +1,12 @@
+[package]
+name = "demo"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[dependencies]
+tui-pages = { path = "../.." }
+crossterm = "0.28"
+ratatui = "0.28"
+anyhow = "1"
