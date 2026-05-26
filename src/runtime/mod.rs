@@ -4,6 +4,7 @@ use crate::input::{parse_binding, InputHint, InputPipeline, InputRegistry, KeyCh
 use crate::navigation::{BufferState, PaneSplit};
 use crossterm::event::KeyEvent;
 use std::borrow::Cow;
+use std::error::Error;
 use std::fmt;
 use std::marker::PhantomData;
 
@@ -193,6 +194,32 @@ pub trait TuiActionHandler<V, A, S, D = (), P = ()> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TuiPagesError<E> {
+    Handler(E),
+}
+
+impl<E> fmt::Display for TuiPagesError<E>
+where
+    E: fmt::Display,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TuiPagesError::Handler(error) => write!(f, "handler error: {error}"),
+        }
+    }
+}
+
+impl<E> Error for TuiPagesError<E> where E: Error + 'static {}
+
+impl<E> From<E> for TuiPagesError<E> {
+    fn from(error: E) -> Self {
+        Self::Handler(error)
+    }
+}
+
+pub type TuiPagesResult<T, E> = Result<T, TuiPagesError<E>>;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TuiPagesStatus<A> {
     ActionHandled,
     TextHandled,
@@ -279,7 +306,7 @@ where
         &mut self,
         key: KeyEvent,
         state: &mut S,
-    ) -> Result<TuiPagesOutput<A>, Handler::Error> {
+    ) -> TuiPagesResult<TuiPagesOutput<A>, Handler::Error> {
         let spec = self.current_page_spec(state);
         if self.focus.targets() != spec.focus_targets.as_slice() {
             self.focus.register_page(spec.focus_targets.clone());
@@ -311,7 +338,7 @@ where
         &mut self,
         input: &str,
         state: &mut S,
-    ) -> Result<TuiPagesOutput<A>, Handler::Error> {
+    ) -> TuiPagesResult<TuiPagesOutput<A>, Handler::Error> {
         match self.commands.process(input) {
             CommandResponse::Execute(action) => {
                 let quit_requested = self.dispatch_action(action, state)?;
@@ -393,13 +420,16 @@ where
         &mut self,
         action: A,
         state: &mut S,
-    ) -> Result<bool, Handler::Error> {
+    ) -> TuiPagesResult<bool, Handler::Error> {
         let ctx = ActionContext {
             current_view: self.current_view().clone(),
             focus: self.focus.current(),
             has_overlay: self.focus.has_overlay(),
         };
-        let outcome = self.handler.handle_action(action, ctx, state)?;
+        let outcome = self
+            .handler
+            .handle_action(action, ctx, state)
+            .map_err(TuiPagesError::Handler)?;
         Ok(self.apply_outcome(outcome, state))
     }
 
@@ -407,13 +437,16 @@ where
         &mut self,
         chord: KeyChord,
         state: &mut S,
-    ) -> Result<bool, Handler::Error> {
+    ) -> TuiPagesResult<bool, Handler::Error> {
         let ctx = ActionContext {
             current_view: self.current_view().clone(),
             focus: self.focus.current(),
             has_overlay: self.focus.has_overlay(),
         };
-        let outcome = self.handler.handle_text(chord, ctx, state)?;
+        let outcome = self
+            .handler
+            .handle_text(chord, ctx, state)
+            .map_err(TuiPagesError::Handler)?;
         Ok(self.apply_outcome(outcome, state))
     }
 

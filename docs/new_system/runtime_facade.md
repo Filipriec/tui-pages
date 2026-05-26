@@ -315,6 +315,40 @@ The runtime applies these effects:
 - `TuiEffect::RefreshPage`
 - `TuiEffect::Quit`
 
+## Error Model
+
+Applications keep their own handler error type:
+
+```rust
+impl TuiActionHandler<AppView, AppAction, AppState> for MyHandler {
+    type Error = MyAppError;
+}
+```
+
+Runtime methods return the exported wrapper:
+
+```rust
+TuiPagesResult<TuiPagesOutput<AppAction>, MyAppError>
+```
+
+which is an alias for:
+
+```rust
+Result<TuiPagesOutput<AppAction>, TuiPagesError<MyAppError>>
+```
+
+Currently the runtime error type is intentionally small:
+
+```rust
+pub enum TuiPagesError<E> {
+    Handler(E),
+}
+```
+
+This gives consumers one stable result shape while keeping application failures
+application-owned. More runtime-specific variants should only be added when the
+runtime has real fallible states that should not be represented as no-ops.
+
 ## Compatibility Note
 
 The old lower-level modules can remain available for advanced users. The new

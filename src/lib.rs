@@ -29,5 +29,6 @@ pub use navigation::{
 };
 pub use runtime::{
     modes, ActionContext, ActionOutcome, ModeId, PageProvider, PageSpec, TuiActionHandler,
-    TuiEffect, TuiPages, TuiPagesBuilder, TuiPagesOutput, TuiPagesStatus,
+    TuiEffect, TuiPages, TuiPagesBuilder, TuiPagesError, TuiPagesOutput, TuiPagesResult,
+    TuiPagesStatus,
 };
