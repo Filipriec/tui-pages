@@ -1,0 +1,3 @@
+[submodule "mdbook"]
+	path = mdbook
+	url = git@gitlab.com:filipriec/tui-pages-docs.git
