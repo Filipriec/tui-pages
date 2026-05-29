@@ -1,6 +1,6 @@
 use tui_pages::{
-    BufferState, FocusController, FocusIntent, FocusManager, FocusTarget, NavigationCoordinator,
-    NavigationEvent, NavigationRouter,
+    BufferState, FocusController, FocusIntent, FocusManager, FocusTarget, FocusWrap,
+    NavigationCoordinator, NavigationEvent, NavigationRouter,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,6 +44,35 @@ fn focus_manager_moves_between_buttons_without_wrapping() {
     assert_eq!(focus.current(), Some(FocusTarget::Button(1)));
     focus.apply_focus_intent(FocusIntent::Next);
     assert_eq!(focus.current(), Some(FocusTarget::Button(1)));
+}
+
+#[test]
+fn focus_wrap_is_opt_in() {
+    let mut focus: FocusManager = FocusManager::new();
+    focus.set_focus_wrap(FocusWrap::Wrap);
+    focus.apply_focus_intent(FocusIntent::RegisterPage(vec![
+        FocusTarget::Button(0),
+        FocusTarget::Button(1),
+    ]));
+
+    // Forward off the last element wraps to the first.
+    focus.apply_focus_intent(FocusIntent::Next);
+    assert_eq!(focus.current(), Some(FocusTarget::Button(1)));
+    focus.apply_focus_intent(FocusIntent::Next);
+    assert_eq!(focus.current(), Some(FocusTarget::Button(0)));
+    // Backward off the first wraps to the last.
+    focus.apply_focus_intent(FocusIntent::Prev);
+    assert_eq!(focus.current(), Some(FocusTarget::Button(1)));
+
+    // Default is still clamp.
+    let mut clamped: FocusManager = FocusManager::new();
+    clamped.apply_focus_intent(FocusIntent::RegisterPage(vec![
+        FocusTarget::Button(0),
+        FocusTarget::Button(1),
+    ]));
+    clamped.apply_focus_intent(FocusIntent::Next);
+    clamped.apply_focus_intent(FocusIntent::Next);
+    assert_eq!(clamped.current(), Some(FocusTarget::Button(1)));
 }
 
 #[test]

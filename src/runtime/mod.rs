@@ -1,5 +1,5 @@
 use crate::command::{CommandHint, CommandRegistry, CommandResolver, CommandResponse};
-use crate::focus::{FocusController, FocusIntent, FocusManager, FocusTarget};
+use crate::focus::{FocusController, FocusIntent, FocusManager, FocusTarget, FocusWrap};
 use crate::input::{parse_binding, InputHint, InputPipeline, InputRegistry, KeyChord, KeyMap};
 use crate::navigation::{BufferState, PaneSplit};
 use crossterm::event::KeyEvent;
@@ -495,6 +495,7 @@ pub struct TuiPagesBuilder<V, A, S, O = (), D = (), P = (), Pages = (), Handler 
     command_registry: CommandRegistry<A>,
     input_timeout_ms: u64,
     command_timeout_ms: u64,
+    focus_wrap: FocusWrap,
     pages: Pages,
     handler: Handler,
     _state: PhantomData<S>,
@@ -512,6 +513,7 @@ impl<V, A, S, O, D, P> TuiPagesBuilder<V, A, S, O, D, P, (), ()> {
             command_registry: CommandRegistry::new(),
             input_timeout_ms: 1000,
             command_timeout_ms: 1000,
+            focus_wrap: FocusWrap::default(),
             pages: (),
             handler: (),
             _state: PhantomData,
@@ -549,6 +551,7 @@ impl<V, A, S, O, D, P, Pages, Handler> TuiPagesBuilder<V, A, S, O, D, P, Pages, 
             command_registry: self.command_registry,
             input_timeout_ms: self.input_timeout_ms,
             command_timeout_ms: self.command_timeout_ms,
+            focus_wrap: self.focus_wrap,
             pages,
             handler: self.handler,
             _state: PhantomData,
@@ -569,6 +572,7 @@ impl<V, A, S, O, D, P, Pages, Handler> TuiPagesBuilder<V, A, S, O, D, P, Pages, 
             command_registry: self.command_registry,
             input_timeout_ms: self.input_timeout_ms,
             command_timeout_ms: self.command_timeout_ms,
+            focus_wrap: self.focus_wrap,
             pages: self.pages,
             handler,
             _state: PhantomData,
@@ -576,6 +580,13 @@ impl<V, A, S, O, D, P, Pages, Handler> TuiPagesBuilder<V, A, S, O, D, P, Pages, 
             _dialog: PhantomData,
             _picker: PhantomData,
         }
+    }
+
+    /// Set how focus navigation behaves at the ends of a list — clamp (default)
+    /// or wrap-around. Applies to page focus, section items, and dialog buttons.
+    pub fn focus_wrap(mut self, wrap: FocusWrap) -> Self {
+        self.focus_wrap = wrap;
+        self
     }
 
     pub fn keymap(mut self, mode: impl Into<ModeId>, configure: impl FnOnce(&mut KeyMap<A>)) -> Self {
@@ -618,10 +629,13 @@ impl<V, A, S, O, D, P, Pages, Handler> TuiPagesBuilder<V, A, S, O, D, P, Pages, 
             .fallback_view
             .unwrap_or_else(|| self.initial_view.clone());
 
+        let mut focus = FocusManager::new();
+        focus.set_focus_wrap(self.focus_wrap);
+
         TuiPages {
             input: InputPipeline::new(self.input_registry, self.input_timeout_ms),
             commands: CommandResolver::new(self.command_registry, self.command_timeout_ms),
-            focus: FocusManager::new(),
+            focus,
             buffer: BufferState::new(self.initial_view),
             pages: self.pages,
             handler: self.handler,

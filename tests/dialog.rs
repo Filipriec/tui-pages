@@ -2,7 +2,7 @@
 
 use crossterm::event::{KeyCode, KeyEvent};
 use tui_pages::dialog::{self, DialogData, DialogKey, DialogResult};
-use tui_pages::{FocusController, FocusIntent, FocusManager, FocusTarget};
+use tui_pages::{FocusController, FocusIntent, FocusManager, FocusTarget, FocusWrap};
 
 fn key(code: KeyCode) -> KeyEvent {
     KeyEvent::from(code)
@@ -98,6 +98,23 @@ fn handle_key_drives_the_conventional_bindings() {
         DialogKey::Resolved(DialogResult::Dismissed)
     );
     assert!(dialog::current_dialog(&focus).is_none());
+}
+
+#[test]
+fn dialog_buttons_wrap_when_enabled() {
+    let mut focus: Focus = FocusManager::new();
+    focus.set_focus_wrap(FocusWrap::Wrap);
+    let data = DialogData::new("Q", "m", ["A", "B"], Purpose::ConfirmDelete);
+    focus.apply_focus_intent(data.show_intent());
+
+    // index 0 -> Next -> 1 -> Next wraps -> 0
+    focus.apply_focus_intent(FocusIntent::Next);
+    assert_eq!(dialog::active_button(&focus), Some(1));
+    focus.apply_focus_intent(FocusIntent::Next);
+    assert_eq!(dialog::active_button(&focus), Some(0));
+    // Prev off the first wraps to the last.
+    focus.apply_focus_intent(FocusIntent::Prev);
+    assert_eq!(dialog::active_button(&focus), Some(1));
 }
 
 #[test]

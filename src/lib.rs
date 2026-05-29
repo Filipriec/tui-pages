@@ -22,8 +22,8 @@ pub use dialog::{render_dialog, DialogData, DialogKey, DialogResult, DialogTheme
 
 pub use command::{CommandHint, CommandRegistry, CommandResolver, CommandResponse};
 pub use focus::{
-    FocusController, FocusIntent, FocusManager, FocusQuery, FocusTarget, Focusable, OverlayFocus,
-    PageFocusBuilder,
+    FocusController, FocusIntent, FocusManager, FocusQuery, FocusTarget, FocusWrap, Focusable,
+    OverlayFocus, PageFocusBuilder,
 };
 pub use input::{
     parse_binding, parse_key, try_parse_binding, try_parse_key, ChordSequenceTracker, InputHint,
@@ -53,7 +53,7 @@ pub use runtime::{
 pub mod prelude {
     pub use crate::{
         modes, parse_binding, try_parse_binding, ActionContext, ActionOutcome, FocusController,
-        FocusIntent, FocusManager, FocusQuery, FocusTarget, KeyChord, ModeId, PageFn,
+        FocusIntent, FocusManager, FocusQuery, FocusTarget, FocusWrap, KeyChord, ModeId, PageFn,
         PageFocusBuilder, PageProvider, PageSpec, ParseKeyError, TuiActionHandler, TuiEffect,
         TuiPages, TuiPagesOutput, TuiPagesStatus,
     };

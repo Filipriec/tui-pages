@@ -1,5 +1,25 @@
 use crate::focus::{FocusIntent, FocusQuery, FocusTarget};
 
+/// How focus navigation behaves at the ends of a list (pages, section items,
+/// and dialog buttons).
+///
+/// The crate does not hardcode a policy — you choose. The default is
+/// [`Clamp`](FocusWrap::Clamp), which preserves "stop at the first/last
+/// element". Set it on the builder with
+/// [`focus_wrap`](crate::TuiPagesBuilder::focus_wrap) or at runtime with
+/// [`FocusManager::set_focus_wrap`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+pub enum FocusWrap {
+    /// Stop at the first/last element; `Next` on the last (or `Prev` on the
+    /// first) is a no-op.
+    #[default]
+    Clamp,
+    /// Wrap around: `Next` on the last element moves to the first, and `Prev`
+    /// on the first moves to the last.
+    Wrap,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OverlayFocus<O = (), D = (), P = ()> {
     Simple(O),
@@ -20,6 +40,7 @@ pub struct FocusManager<O = (), D = (), P = ()> {
     index: usize,
     overlay: Option<OverlayFocus<O, D, P>>,
     entered_section: Option<EnteredSection>,
+    wrap: FocusWrap,
 }
 
 impl<O, D, P> Default for FocusManager<O, D, P> {
@@ -40,7 +61,18 @@ impl<O, D, P> FocusManager<O, D, P> {
             index: 0,
             overlay: None,
             entered_section: None,
+            wrap: FocusWrap::Clamp,
         }
+    }
+
+    /// The current end-of-list navigation policy.
+    pub fn focus_wrap(&self) -> FocusWrap {
+        self.wrap
+    }
+
+    /// Set the end-of-list navigation policy (clamp vs. wrap-around).
+    pub fn set_focus_wrap(&mut self, wrap: FocusWrap) {
+        self.wrap = wrap;
     }
 
     pub fn targets(&self) -> &[FocusTarget<O>] {
@@ -66,9 +98,14 @@ impl<O, D, P> FocusManager<O, D, P> {
     }
 
     pub fn next(&mut self) {
+        let wrap = self.wrap;
+
         if let Some(OverlayFocus::Dialog { index, buttons, .. }) = &mut self.overlay {
-            if *buttons > 0 && *index < *buttons - 1 {
-                *index += 1;
+            if *buttons > 0 {
+                *index = match wrap {
+                    FocusWrap::Clamp => (*index + 1).min(*buttons - 1),
+                    FocusWrap::Wrap => (*index + 1) % *buttons,
+                };
             }
             return;
         }
@@ -78,9 +115,10 @@ impl<O, D, P> FocusManager<O, D, P> {
         }
 
         if let Some(section) = &mut self.entered_section {
-            if section.item_index < section.item_count - 1 {
-                section.item_index += 1;
-            }
+            section.item_index = match wrap {
+                FocusWrap::Clamp => (section.item_index + 1).min(section.item_count - 1),
+                FocusWrap::Wrap => (section.item_index + 1) % section.item_count,
+            };
             return;
         }
 
@@ -96,15 +134,30 @@ impl<O, D, P> FocusManager<O, D, P> {
         for index in (self.index + 1)..self.targets.len() {
             if self.targets[index].is_top_level_navigable() {
                 self.index = index;
-                break;
+                return;
+            }
+        }
+
+        // No navigable target after the current one: wrap to the first.
+        if matches!(wrap, FocusWrap::Wrap) {
+            for index in 0..self.index {
+                if self.targets[index].is_top_level_navigable() {
+                    self.index = index;
+                    return;
+                }
             }
         }
     }
 
     pub fn prev(&mut self) {
-        if let Some(OverlayFocus::Dialog { index, .. }) = &mut self.overlay {
-            if *index > 0 {
-                *index -= 1;
+        let wrap = self.wrap;
+
+        if let Some(OverlayFocus::Dialog { index, buttons, .. }) = &mut self.overlay {
+            if *buttons > 0 {
+                *index = match wrap {
+                    FocusWrap::Clamp => index.saturating_sub(1),
+                    FocusWrap::Wrap => (*index + *buttons - 1) % *buttons,
+                };
             }
             return;
         }
@@ -114,9 +167,12 @@ impl<O, D, P> FocusManager<O, D, P> {
         }
 
         if let Some(section) = &mut self.entered_section {
-            if section.item_index > 0 {
-                section.item_index -= 1;
-            }
+            section.item_index = match wrap {
+                FocusWrap::Clamp => section.item_index.saturating_sub(1),
+                FocusWrap::Wrap => {
+                    (section.item_index + section.item_count - 1) % section.item_count
+                }
+            };
             return;
         }
 
@@ -132,7 +188,17 @@ impl<O, D, P> FocusManager<O, D, P> {
         for index in (0..self.index).rev() {
             if self.targets[index].is_top_level_navigable() {
                 self.index = index;
-                break;
+                return;
+            }
+        }
+
+        // No navigable target before the current one: wrap to the last.
+        if matches!(wrap, FocusWrap::Wrap) {
+            for index in ((self.index + 1)..self.targets.len()).rev() {
+                if self.targets[index].is_top_level_navigable() {
+                    self.index = index;
+                    return;
+                }
             }
         }
     }

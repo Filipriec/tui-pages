@@ -8,6 +8,6 @@ mod target;
 pub use builder::PageFocusBuilder;
 pub use focusable::Focusable;
 pub use intent::FocusIntent;
-pub use manager::{FocusController, FocusManager, OverlayFocus};
+pub use manager::{FocusController, FocusManager, FocusWrap, OverlayFocus};
 pub use query::FocusQuery;
 pub use target::FocusTarget;
