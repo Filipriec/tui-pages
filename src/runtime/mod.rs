@@ -594,6 +594,8 @@ impl<V, A, S, D, P, Pages, Handler> TuiPagesBuilder<V, A, S, D, P, Pages, Handle
     pub fn build(self) -> TuiPages<V, A, S, Pages, Handler, D, P>
     where
         V: Clone + PartialEq,
+        Pages: PageProvider<V, S>,
+        Handler: TuiActionHandler<V, A, S, D, P>,
     {
         let fallback_view = self
             .fallback_view

@@ -86,4 +86,5 @@ fn run_one_key(key: KeyEvent, state: &mut AppState) {
 
 ## Architecture
 
-The original architecture diagrams are kept in `docs/new_system`.
+See [`docs/architecture/architecture.md`](docs/architecture/architecture.md)
+for the full design, flow diagrams, and the primitive layer.

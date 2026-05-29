@@ -16,9 +16,8 @@ fn main() -> Result<()> {
 
     let mut tui = app::build();
     let mut state = app::AppState::default();
-    let mut waiting: Vec<InputHint<app::Action>> = Vec::new();
 
-    let result = run(&mut terminal, &mut tui, &mut state, &mut waiting);
+    let result = run(&mut terminal, &mut tui, &mut state);
 
     disable_raw_mode()?;
     crossterm::execute!(std::io::stderr(), LeaveAlternateScreen)?;
@@ -29,40 +28,54 @@ fn run(
     terminal: &mut Terminal<CrosstermBackend<std::io::Stderr>>,
     tui: &mut app::App,
     state: &mut app::AppState,
-    waiting: &mut Vec<InputHint<app::Action>>,
 ) -> Result<()> {
+    // Pending multi-key chord hints, shown in the status bar.
+    let mut waiting: Vec<InputHint<app::Action>> = Vec::new();
+
     loop {
-        terminal.draw(|frame| {
-            ui::render(
-                frame,
-                tui,
-                state,
-                ui::Status {
-                    waiting: if waiting.is_empty() { None } else { Some(waiting) },
-                },
-            )
-        })?;
+        terminal.draw(|frame| ui::render(frame, tui, state, &waiting))?;
 
         let Event::Key(key) = crossterm::event::read()? else {
             continue;
         };
 
-        // Palette submission: run the typed command before the Enter key closes the overlay.
-        let submitted_quit = if state.palette_open && key.code == KeyCode::Enter {
-            let input = state.palette_input.clone();
-            tui.submit_command(&input, state)?.quit_requested
-        } else {
-            false
-        };
+        // The command palette is built entirely from public runtime API:
+        // app-owned text state plus `tui.commands` for resolution. The crate
+        // ships no palette feature — an enormous app composes its own this way.
+        if state.palette_open {
+            match key.code {
+                KeyCode::Enter => {
+                    let input = state.palette_input.clone();
+                    let quit = tui.submit_command(&input, state)?.quit_requested;
+                    close_palette(tui, state);
+                    if quit {
+                        return Ok(());
+                    }
+                }
+                KeyCode::Esc => close_palette(tui, state),
+                KeyCode::Backspace => {
+                    state.palette_input.pop();
+                }
+                KeyCode::Char(c) => state.palette_input.push(c),
+                _ => {}
+            }
+            continue;
+        }
 
         let output = tui.handle_key(key, state)?;
         match output.status {
-            TuiPagesStatus::Waiting(hints) => *waiting = hints,
+            TuiPagesStatus::Waiting(hints) => waiting = hints,
             _ => waiting.clear(),
         }
 
-        if submitted_quit || output.quit_requested {
+        if output.quit_requested {
             return Ok(());
         }
     }
+}
+
+fn close_palette(tui: &mut app::App, state: &mut app::AppState) {
+    state.palette_open = false;
+    state.palette_input.clear();
+    tui.focus.clear_overlay();
 }

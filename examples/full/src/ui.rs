@@ -7,15 +7,11 @@ use ratatui::{
     widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
     Frame,
 };
-use tui_pages::{FocusTarget, InputHint};
+use tui_pages::{FocusTarget, InputHint, PaneSplit};
 
-use crate::app::{App, AppState, View, NOTES, NOTES_SECTION};
+use crate::app::{self, App, AppState, View, NOTES, NOTES_SECTION};
 
-pub struct Status<'a, A> {
-    pub waiting: Option<&'a [InputHint<A>]>,
-}
-
-pub fn render(frame: &mut Frame, tui: &App, state: &AppState, status: Status<'_, crate::app::Action>) {
+pub fn render(frame: &mut Frame, tui: &App, state: &AppState, waiting: &[InputHint<app::Action>]) {
     let area = frame.area();
     let rows = Layout::default()
         .direction(Direction::Vertical)
@@ -30,10 +26,11 @@ pub fn render(frame: &mut Frame, tui: &App, state: &AppState, status: Status<'_,
     render_tabs(frame, rows[0], tui);
     render_workspace(frame, rows[1], tui);
     render_body(frame, rows[2], tui, state);
-    render_status(frame, rows[3], tui, state, status);
+    render_status(frame, rows[3], tui, state, waiting);
 
+    // Palette is app state; draw it when the app has it open.
     if state.palette_open {
-        render_palette(frame, area, state);
+        render_palette(frame, area, &state.palette_input);
     }
 }
 
@@ -74,9 +71,9 @@ fn render_workspace(frame: &mut Frame, area: Rect, tui: &App) {
         .enumerate()
         .map(|(i, v)| {
             if i == tui.buffer.active_index {
-                format!("*{:?}", v)
+                format!("*{v:?}")
             } else {
-                format!(" {:?}", v)
+                format!(" {v:?}")
             }
         })
         .collect::<Vec<_>>()
@@ -109,14 +106,57 @@ fn render_workspace(frame: &mut Frame, area: Rect, tui: &App) {
 }
 
 fn render_body(frame: &mut Frame, area: Rect, tui: &App, state: &AppState) {
-    match tui.current_view() {
-        View::Home => render_home(frame, area, tui),
-        View::Notes => render_notes(frame, area, tui, state),
-        View::Help => render_help(frame, area),
+    let panes = tui.buffer.panes();
+    let active_idx = tui.buffer.active_pane_index();
+
+    let regions: Vec<Rect> = if panes.len() <= 1 {
+        vec![area]
+    } else {
+        let direction = match tui.buffer.split_direction() {
+            Some(PaneSplit::Horizontal) => Direction::Vertical,
+            _ => Direction::Horizontal,
+        };
+        let count = panes.len() as u32;
+        let constraints: Vec<Constraint> =
+            (0..panes.len()).map(|_| Constraint::Ratio(1, count)).collect();
+        Layout::default()
+            .direction(direction)
+            .constraints(constraints)
+            .split(area)
+            .to_vec()
+    };
+
+    for (i, pane) in panes.iter().enumerate() {
+        let is_active = i == active_idx;
+        let focus = if is_active { tui.focus.current() } else { None };
+        render_pane(frame, regions[i], pane.view, state, focus, is_active);
     }
 }
 
-fn render_home(frame: &mut Frame, area: Rect, tui: &App) {
+fn render_pane(
+    frame: &mut Frame,
+    area: Rect,
+    view: View,
+    state: &AppState,
+    focus: Option<FocusTarget>,
+    is_active: bool,
+) {
+    let border = Style::default().fg(if is_active { Color::Green } else { Color::DarkGray });
+    let outer = Block::default()
+        .borders(Borders::ALL)
+        .border_style(border)
+        .title(format!(" {} ", if is_active { "● active" } else { "○ inactive" }));
+    let inner = outer.inner(area);
+    frame.render_widget(outer, area);
+
+    match view {
+        View::Home => render_home(frame, inner, focus),
+        View::Notes => render_notes(frame, inner, state, focus),
+        View::Help => render_help(frame, inner),
+    }
+}
+
+fn render_home(frame: &mut Frame, area: Rect, focus: Option<FocusTarget>) {
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(0), Constraint::Length(3), Constraint::Length(3)])
@@ -134,17 +174,16 @@ fn render_home(frame: &mut Frame, area: Rect, tui: &App) {
         rows[0],
     );
 
-    render_button(frame, rows[1], "Open Notes", tui.focus.current(), 0);
-    render_button(frame, rows[2], "Open Help", tui.focus.current(), 1);
+    render_button(frame, rows[1], "Open Notes", focus.clone(), 0);
+    render_button(frame, rows[2], "Open Help", focus, 1);
 }
 
-fn render_notes(frame: &mut Frame, area: Rect, tui: &App, state: &AppState) {
+fn render_notes(frame: &mut Frame, area: Rect, state: &AppState, focus: Option<FocusTarget>) {
     let cols = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
         .split(area);
 
-    let focus = tui.focus.current();
     let section_focused = matches!(
         focus,
         Some(FocusTarget::Section(NOTES_SECTION))
@@ -245,7 +284,7 @@ fn render_status(
     area: Rect,
     tui: &App,
     state: &AppState,
-    status: Status<'_, crate::app::Action>,
+    waiting: &[InputHint<app::Action>],
 ) {
     let focus_label = tui
         .focus
@@ -253,19 +292,17 @@ fn render_status(
         .map(|f| format!("{f:?}"))
         .unwrap_or_else(|| "None".into());
 
-    let waiting = status.waiting.and_then(|hints| {
-        if hints.is_empty() {
-            None
-        } else {
-            let preview = hints
-                .iter()
-                .take(4)
-                .map(|h| h.key.display_string())
-                .collect::<Vec<_>>()
-                .join(" / ");
-            Some(format!("…waiting: {preview}"))
-        }
-    });
+    let waiting = if waiting.is_empty() {
+        None
+    } else {
+        let preview = waiting
+            .iter()
+            .take(4)
+            .map(|h| h.key.display_string())
+            .collect::<Vec<_>>()
+            .join(" / ");
+        Some(format!("…waiting: {preview}"))
+    };
 
     let mut lines = vec![Line::from(format!("focus: {focus_label}"))];
     if let Some(w) = waiting {
@@ -285,7 +322,7 @@ fn render_status(
     );
 }
 
-fn render_palette(frame: &mut Frame, area: Rect, state: &AppState) {
+fn render_palette(frame: &mut Frame, area: Rect, input: &str) {
     let width = area.width.saturating_sub(10).min(60);
     let x = area.x + (area.width.saturating_sub(width)) / 2;
     let y = area.y + area.height / 3;
@@ -293,7 +330,7 @@ fn render_palette(frame: &mut Frame, area: Rect, state: &AppState) {
 
     frame.render_widget(Clear, rect);
     frame.render_widget(
-        Paragraph::new(format!(":{}", state.palette_input))
+        Paragraph::new(format!(":{input}"))
             .style(
                 Style::default()
                     .fg(Color::Yellow)

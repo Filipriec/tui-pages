@@ -14,6 +14,12 @@ impl KeyChord {
 
     pub fn from_event(event: &KeyEvent) -> Self {
         let mut modifiers = event.modifiers;
+        // SHIFT is encoded in the character itself (':' vs ';', 'A' vs 'a'),
+        // so a binding like `":"` should match an event of `Char(':') + SHIFT`.
+        // We keep SHIFT only when combined with another modifier (e.g. Ctrl+Shift+S).
+        if matches!(event.code, KeyCode::Char(_)) && modifiers == KeyModifiers::SHIFT {
+            modifiers = KeyModifiers::empty();
+        }
         if event.code == KeyCode::BackTab {
             modifiers -= KeyModifiers::SHIFT;
         }

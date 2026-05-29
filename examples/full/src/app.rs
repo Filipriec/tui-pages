@@ -1,14 +1,16 @@
-// Everything here uses `tui-pages`. The UI layer (ui.rs) does not.
+// Everything in this file uses `tui-pages`. The UI layer (ui.rs) only reads
+// runtime state to draw; it owns no coordination logic.
 //
-// Features exercised:
-//   • Views with Navigate                  (TuiEffect::Navigate)
-//   • Tab / Shift+Tab focus + Enter select (FocusIntent::Next/Prev, Button)
-//   • Section + j/k items                  (Section / SectionItem, EnterSection/LeaveSection)
-//   • Multi-key chord sequences            (`g h`, `g n`, `g ?` → see status bar hints)
-//   • Buffer history                       (NextBuffer / PreviousBuffer / CloseBuffer)
-//   • Pane split + cycle                   (SplitPane / NextPane / ClosePane)
-//   • Command palette `:` overlay          (accepts_text_input + COMMAND mode + submit_command)
-//   • Modes: GENERAL / GLOBAL / COMMAND
+// Capabilities exercised:
+//   • Views + navigation            TuiEffect::Navigate
+//   • Focus cycling + activation     FocusIntent::Next/Prev, FocusTarget::Button
+//   • Sections with items            EnterSection / LeaveSection, SectionItem
+//   • Multi-key chord sequences      `g h`, `g n`, `g ?`
+//   • Buffer history                 NextBuffer / PreviousBuffer / CloseBuffer
+//   • Pane splits                    SplitPane / NextPane / ClosePane
+//   • Command palette                built in app space from the runtime's
+//                                    public command resolver — see main.rs.
+//                                    The crate ships no palette; you compose one.
 
 use tui_pages::{
     modes, ActionContext, ActionOutcome, FocusIntent, FocusTarget, OverlayKind, PageFocusBuilder,
@@ -53,10 +55,6 @@ pub enum Action {
     ClosePane,
 
     OpenPalette,
-    ClosePalette,
-    SubmitPalette,
-    PaletteBackspace,
-
     Quit,
 }
 
@@ -64,6 +62,7 @@ pub enum Action {
 pub struct AppState {
     pub selected_note: Option<usize>,
     pub message: String,
+    // The command palette is ordinary app state. The crate does not own it.
     pub palette_open: bool,
     pub palette_input: String,
 }
@@ -93,7 +92,7 @@ impl TuiActionHandler<View, Action, AppState> for Handler {
             Action::MoveUp => inside_section(ctx.focus, FocusIntent::Prev),
             Action::MoveDown => inside_section(ctx.focus, FocusIntent::Next),
             Action::Select => select(ctx, state),
-            Action::Escape => escape(ctx, state),
+            Action::Escape => escape(ctx),
 
             Action::GotoHome => ActionOutcome::effect(TuiEffect::Navigate(View::Home)),
             Action::GotoNotes => ActionOutcome::effect(TuiEffect::Navigate(View::Notes)),
@@ -112,53 +111,19 @@ impl TuiActionHandler<View, Action, AppState> for Handler {
             Action::NextPane => ActionOutcome::effect(TuiEffect::NextPane),
             Action::ClosePane => ActionOutcome::effect(TuiEffect::ClosePane),
 
+            // Open is just app state plus a focus effect. Typing, submitting,
+            // and closing are handled by the app's own loop in main.rs.
             Action::OpenPalette => {
                 state.palette_open = true;
                 state.palette_input.clear();
-                ActionOutcome::effects([
-                    TuiEffect::Focus(FocusIntent::Open(FocusTarget::Overlay(
-                        OverlayKind::CommandBar,
-                    ))),
-                    TuiEffect::RefreshPage,
-                ])
-            }
-            Action::ClosePalette => close_palette(state),
-            Action::SubmitPalette => {
-                // Actual submission happens in main.rs (needs &mut tui).
-                // Here we just close the overlay; main runs submit_command first.
-                close_palette(state)
-            }
-            Action::PaletteBackspace => {
-                state.palette_input.pop();
-                ActionOutcome::none()
+                ActionOutcome::effect(TuiEffect::Focus(FocusIntent::Open(
+                    FocusTarget::Overlay(OverlayKind::CommandBar),
+                )))
             }
 
             Action::Quit => ActionOutcome::effect(TuiEffect::Quit),
         })
     }
-
-    fn handle_text(
-        &mut self,
-        chord: tui_pages::KeyChord,
-        _ctx: ActionContext<View>,
-        state: &mut AppState,
-    ) -> Result<ActionOutcome<View>, Self::Error> {
-        if state.palette_open {
-            if let crossterm::event::KeyCode::Char(c) = chord.code {
-                state.palette_input.push(c);
-            }
-        }
-        Ok(ActionOutcome::none())
-    }
-}
-
-fn close_palette(state: &mut AppState) -> ActionOutcome<View> {
-    state.palette_open = false;
-    state.palette_input.clear();
-    ActionOutcome::effects([
-        TuiEffect::Focus(FocusIntent::ClearOverlay),
-        TuiEffect::RefreshPage,
-    ])
 }
 
 fn top_level_focus(focus: Option<FocusTarget>, intent: FocusIntent) -> ActionOutcome<View> {
@@ -180,27 +145,37 @@ fn inside_section(focus: Option<FocusTarget>, intent: FocusIntent) -> ActionOutc
 }
 
 fn select(ctx: ActionContext<View>, state: &mut AppState) -> ActionOutcome<View> {
-    match ctx.focus {
-        Some(FocusTarget::Section(NOTES_SECTION)) => {
+    match (ctx.current_view, ctx.focus) {
+        (View::Notes, Some(FocusTarget::Section(NOTES_SECTION))) => {
             ActionOutcome::effect(TuiEffect::Focus(FocusIntent::EnterSection {
                 item_count: NOTES.len(),
             }))
         }
-        Some(FocusTarget::SectionItem {
-            section: NOTES_SECTION,
-            item,
-        }) => {
+        (
+            View::Notes,
+            Some(FocusTarget::SectionItem {
+                section: NOTES_SECTION,
+                item,
+            }),
+        ) => {
             state.selected_note = Some(item);
             state.message = format!("Selected note: {}", NOTES[item]);
             ActionOutcome::effect(TuiEffect::RefreshPage)
         }
-        Some(FocusTarget::Button(0)) => ActionOutcome::effect(TuiEffect::Navigate(View::Notes)),
-        Some(FocusTarget::Button(1)) => ActionOutcome::effect(TuiEffect::Navigate(View::Help)),
+        (View::Notes, Some(FocusTarget::Button(0))) => {
+            ActionOutcome::effect(TuiEffect::Navigate(View::Home))
+        }
+        (View::Home, Some(FocusTarget::Button(0))) => {
+            ActionOutcome::effect(TuiEffect::Navigate(View::Notes))
+        }
+        (View::Home, Some(FocusTarget::Button(1))) => {
+            ActionOutcome::effect(TuiEffect::Navigate(View::Help))
+        }
         _ => ActionOutcome::none(),
     }
 }
 
-fn escape(ctx: ActionContext<View>, _state: &mut AppState) -> ActionOutcome<View> {
+fn escape(ctx: ActionContext<View>) -> ActionOutcome<View> {
     if matches!(ctx.focus, Some(FocusTarget::SectionItem { .. })) {
         ActionOutcome::effect(TuiEffect::Focus(FocusIntent::LeaveSection))
     } else {
@@ -208,22 +183,11 @@ fn escape(ctx: ActionContext<View>, _state: &mut AppState) -> ActionOutcome<View
     }
 }
 
-fn page_spec(view: &View, state: &AppState, _focus: Option<&FocusTarget>) -> PageSpec {
-    if state.palette_open {
-        // Text-input mode: plain chars bypass GENERAL bindings and reach handle_text.
-        return PageSpec::new()
-            .modes(vec![modes::COMMAND, modes::GLOBAL])
-            .accepts_text_input(true);
-    }
-
+fn page_spec(view: &View, _state: &AppState, _focus: Option<&FocusTarget>) -> PageSpec {
     let mut focus = PageFocusBuilder::new();
     match view {
-        View::Home => {
-            focus = focus.button(0).button(1);
-        }
-        View::Notes => {
-            focus = focus.section(NOTES_SECTION).button(0);
-        }
+        View::Home => focus = focus.button(0).button(1),
+        View::Notes => focus = focus.section(NOTES_SECTION).button(0),
         View::Help => {}
     }
 
@@ -236,7 +200,7 @@ pub fn build() -> App {
     let mut app = TuiPages::builder(View::Home)
         .pages(page_spec as fn(&View, &AppState, Option<&FocusTarget>) -> PageSpec)
         .handler(Handler)
-        // Focus and selection
+        // Focus + activation
         .bind(modes::GENERAL, "tab", Action::FocusNext)
         .bind(modes::GENERAL, "shift+tab", Action::FocusPrev)
         .bind(modes::GENERAL, "j", Action::MoveDown)
@@ -245,7 +209,7 @@ pub fn build() -> App {
         .bind(modes::GENERAL, "up", Action::MoveUp)
         .bind(modes::GENERAL, "enter", Action::Select)
         .bind(modes::GENERAL, "esc", Action::Escape)
-        // Multi-key chords (try `g`, then `h` / `n` / `?`)
+        // Multi-key chords: press `g`, then h / n / ?
         .bind(modes::GENERAL, "g h", Action::GotoHome)
         .bind(modes::GENERAL, "g n", Action::GotoNotes)
         .bind(modes::GENERAL, "g ?", Action::GotoHelp)
@@ -258,14 +222,11 @@ pub fn build() -> App {
         .bind(modes::GENERAL, "ctrl+d", Action::SplitHorizontal)
         .bind(modes::GENERAL, "ctrl+n", Action::NextPane)
         .bind(modes::GENERAL, "ctrl+w", Action::ClosePane)
-        // Palette
+        // Command line (`:` opens it; runtime handles typing / Enter / Esc)
         .bind(modes::GENERAL, ":", Action::OpenPalette)
-        .bind(modes::COMMAND, "esc", Action::ClosePalette)
-        .bind(modes::COMMAND, "enter", Action::SubmitPalette)
-        .bind(modes::COMMAND, "backspace", Action::PaletteBackspace)
-        // Global
+        // Quit works everywhere, including while the command line is open
         .bind(modes::GLOBAL, "ctrl+c", Action::Quit)
-        // Command palette entries (typed after `:`)
+        // Commands typed into the command line
         .command("Go to Home", ["h", "home"], Action::GotoHome)
         .command("Go to Notes", ["n", "notes"], Action::GotoNotes)
         .command("Go to Help", ["?", "help"], Action::GotoHelp)

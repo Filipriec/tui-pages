@@ -1,0 +1,26 @@
+flowchart TB
+    subgraph TARGET[Focus Target State]
+        subgraph PageProvider[Page Provider]
+            PS[PageSpec.focus_targets]
+        end
+
+        subgraph FM[FocusManager - Single Source]
+            RT[register_page]
+            TG[targets]
+            CT[current]
+            IF[is_focused]
+        end
+    end
+
+    subgraph CONSUMERS[Consumers]
+        RUNTIME[TuiPages runtime]
+        HANDLER[TuiActionHandler via ActionContext.focus]
+        UI[UI Rendering]
+    end
+
+    PageProvider -->|register if changed| RT
+    RT --> TG
+    TG --> CT
+    CT --> RUNTIME
+    CT --> HANDLER
+    IF --> UI
