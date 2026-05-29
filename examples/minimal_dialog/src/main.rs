@@ -3,12 +3,11 @@ mod ui;
 
 use anyhow::Result;
 use crossterm::{
-    event::{Event, KeyCode},
+    event::Event,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
-use tui_pages::dialog::{self, DialogResult};
-use tui_pages::{FocusController, FocusIntent};
+use tui_pages::prelude::*;
 
 use app::Purpose;
 
@@ -39,46 +38,31 @@ fn run(
             continue;
         };
 
-        // A modal dialog intercepts all input until it is answered. We drive it
-        // directly with the runtime's focus manager and the `dialog::*` helpers.
-        if dialog::current_dialog(&tui.focus).is_some() {
-            match key.code {
-                KeyCode::Tab | KeyCode::Right => {
-                    tui.focus.apply_focus_intent(FocusIntent::Next)
+        // A modal dialog intercepts input until it is answered. `dialog::handle_key`
+        // applies the conventional bindings (Tab/arrows move, Enter selects, Esc
+        // dismisses) and closes the dialog for us — we only act on the result.
+        match dialog::handle_key(&mut tui.focus, key) {
+            DialogKey::Ignored => {
+                if tui.handle_key(key, state)?.quit_requested {
+                    return Ok(());
                 }
-                KeyCode::BackTab | KeyCode::Left => {
-                    tui.focus.apply_focus_intent(FocusIntent::Prev)
-                }
-                KeyCode::Enter => {
-                    if let Some(DialogResult::Selected { purpose, index }) =
-                        dialog::selection(&tui.focus)
-                    {
-                        apply_dialog(purpose, index, state);
-                    }
-                    tui.focus.apply_focus_intent(FocusIntent::ClearOverlay);
-                }
-                KeyCode::Esc => {
-                    state.message = "Cancelled.".into();
-                    tui.focus.apply_focus_intent(FocusIntent::ClearOverlay);
-                }
-                _ => {}
             }
-            continue;
-        }
-
-        if tui.handle_key(key, state)?.quit_requested {
-            return Ok(());
+            DialogKey::Consumed => {}
+            DialogKey::Resolved(result) => apply_dialog(result, state),
         }
     }
 }
 
-fn apply_dialog(purpose: Option<Purpose>, index: usize, state: &mut app::AppState) {
-    match (purpose, index) {
-        (Some(Purpose::ConfirmDelete), 0) => {
+fn apply_dialog(result: DialogResult<Purpose>, state: &mut app::AppState) {
+    match result {
+        DialogResult::Selected {
+            purpose: Some(Purpose::ConfirmDelete),
+            index: 0,
+        } => {
             let removed = state.items.remove(0);
             state.message = format!("Deleted \"{removed}\".");
         }
-        (Some(Purpose::ConfirmDelete), _) => state.message = "Deletion cancelled.".into(),
-        _ => {}
+        DialogResult::Selected { .. } => state.message = "Deletion cancelled.".into(),
+        DialogResult::Dismissed => state.message = "Cancelled.".into(),
     }
 }

@@ -12,10 +12,8 @@
 //                                    public command resolver — see main.rs.
 //                                    The crate ships no palette; you compose one.
 
-use tui_pages::{
-    modes, ActionContext, ActionOutcome, FocusIntent, FocusTarget, OverlayKind, PageFocusBuilder,
-    PageSpec, PaneSplit, TuiActionHandler, TuiEffect, TuiPages,
-};
+use tui_pages::prelude::*;
+use tui_pages::{OverlayKind, PaneSplit};
 
 pub const NOTES_SECTION: usize = 0;
 pub const NOTES: [&str; 4] = [
@@ -67,13 +65,7 @@ pub struct AppState {
     pub palette_input: String,
 }
 
-pub type App = TuiPages<
-    View,
-    Action,
-    AppState,
-    fn(&View, &AppState, Option<&FocusTarget>) -> PageSpec,
-    Handler,
->;
+pub type App = TuiPages<View, Action, AppState, PageFn<View, AppState>, Handler>;
 
 pub struct Handler;
 
@@ -198,7 +190,7 @@ fn page_spec(view: &View, _state: &AppState, _focus: Option<&FocusTarget>) -> Pa
 
 pub fn build() -> App {
     let mut app = TuiPages::builder(View::Home)
-        .pages(page_spec as fn(&View, &AppState, Option<&FocusTarget>) -> PageSpec)
+        .pages(page_spec as PageFn<View, AppState>)
         .handler(Handler)
         // Focus + activation
         .bind(modes::GENERAL, "tab", Action::FocusNext)

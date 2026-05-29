@@ -21,6 +21,18 @@ ratatui only when enabled:
 tui-pages = { version = "0.1", features = ["dialog"] }
 ```
 
+A dialog is driven from your event loop with one helper — `dialog::handle_key`
+applies the conventional bindings (Tab/arrows move, Enter selects, Esc
+dismisses), closes the dialog, and hands you the result:
+
+```rust
+match dialog::handle_key(&mut tui.focus, key) {
+    DialogKey::Ignored => { tui.handle_key(key, state)?; } // no dialog: normal input
+    DialogKey::Consumed => {}                               // navigated; redraw
+    DialogKey::Resolved(result) => apply(result, state),   // answered
+}
+```
+
 Applications keep their own action enum, page enum, app state, render code,
 side effects, canvas/editor actions, dialogs, and picker data. `tui-pages`
 only owns the coordination model: input sequences, command resolution, focus,
@@ -33,12 +45,15 @@ overlays, or quit.
 
 ## Minimal Shape
 
+`use tui_pages::prelude::*;` pulls in the runtime, the focus types, the
+`PageFn` alias, and the `FocusController` trait (whose `apply_focus_intent`
+method is otherwise invisible until the trait is in scope). With the `dialog`
+feature it also re-exports the dialog content/result/theme/renderer and the
+`dialog::*` driver helpers.
+
 ```rust
 use crossterm::event::KeyEvent;
-use tui_pages::{
-    modes, ActionContext, ActionOutcome, FocusIntent, FocusTarget, PageSpec,
-    TuiActionHandler, TuiEffect, TuiPages,
-};
+use tui_pages::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum AppAction {

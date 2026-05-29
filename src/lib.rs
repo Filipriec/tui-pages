@@ -18,7 +18,7 @@ pub mod navigation;
 pub mod runtime;
 
 #[cfg(feature = "dialog")]
-pub use dialog::{render_dialog, DialogData, DialogResult, DialogTheme};
+pub use dialog::{render_dialog, DialogData, DialogKey, DialogResult, DialogTheme};
 
 pub use command::{CommandHint, CommandRegistry, CommandResolver, CommandResponse};
 pub use focus::{
@@ -34,7 +34,31 @@ pub use navigation::{
     PaneId, PaneSession, PaneSplit, ViewBuffer, WorkspaceState,
 };
 pub use runtime::{
-    modes, ActionContext, ActionOutcome, ModeId, PageProvider, PageSpec, TuiActionHandler,
+    modes, ActionContext, ActionOutcome, ModeId, PageFn, PageProvider, PageSpec, TuiActionHandler,
     TuiEffect, TuiPages, TuiPagesBuilder, TuiPagesError, TuiPagesOutput, TuiPagesResult,
     TuiPagesStatus,
 };
+
+/// Everything a typical application needs in one glob import.
+///
+/// ```ignore
+/// use tui_pages::prelude::*;
+/// ```
+///
+/// This pulls in the runtime, the focus types, and — crucially — the
+/// [`FocusController`] trait, whose [`apply_focus_intent`](FocusController::apply_focus_intent)
+/// method is otherwise invisible until the trait is in scope. With the
+/// `dialog` feature it also brings in the dialog content, result, theme,
+/// renderer, and the `dialog::*` driver helpers.
+pub mod prelude {
+    pub use crate::{
+        modes, ActionContext, ActionOutcome, FocusController, FocusIntent, FocusManager,
+        FocusQuery, FocusTarget, ModeId, PageFn, PageFocusBuilder, PageProvider, PageSpec,
+        TuiActionHandler, TuiEffect, TuiPages, TuiPagesOutput, TuiPagesStatus,
+    };
+
+    #[cfg(feature = "dialog")]
+    pub use crate::dialog::{self, DialogData, DialogKey, DialogResult, DialogTheme};
+    #[cfg(feature = "dialog")]
+    pub use crate::render_dialog;
+}

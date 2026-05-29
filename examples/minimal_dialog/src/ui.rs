@@ -6,8 +6,7 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, Paragraph},
     Frame,
 };
-use tui_pages::dialog::{self, render_dialog, DialogTheme};
-use tui_pages::FocusTarget;
+use tui_pages::prelude::*;
 
 use crate::app::{App, AppState};
 

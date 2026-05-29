@@ -102,6 +102,18 @@ impl PageSpec {
     }
 }
 
+/// A plain function that maps `(view, state, focus)` to a [`PageSpec`].
+///
+/// Most apps describe their pages with a free function; this alias spells out
+/// the signature so the [`TuiPages`] type parameter and the `as` coercion at
+/// the call site stay readable:
+///
+/// ```ignore
+/// type App = TuiPages<View, Action, State, PageFn<View, State>, Handler>;
+/// //                  builder: .pages(page_spec as PageFn<View, State>)
+/// ```
+pub type PageFn<V, S> = fn(&V, &S, Option<&FocusTarget>) -> PageSpec;
+
 pub trait PageProvider<V, S> {
     fn page_spec(&self, view: &V, state: &S, focus: Option<&FocusTarget>) -> PageSpec;
 }

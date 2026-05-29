@@ -1,9 +1,6 @@
 // Everything in this file talks to `tui-pages`. The UI layer (ui.rs) does not.
 
-use tui_pages::{
-    modes, ActionContext, ActionOutcome, FocusIntent, FocusTarget, PageFocusBuilder, PageSpec,
-    TuiActionHandler, TuiEffect, TuiPages,
-};
+use tui_pages::prelude::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum View {
@@ -19,13 +16,7 @@ pub enum Action {
     Quit,
 }
 
-pub type App = TuiPages<
-    View,
-    Action,
-    (),
-    fn(&View, &(), Option<&FocusTarget>) -> PageSpec,
-    Handler,
->;
+pub type App = TuiPages<View, Action, (), PageFn<View, ()>, Handler>;
 
 pub struct Handler;
 
@@ -64,7 +55,7 @@ fn page_spec(_view: &View, _state: &(), _focus: Option<&FocusTarget>) -> PageSpe
 
 pub fn build() -> App {
     let mut app = TuiPages::builder(View::Home)
-        .pages(page_spec as fn(&View, &(), Option<&FocusTarget>) -> PageSpec)
+        .pages(page_spec as PageFn<View, ()>)
         .handler(Handler)
         .bind(modes::GENERAL, "tab", Action::FocusNext)
         .bind(modes::GENERAL, "shift+tab", Action::FocusPrev)

@@ -1,7 +1,12 @@
 #![cfg(feature = "dialog")]
 
-use tui_pages::dialog::{self, DialogData, DialogResult};
+use crossterm::event::{KeyCode, KeyEvent};
+use tui_pages::dialog::{self, DialogData, DialogKey, DialogResult};
 use tui_pages::{FocusController, FocusIntent, FocusManager, FocusTarget};
+
+fn key(code: KeyCode) -> KeyEvent {
+    KeyEvent::from(code)
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Purpose {
@@ -51,6 +56,47 @@ fn dialog_shows_navigates_and_resolves() {
     focus.apply_focus_intent(FocusIntent::ClearOverlay);
     assert!(dialog::current_dialog(&focus).is_none());
     assert_eq!(focus.current(), Some(FocusTarget::Button(0)));
+}
+
+#[test]
+fn handle_key_drives_the_conventional_bindings() {
+    let mut focus: Focus = FocusManager::new();
+    focus.register_page(vec![FocusTarget::Button(0)]);
+
+    // With no dialog open, keys are left untouched for the rest of the loop.
+    assert_eq!(dialog::handle_key(&mut focus, key(KeyCode::Enter)), DialogKey::Ignored);
+
+    let data = DialogData::new("Delete?", "msg", ["Delete", "Cancel"], Purpose::ConfirmDelete);
+    focus.apply_focus_intent(data.show_intent());
+
+    // Tab/Right advance, BackTab/Left retreat — all consumed while modal.
+    assert_eq!(dialog::handle_key(&mut focus, key(KeyCode::Tab)), DialogKey::Consumed);
+    assert_eq!(dialog::active_button(&focus), Some(1));
+    assert_eq!(dialog::handle_key(&mut focus, key(KeyCode::Left)), DialogKey::Consumed);
+    assert_eq!(dialog::active_button(&focus), Some(0));
+    // Unbound keys are swallowed by the modal rather than leaking through.
+    assert_eq!(dialog::handle_key(&mut focus, key(KeyCode::Char('x'))), DialogKey::Consumed);
+
+    // Enter resolves to the active button and closes the dialog.
+    assert_eq!(
+        dialog::handle_key(&mut focus, key(KeyCode::Enter)),
+        DialogKey::Resolved(DialogResult::Selected {
+            purpose: Some(Purpose::ConfirmDelete),
+            index: 0,
+        })
+    );
+    assert!(dialog::current_dialog(&focus).is_none());
+    assert_eq!(focus.current(), Some(FocusTarget::Button(0)));
+
+    // Esc dismisses and closes.
+    focus.apply_focus_intent(
+        DialogData::new("Delete?", "msg", ["Delete"], Purpose::ConfirmDelete).show_intent(),
+    );
+    assert_eq!(
+        dialog::handle_key(&mut focus, key(KeyCode::Esc)),
+        DialogKey::Resolved(DialogResult::Dismissed)
+    );
+    assert!(dialog::current_dialog(&focus).is_none());
 }
 
 #[test]

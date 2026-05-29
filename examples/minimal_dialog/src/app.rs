@@ -5,11 +5,7 @@
 // only opens the dialog; the modal itself is driven in the event loop (main.rs)
 // using the `dialog::*` helpers.
 
-use tui_pages::dialog::DialogData;
-use tui_pages::{
-    modes, ActionContext, ActionOutcome, FocusIntent, FocusTarget, PageFocusBuilder, PageSpec,
-    TuiActionHandler, TuiEffect, TuiPages,
-};
+use tui_pages::prelude::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum View {
@@ -46,14 +42,7 @@ impl Default for AppState {
 }
 
 // The dialog payload (`DialogData<Purpose>`) is the runtime's `D` type param.
-pub type App = TuiPages<
-    View,
-    Action,
-    AppState,
-    fn(&View, &AppState, Option<&FocusTarget>) -> PageSpec,
-    Handler,
-    DialogData<Purpose>,
->;
+pub type App = TuiPages<View, Action, AppState, PageFn<View, AppState>, Handler, DialogData<Purpose>>;
 
 pub struct Handler;
 
@@ -104,7 +93,7 @@ fn page_spec(_view: &View, _state: &AppState, _focus: Option<&FocusTarget>) -> P
 
 pub fn build() -> App {
     let mut app = TuiPages::builder(View::Main)
-        .pages(page_spec as fn(&View, &AppState, Option<&FocusTarget>) -> PageSpec)
+        .pages(page_spec as PageFn<View, AppState>)
         .handler(Handler)
         .bind(modes::GENERAL, "tab", Action::FocusNext)
         .bind(modes::GENERAL, "shift+tab", Action::FocusPrev)
