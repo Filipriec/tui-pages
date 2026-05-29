@@ -35,6 +35,9 @@ ActionDecider - Who does what
 
 Executor - function lives in the login page for login. We should login. So executor does call this function from the login page. Its a simple function call.
 
+## Examples
+There are 4, located at examples dir, go into whichever you want to run and hit cargo run.
+
 ## Architecture
 
 (Dont even read this, its done by Opus, its for the LLMs)
