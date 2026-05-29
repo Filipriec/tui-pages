@@ -18,13 +18,21 @@ This crate it that architecture. Asked AI to generalize so that you can also use
 ## Actual docs
 ### How it worked before the generalization:
 <img src="docs/full_system_legacy.mermaid.svg" width="400">
+
 Simply:
+
 User pressed keybinding("ctrl+s" - handled by KeyEvent), or any keyboard letter. That is flushed into InputPipeline.
+
 InputPipeline - maps typesafe Command::Save to string from KeyEvent or keyboard.
+
 InputOrchestrator - decides where the user request should go. E.g. we press "j" for Movement::Down. This request is to be processed by FocusManager. So we just go there. 
-FocusManager - !!! IMPORTANT - this handles focus. Of the whole app. Like it holds everything. So if library wants focus, its a problem, there is system inside of it for that. But if you want to focus element, you simply tell focus manager. You are not doing it on your own, be dumb, let this do the work for you.
+
+FocusManager [IMPORTANT] - this handles focus. Of the whole app. Like it holds everything. So if library wants focus, its a problem, there is system inside of it for that. But if you want to focus element, you simply tell focus manager. You are not doing it on your own, be dumb, let this do the work for you.
+
 CommandPipeline - I forgot, who cares
+
 ActionDecider - Who does what
+
 Executor - function lives in the login page for login. We should login. So executor does call this function from the login page. Its a simple function call.
 
 ## Architecture
