@@ -2,8 +2,17 @@
 name = "tui-pages"
 version = "0.1.0"
 edition = "2021"
-license = "MIT OR Apache-2.0"
+license = "MIT"
 description = "Coordination runtime for keyboard-driven, page-based TUI applications: input sequences, command resolution, focus, navigation, buffers, and panes."
+repository = "https://gitlab.com/filipriec/tui-pages"
+readme = "README.md"
+keywords = ["tui", "terminal", "ratatui", "keyboard", "ui"]
+categories = ["command-line-interface"]
+exclude = ["examples/", ".claude/", ".forge/"]
+
+[package.metadata.docs.rs]
+# Document every feature (incl. the optional `dialog` renderer) on docs.rs.
+all-features = true
 
 [dependencies]
 crossterm = "0.28"
@@ -13,7 +22,9 @@ tracing = "0.1"
 
 [features]
 default = []
-serde = ["dep:serde"]
+# Derives serde on the input/mode types. KeyChord embeds crossterm's KeyCode /
+# KeyModifiers, so we also turn on crossterm's own serde impls.
+serde = ["dep:serde", "crossterm/serde"]
 # Built-in modal dialog: content/result types plus a ratatui renderer.
 # Pulls in ratatui; the rest of the crate stays rendering-agnostic.
 dialog = ["dep:ratatui"]

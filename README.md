@@ -1,5 +1,9 @@
 # tui-pages
 
+> **Origin:** This crate was extracted from a production application and
+> packaged into a standalone crate. The underlying code is handcrafted; the
+> extraction and crate-packaging work was done with AI - Claude, GPT, Minimax.
+
 Opinionated coordination runtime for page-based, keyboard-driven TUI
 applications.
 
