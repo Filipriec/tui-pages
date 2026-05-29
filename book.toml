@@ -1,0 +1,18 @@
+[book]
+authors = ["Filip Priěčinský"]
+language = "en"
+multilingual = false
+src = "src"
+title = "tui-pages"
+
+[build]
+create-missing = false
+
+[output.html]
+additional-js = []
+additional-css = []
+mathjax-support = false
+katex-support = false
+
+[output.html.search]
+limit-results = 30

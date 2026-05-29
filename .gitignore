@@ -1,4 +1,3 @@
-/target
-Cargo.lock
-examples/*/target/
+book
+target/
 finds.md
