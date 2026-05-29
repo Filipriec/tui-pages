@@ -18,6 +18,35 @@ impl<A> KeyMap<A> {
     pub fn bind(&mut self, sequence: impl Into<Vec<KeyChord>>, action: A) {
         self.bindings.insert(sequence.into(), action);
     }
+
+    /// Remove the binding for an exact chord sequence, returning the action it
+    /// was mapped to (if any). Pair with [`crate::input::try_parse_binding`] to
+    /// drive a remap UI: `map.unbind(&try_parse_binding(old)?)`.
+    pub fn unbind(&mut self, sequence: &[KeyChord]) -> Option<A> {
+        self.bindings.remove(sequence)
+    }
+}
+
+impl<A: PartialEq> KeyMap<A> {
+    /// Every chord sequence currently bound to `action` in this map. Useful for
+    /// a help screen ("what fires this action?") or to find what to unbind
+    /// before rebinding.
+    pub fn bindings_for(&self, action: &A) -> Vec<&[KeyChord]> {
+        self.bindings
+            .iter()
+            .filter(|(_, bound)| *bound == action)
+            .map(|(sequence, _)| sequence.as_slice())
+            .collect()
+    }
+
+    /// Remove every binding mapped to `action`, returning how many were
+    /// removed. Lets a remap UI clear an action's old keys before assigning new
+    /// ones, regardless of how many sequences pointed at it.
+    pub fn unbind_action(&mut self, action: &A) -> usize {
+        let before = self.bindings.len();
+        self.bindings.retain(|_, bound| bound != action);
+        before - self.bindings.len()
+    }
 }
 
 #[derive(Debug, Clone)]

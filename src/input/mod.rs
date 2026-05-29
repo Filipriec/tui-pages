@@ -6,7 +6,7 @@ mod response;
 mod sequence;
 
 pub use key_chord::KeyChord;
-pub use key_sequence::{parse_binding, parse_key};
+pub use key_sequence::{parse_binding, parse_key, try_parse_binding, try_parse_key, ParseKeyError};
 pub use pipeline::InputPipeline;
 pub use registry::{InputRegistry, KeyMap};
 pub use response::{InputHint, PipelineResponse};

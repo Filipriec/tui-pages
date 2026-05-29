@@ -26,8 +26,8 @@ pub use focus::{
     OverlayKind, PageFocusBuilder,
 };
 pub use input::{
-    parse_binding, parse_key, ChordSequenceTracker, InputHint, InputPipeline, InputRegistry, KeyChord, KeyMap,
-    PipelineResponse,
+    parse_binding, parse_key, try_parse_binding, try_parse_key, ChordSequenceTracker, InputHint,
+    InputPipeline, InputRegistry, KeyChord, KeyMap, ParseKeyError, PipelineResponse,
 };
 pub use navigation::{
     BufferState, NavigationCoordinator, NavigationEvent, NavigationResult, NavigationRouter,
@@ -52,9 +52,10 @@ pub use runtime::{
 /// renderer, and the `dialog::*` driver helpers.
 pub mod prelude {
     pub use crate::{
-        modes, ActionContext, ActionOutcome, FocusController, FocusIntent, FocusManager,
-        FocusQuery, FocusTarget, ModeId, PageFn, PageFocusBuilder, PageProvider, PageSpec,
-        TuiActionHandler, TuiEffect, TuiPages, TuiPagesOutput, TuiPagesStatus,
+        modes, parse_binding, try_parse_binding, ActionContext, ActionOutcome, FocusController,
+        FocusIntent, FocusManager, FocusQuery, FocusTarget, KeyChord, ModeId, PageFn,
+        PageFocusBuilder, PageProvider, PageSpec, ParseKeyError, TuiActionHandler, TuiEffect,
+        TuiPages, TuiPagesOutput, TuiPagesStatus,
     };
 
     #[cfg(feature = "dialog")]
