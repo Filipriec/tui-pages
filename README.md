@@ -2,6 +2,7 @@
 
 > [!IMPORTANT]
 > Read this docs, its handwritten
+
 > **Origin:** Originally developed for TUI accounting system. This crate was extracted and optimized from it using AI(thank you claude, chatgbt and minimax).
 
 ## Docs:
