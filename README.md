@@ -4,6 +4,7 @@
 
 ## Docs:
 ```
+git submodule update --init --recursive
 mdbook serve mdbook --open
 ```
 
