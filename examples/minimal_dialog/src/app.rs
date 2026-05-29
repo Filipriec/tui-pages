@@ -42,11 +42,13 @@ impl Default for AppState {
 }
 
 // The dialog payload (`DialogData<Purpose>`) is the runtime's `D` type param.
-pub type App = TuiPages<View, Action, AppState, PageFn<View, AppState>, Handler, DialogData<Purpose>>;
+// O = () — this example has no named simple overlays, only a dialog (D).
+pub type App =
+    TuiPages<View, Action, AppState, PageFn<View, AppState>, Handler, (), DialogData<Purpose>>;
 
 pub struct Handler;
 
-impl TuiActionHandler<View, Action, AppState, DialogData<Purpose>> for Handler {
+impl TuiActionHandler<View, Action, AppState, (), DialogData<Purpose>> for Handler {
     type Error = std::convert::Infallible;
 
     fn handle_action(
@@ -54,7 +56,7 @@ impl TuiActionHandler<View, Action, AppState, DialogData<Purpose>> for Handler {
         action: Action,
         ctx: ActionContext<View>,
         state: &mut AppState,
-    ) -> Result<ActionOutcome<View, DialogData<Purpose>>, Self::Error> {
+    ) -> Result<ActionOutcome<View, (), DialogData<Purpose>>, Self::Error> {
         Ok(match action {
             Action::FocusNext => ActionOutcome::effect(TuiEffect::Focus(FocusIntent::Next)),
             Action::FocusPrev => ActionOutcome::effect(TuiEffect::Focus(FocusIntent::Prev)),

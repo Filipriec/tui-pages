@@ -10,4 +10,4 @@ pub use focusable::Focusable;
 pub use intent::FocusIntent;
 pub use manager::{FocusController, FocusManager, OverlayFocus};
 pub use query::FocusQuery;
-pub use target::{FocusTarget, OverlayKind};
+pub use target::FocusTarget;

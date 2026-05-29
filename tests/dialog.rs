@@ -13,7 +13,8 @@ enum Purpose {
     ConfirmDelete,
 }
 
-type Focus = FocusManager<DialogData<Purpose>, ()>;
+// O = () (no named overlays), D = DialogData<Purpose>, P = ().
+type Focus = FocusManager<(), DialogData<Purpose>, ()>;
 
 #[test]
 fn dialog_shows_navigates_and_resolves() {

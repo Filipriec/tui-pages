@@ -47,6 +47,27 @@ fn focus_manager_moves_between_buttons_without_wrapping() {
 }
 
 #[test]
+fn overlay_type_is_application_defined() {
+    // The crate provides no overlay names; the app supplies its own type as `O`.
+    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+    enum Overlay {
+        Palette,
+        Sidebar,
+    }
+
+    let mut focus: FocusManager<Overlay> = FocusManager::new();
+    focus.register_page(vec![FocusTarget::Button(0)]);
+
+    focus.apply_focus_intent(FocusIntent::Open(FocusTarget::Overlay(Overlay::Palette)));
+    assert_eq!(focus.current(), Some(FocusTarget::Overlay(Overlay::Palette)));
+    assert!(focus.is_overlay_open(&FocusTarget::Overlay(Overlay::Palette)));
+    assert!(!focus.is_overlay_open(&FocusTarget::Overlay(Overlay::Sidebar)));
+
+    focus.apply_focus_intent(FocusIntent::ClearOverlay);
+    assert_eq!(focus.current(), Some(FocusTarget::Button(0)));
+}
+
+#[test]
 fn navigation_returns_focus_registration_intent() {
     let mut router = Router {
         current: View::Home,

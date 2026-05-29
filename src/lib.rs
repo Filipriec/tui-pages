@@ -23,7 +23,7 @@ pub use dialog::{render_dialog, DialogData, DialogKey, DialogResult, DialogTheme
 pub use command::{CommandHint, CommandRegistry, CommandResolver, CommandResponse};
 pub use focus::{
     FocusController, FocusIntent, FocusManager, FocusQuery, FocusTarget, Focusable, OverlayFocus,
-    OverlayKind, PageFocusBuilder,
+    PageFocusBuilder,
 };
 pub use input::{
     parse_binding, parse_key, try_parse_binding, try_parse_key, ChordSequenceTracker, InputHint,

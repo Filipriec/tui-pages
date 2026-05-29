@@ -9,7 +9,7 @@ use ratatui::{
 };
 use tui_pages::{FocusTarget, InputHint, PaneSplit};
 
-use crate::app::{self, App, AppState, View, NOTES, NOTES_SECTION};
+use crate::app::{self, App, AppState, Overlay, View, NOTES, NOTES_SECTION};
 
 pub fn render(frame: &mut Frame, tui: &App, state: &AppState, waiting: &[InputHint<app::Action>]) {
     let area = frame.area();
@@ -138,7 +138,7 @@ fn render_pane(
     area: Rect,
     view: View,
     state: &AppState,
-    focus: Option<FocusTarget>,
+    focus: Option<FocusTarget<Overlay>>,
     is_active: bool,
 ) {
     let border = Style::default().fg(if is_active { Color::Green } else { Color::DarkGray });
@@ -156,7 +156,7 @@ fn render_pane(
     }
 }
 
-fn render_home(frame: &mut Frame, area: Rect, focus: Option<FocusTarget>) {
+fn render_home(frame: &mut Frame, area: Rect, focus: Option<FocusTarget<Overlay>>) {
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(0), Constraint::Length(3), Constraint::Length(3)])
@@ -178,7 +178,7 @@ fn render_home(frame: &mut Frame, area: Rect, focus: Option<FocusTarget>) {
     render_button(frame, rows[2], "Open Help", focus, 1);
 }
 
-fn render_notes(frame: &mut Frame, area: Rect, state: &AppState, focus: Option<FocusTarget>) {
+fn render_notes(frame: &mut Frame, area: Rect, state: &AppState, focus: Option<FocusTarget<Overlay>>) {
     let cols = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
@@ -263,7 +263,7 @@ fn render_help(frame: &mut Frame, area: Rect) {
     );
 }
 
-fn render_button(frame: &mut Frame, area: Rect, label: &str, focus: Option<FocusTarget>, index: usize) {
+fn render_button(frame: &mut Frame, area: Rect, label: &str, focus: Option<FocusTarget<Overlay>>, index: usize) {
     let focused = matches!(focus, Some(FocusTarget::Button(i)) if i == index);
     let style = if focused {
         Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)

@@ -1,28 +1,25 @@
+/// A focusable element of a page.
+///
+/// `O` is the application-defined overlay type carried by
+/// [`FocusTarget::Overlay`] — your own enum of the modal overlays your TUI has
+/// (a command bar, a search palette, a sidebar, …). The crate provides no
+/// overlay names; you define them. Apps that use no named overlays leave `O`
+/// at its default `()`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
-pub enum FocusTarget {
+pub enum FocusTarget<O = ()> {
     CanvasField(usize),
     InternalCanvasField(usize),
     Button(usize),
     Section(usize),
     SectionItem { section: usize, item: usize },
-    Overlay(OverlayKind),
+    Overlay(O),
     DialogButton(usize),
     Picker,
     Custom(String),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
-pub enum OverlayKind {
-    CommandBar,
-    SearchPalette,
-    FindFilePalette,
-    Sidebar,
-    Custom(String),
-}
-
-impl FocusTarget {
+impl<O> FocusTarget<O> {
     pub fn is_canvas(&self) -> bool {
         matches!(
             self,
@@ -44,8 +41,11 @@ impl FocusTarget {
     pub fn is_top_level_navigable(&self) -> bool {
         !matches!(self, FocusTarget::InternalCanvasField(_))
     }
+}
 
-    pub fn to_overlay(&self) -> Option<OverlayKind> {
+impl<O: Clone> FocusTarget<O> {
+    /// The overlay identity if this target is an [`Overlay`](FocusTarget::Overlay).
+    pub fn to_overlay(&self) -> Option<O> {
         match self {
             FocusTarget::Overlay(kind) => Some(kind.clone()),
             _ => None,

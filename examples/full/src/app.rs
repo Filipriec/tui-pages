@@ -13,7 +13,15 @@
 //                                    The crate ships no palette; you compose one.
 
 use tui_pages::prelude::*;
-use tui_pages::{OverlayKind, PaneSplit};
+use tui_pages::PaneSplit;
+
+/// The overlays this TUI has. The crate provides no overlay names — this is the
+/// app's own type, threaded through the runtime as the `O` parameter so focus
+/// targets are compiler-checked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Overlay {
+    CommandBar,
+}
 
 pub const NOTES_SECTION: usize = 0;
 pub const NOTES: [&str; 4] = [
@@ -65,19 +73,19 @@ pub struct AppState {
     pub palette_input: String,
 }
 
-pub type App = TuiPages<View, Action, AppState, PageFn<View, AppState>, Handler>;
+pub type App = TuiPages<View, Action, AppState, PageFn<View, AppState, Overlay>, Handler, Overlay>;
 
 pub struct Handler;
 
-impl TuiActionHandler<View, Action, AppState> for Handler {
+impl TuiActionHandler<View, Action, AppState, Overlay> for Handler {
     type Error = std::convert::Infallible;
 
     fn handle_action(
         &mut self,
         action: Action,
-        ctx: ActionContext<View>,
+        ctx: ActionContext<View, Overlay>,
         state: &mut AppState,
-    ) -> Result<ActionOutcome<View>, Self::Error> {
+    ) -> Result<ActionOutcome<View, Overlay>, Self::Error> {
         Ok(match action {
             Action::FocusNext => top_level_focus(ctx.focus, FocusIntent::Next),
             Action::FocusPrev => top_level_focus(ctx.focus, FocusIntent::Prev),
@@ -109,7 +117,7 @@ impl TuiActionHandler<View, Action, AppState> for Handler {
                 state.palette_open = true;
                 state.palette_input.clear();
                 ActionOutcome::effect(TuiEffect::Focus(FocusIntent::Open(
-                    FocusTarget::Overlay(OverlayKind::CommandBar),
+                    FocusTarget::Overlay(Overlay::CommandBar),
                 )))
             }
 
@@ -118,7 +126,10 @@ impl TuiActionHandler<View, Action, AppState> for Handler {
     }
 }
 
-fn top_level_focus(focus: Option<FocusTarget>, intent: FocusIntent) -> ActionOutcome<View> {
+fn top_level_focus(
+    focus: Option<FocusTarget<Overlay>>,
+    intent: FocusIntent<Overlay>,
+) -> ActionOutcome<View, Overlay> {
     if matches!(focus, Some(FocusTarget::SectionItem { .. })) {
         return ActionOutcome::effects([
             TuiEffect::Focus(FocusIntent::LeaveSection),
@@ -128,7 +139,10 @@ fn top_level_focus(focus: Option<FocusTarget>, intent: FocusIntent) -> ActionOut
     ActionOutcome::effect(TuiEffect::Focus(intent))
 }
 
-fn inside_section(focus: Option<FocusTarget>, intent: FocusIntent) -> ActionOutcome<View> {
+fn inside_section(
+    focus: Option<FocusTarget<Overlay>>,
+    intent: FocusIntent<Overlay>,
+) -> ActionOutcome<View, Overlay> {
     if matches!(focus, Some(FocusTarget::SectionItem { .. })) {
         ActionOutcome::effect(TuiEffect::Focus(intent))
     } else {
@@ -136,7 +150,7 @@ fn inside_section(focus: Option<FocusTarget>, intent: FocusIntent) -> ActionOutc
     }
 }
 
-fn select(ctx: ActionContext<View>, state: &mut AppState) -> ActionOutcome<View> {
+fn select(ctx: ActionContext<View, Overlay>, state: &mut AppState) -> ActionOutcome<View, Overlay> {
     match (ctx.current_view, ctx.focus) {
         (View::Notes, Some(FocusTarget::Section(NOTES_SECTION))) => {
             ActionOutcome::effect(TuiEffect::Focus(FocusIntent::EnterSection {
@@ -167,7 +181,7 @@ fn select(ctx: ActionContext<View>, state: &mut AppState) -> ActionOutcome<View>
     }
 }
 
-fn escape(ctx: ActionContext<View>) -> ActionOutcome<View> {
+fn escape(ctx: ActionContext<View, Overlay>) -> ActionOutcome<View, Overlay> {
     if matches!(ctx.focus, Some(FocusTarget::SectionItem { .. })) {
         ActionOutcome::effect(TuiEffect::Focus(FocusIntent::LeaveSection))
     } else {
@@ -175,7 +189,7 @@ fn escape(ctx: ActionContext<View>) -> ActionOutcome<View> {
     }
 }
 
-fn page_spec(view: &View, _state: &AppState, _focus: Option<&FocusTarget>) -> PageSpec {
+fn page_spec(view: &View, _state: &AppState, _focus: Option<&FocusTarget<Overlay>>) -> PageSpec<Overlay> {
     let mut focus = PageFocusBuilder::new();
     match view {
         View::Home => focus = focus.button(0).button(1),
@@ -190,7 +204,7 @@ fn page_spec(view: &View, _state: &AppState, _focus: Option<&FocusTarget>) -> Pa
 
 pub fn build() -> App {
     let mut app = TuiPages::builder(View::Home)
-        .pages(page_spec as PageFn<View, AppState>)
+        .pages(page_spec as PageFn<View, AppState, Overlay>)
         .handler(Handler)
         // Focus + activation
         .bind(modes::GENERAL, "tab", Action::FocusNext)

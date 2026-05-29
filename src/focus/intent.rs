@@ -1,16 +1,16 @@
 use crate::focus::FocusTarget;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum FocusIntent<D = (), P = ()> {
+pub enum FocusIntent<O = (), D = (), P = ()> {
     Next,
     Prev,
-    Set(FocusTarget),
-    Open(FocusTarget),
-    Close(FocusTarget),
-    Toggle(FocusTarget),
-    RegisterPage(Vec<FocusTarget>),
+    Set(FocusTarget<O>),
+    Open(FocusTarget<O>),
+    Close(FocusTarget<O>),
+    Toggle(FocusTarget<O>),
+    RegisterPage(Vec<FocusTarget<O>>),
     RegisterPageAndEnterSection {
-        targets: Vec<FocusTarget>,
+        targets: Vec<FocusTarget<O>>,
         section: usize,
         item_count: usize,
         item: usize,

@@ -29,8 +29,9 @@ use crossterm::event::{KeyCode, KeyEvent};
 impl<D> DialogData<D> {
     /// The focus intent that opens this dialog as a modal overlay. Wrap it in
     /// [`TuiEffect::Focus`](crate::TuiEffect::Focus) (or apply it directly to a
-    /// [`FocusManager`]).
-    pub fn show_intent<P>(self) -> FocusIntent<DialogData<D>, P> {
+    /// [`FocusManager`]). `O` is the app's overlay type and is inferred from
+    /// the surrounding runtime.
+    pub fn show_intent<O, P>(self) -> FocusIntent<O, DialogData<D>, P> {
         let buttons = self.buttons.len();
         FocusIntent::ShowDialog {
             data: self,
@@ -40,7 +41,7 @@ impl<D> DialogData<D> {
 }
 
 /// The dialog currently shown by the focus manager, if any.
-pub fn current_dialog<D, P>(focus: &FocusManager<DialogData<D>, P>) -> Option<&DialogData<D>> {
+pub fn current_dialog<O, D, P>(focus: &FocusManager<O, DialogData<D>, P>) -> Option<&DialogData<D>> {
     match focus.overlay() {
         Some(OverlayFocus::Dialog { data, .. }) => Some(data),
         _ => None,
@@ -48,7 +49,7 @@ pub fn current_dialog<D, P>(focus: &FocusManager<DialogData<D>, P>) -> Option<&D
 }
 
 /// The active (highlighted) button index of the shown dialog, if any.
-pub fn active_button<D, P>(focus: &FocusManager<DialogData<D>, P>) -> Option<usize> {
+pub fn active_button<O, D, P>(focus: &FocusManager<O, DialogData<D>, P>) -> Option<usize> {
     match focus.overlay() {
         Some(OverlayFocus::Dialog { index, .. }) => Some(*index),
         _ => None,
@@ -57,7 +58,9 @@ pub fn active_button<D, P>(focus: &FocusManager<DialogData<D>, P>) -> Option<usi
 
 /// Resolve the current dialog into a [`DialogResult`] describing the selected
 /// button and the dialog's purpose. Returns `None` when no dialog is open.
-pub fn selection<D: Clone, P>(focus: &FocusManager<DialogData<D>, P>) -> Option<DialogResult<D>> {
+pub fn selection<O, D: Clone, P>(
+    focus: &FocusManager<O, DialogData<D>, P>,
+) -> Option<DialogResult<D>> {
     match focus.overlay() {
         Some(OverlayFocus::Dialog { data, index, .. }) => Some(DialogResult::Selected {
             purpose: data.purpose.clone(),
@@ -103,8 +106,8 @@ pub enum DialogKey<D> {
 /// For non-conventional bindings, drive the dialog yourself with
 /// [`current_dialog`], [`active_button`], [`selection`], and
 /// [`FocusIntent`](crate::FocusIntent) — this helper is just the common path.
-pub fn handle_key<D: Clone, P>(
-    focus: &mut FocusManager<DialogData<D>, P>,
+pub fn handle_key<O: Clone + PartialEq, D: Clone, P>(
+    focus: &mut FocusManager<O, DialogData<D>, P>,
     key: KeyEvent,
 ) -> DialogKey<D> {
     if current_dialog(focus).is_none() {

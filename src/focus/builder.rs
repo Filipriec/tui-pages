@@ -1,11 +1,19 @@
 use crate::focus::FocusTarget;
 
-#[derive(Debug, Default, Clone)]
-pub struct PageFocusBuilder {
-    targets: Vec<FocusTarget>,
+#[derive(Debug, Clone)]
+pub struct PageFocusBuilder<O = ()> {
+    targets: Vec<FocusTarget<O>>,
 }
 
-impl PageFocusBuilder {
+impl<O> Default for PageFocusBuilder<O> {
+    fn default() -> Self {
+        Self {
+            targets: Vec::new(),
+        }
+    }
+}
+
+impl<O> PageFocusBuilder<O> {
     pub fn new() -> Self {
         Self::default()
     }
@@ -44,12 +52,12 @@ impl PageFocusBuilder {
         self
     }
 
-    pub fn target(mut self, target: FocusTarget) -> Self {
+    pub fn target(mut self, target: FocusTarget<O>) -> Self {
         self.targets.push(target);
         self
     }
 
-    pub fn build(self) -> Vec<FocusTarget> {
+    pub fn build(self) -> Vec<FocusTarget<O>> {
         self.targets
     }
 }

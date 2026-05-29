@@ -1,8 +1,8 @@
-use crate::focus::{FocusIntent, FocusQuery, FocusTarget, OverlayKind};
+use crate::focus::{FocusIntent, FocusQuery, FocusTarget};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum OverlayFocus<D = (), P = ()> {
-    Simple(OverlayKind),
+pub enum OverlayFocus<O = (), D = (), P = ()> {
+    Simple(O),
     Dialog { data: D, index: usize, buttons: usize },
     Picker { data: P },
 }
@@ -15,24 +15,25 @@ struct EnteredSection {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FocusManager<D = (), P = ()> {
-    targets: Vec<FocusTarget>,
+pub struct FocusManager<O = (), D = (), P = ()> {
+    targets: Vec<FocusTarget<O>>,
     index: usize,
-    overlay: Option<OverlayFocus<D, P>>,
+    overlay: Option<OverlayFocus<O, D, P>>,
     entered_section: Option<EnteredSection>,
 }
 
-impl<D, P> Default for FocusManager<D, P> {
+impl<O, D, P> Default for FocusManager<O, D, P> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-pub trait FocusController<D = (), P = ()> {
-    fn apply_focus_intent(&mut self, intent: FocusIntent<D, P>);
+pub trait FocusController<O = (), D = (), P = ()> {
+    fn apply_focus_intent(&mut self, intent: FocusIntent<O, D, P>);
 }
 
-impl<D, P> FocusManager<D, P> {
+// Operations that don't inspect the overlay identity `O`.
+impl<O, D, P> FocusManager<O, D, P> {
     pub fn new() -> Self {
         Self {
             targets: Vec::new(),
@@ -42,66 +43,22 @@ impl<D, P> FocusManager<D, P> {
         }
     }
 
-    pub fn targets(&self) -> &[FocusTarget] {
+    pub fn targets(&self) -> &[FocusTarget<O>] {
         &self.targets
     }
 
-    pub fn overlay(&self) -> Option<&OverlayFocus<D, P>> {
+    pub fn overlay(&self) -> Option<&OverlayFocus<O, D, P>> {
         self.overlay.as_ref()
     }
 
-    pub fn overlay_mut(&mut self) -> Option<&mut OverlayFocus<D, P>> {
+    pub fn overlay_mut(&mut self) -> Option<&mut OverlayFocus<O, D, P>> {
         self.overlay.as_mut()
     }
 
-    pub fn query(&self) -> FocusQuery {
-        FocusQuery {
-            current: self.current(),
-        }
-    }
-
-    pub fn register_page(&mut self, targets: Vec<FocusTarget>) {
+    pub fn register_page(&mut self, targets: Vec<FocusTarget<O>>) {
         self.targets = targets;
         self.index = 0;
         self.entered_section = None;
-    }
-
-    pub fn add_target(&mut self, target: FocusTarget) {
-        if !self.targets.contains(&target) {
-            self.targets.push(target);
-        }
-    }
-
-    pub fn remove_target(&mut self, target: &FocusTarget) {
-        if let Some(position) = self.targets.iter().position(|candidate| candidate == target) {
-            self.targets.remove(position);
-            if self.index >= self.targets.len() && !self.targets.is_empty() {
-                self.index = self.targets.len() - 1;
-            }
-        }
-    }
-
-    pub fn current(&self) -> Option<FocusTarget> {
-        if let Some(overlay) = &self.overlay {
-            return Some(match overlay {
-                OverlayFocus::Simple(kind) => FocusTarget::Overlay(kind.clone()),
-                OverlayFocus::Dialog { index, .. } => FocusTarget::DialogButton(*index),
-                OverlayFocus::Picker { .. } => FocusTarget::Picker,
-            });
-        }
-
-        if let Some(section) = &self.entered_section {
-            return Some(FocusTarget::SectionItem {
-                section: section.section_id,
-                item: section.item_index,
-            });
-        }
-
-        self.targets.get(self.index).cloned()
-    }
-
-    pub fn is_focused(&self, target: &FocusTarget) -> bool {
-        self.current().as_ref() == Some(target)
     }
 
     pub fn has_overlay(&self) -> bool {
@@ -180,73 +137,6 @@ impl<D, P> FocusManager<D, P> {
         }
     }
 
-    pub fn set_focus(&mut self, target: FocusTarget) {
-        if let Some(kind) = target.to_overlay() {
-            self.overlay = Some(OverlayFocus::Simple(kind));
-            return;
-        }
-
-        if let FocusTarget::DialogButton(next_index) = target {
-            if let Some(OverlayFocus::Dialog { index, buttons, .. }) = &mut self.overlay {
-                if next_index < *buttons {
-                    *index = next_index;
-                }
-            }
-            return;
-        }
-
-        if let FocusTarget::Section(section_id) = target {
-            if let Some(position) = self
-                .targets
-                .iter()
-                .position(|candidate| matches!(candidate, FocusTarget::Section(id) if *id == section_id))
-            {
-                self.index = position;
-                self.overlay = None;
-                self.entered_section = None;
-            }
-            return;
-        }
-
-        if let Some(position) = self.targets.iter().position(|candidate| candidate == &target) {
-            self.index = position;
-            self.overlay = None;
-            self.entered_section = None;
-        }
-    }
-
-    pub fn open_overlay(&mut self, target: FocusTarget) {
-        if let Some(kind) = target.to_overlay() {
-            self.overlay = Some(OverlayFocus::Simple(kind));
-        }
-    }
-
-    pub fn close_overlay(&mut self, target: FocusTarget) {
-        let should_close = match (&self.overlay, target.to_overlay()) {
-            (Some(OverlayFocus::Simple(current)), Some(requested)) => current == &requested,
-            _ => false,
-        };
-
-        if should_close {
-            self.overlay = None;
-        }
-    }
-
-    pub fn toggle_overlay(&mut self, target: FocusTarget) {
-        if self.is_overlay_open(&target) {
-            self.close_overlay(target);
-        } else {
-            self.open_overlay(target);
-        }
-    }
-
-    pub fn is_overlay_open(&self, target: &FocusTarget) -> bool {
-        match (&self.overlay, target.to_overlay()) {
-            (Some(OverlayFocus::Simple(current)), Some(requested)) => current == &requested,
-            _ => false,
-        }
-    }
-
     pub fn show_dialog(&mut self, data: D, buttons: usize) {
         self.overlay = Some(OverlayFocus::Dialog {
             data,
@@ -320,8 +210,125 @@ impl<D, P> FocusManager<D, P> {
     }
 }
 
-impl<D, P> FocusController<D, P> for FocusManager<D, P> {
-    fn apply_focus_intent(&mut self, intent: FocusIntent<D, P>) {
+// Operations that read the current focus (and therefore clone `O`).
+impl<O: Clone, D, P> FocusManager<O, D, P> {
+    pub fn current(&self) -> Option<FocusTarget<O>> {
+        if let Some(overlay) = &self.overlay {
+            return Some(match overlay {
+                OverlayFocus::Simple(kind) => FocusTarget::Overlay(kind.clone()),
+                OverlayFocus::Dialog { index, .. } => FocusTarget::DialogButton(*index),
+                OverlayFocus::Picker { .. } => FocusTarget::Picker,
+            });
+        }
+
+        if let Some(section) = &self.entered_section {
+            return Some(FocusTarget::SectionItem {
+                section: section.section_id,
+                item: section.item_index,
+            });
+        }
+
+        self.targets.get(self.index).cloned()
+    }
+
+    pub fn query(&self) -> FocusQuery<O> {
+        FocusQuery {
+            current: self.current(),
+        }
+    }
+}
+
+// Operations that compare overlays / targets by identity.
+impl<O: Clone + PartialEq, D, P> FocusManager<O, D, P> {
+    pub fn is_focused(&self, target: &FocusTarget<O>) -> bool {
+        self.current().as_ref() == Some(target)
+    }
+
+    pub fn add_target(&mut self, target: FocusTarget<O>) {
+        if !self.targets.contains(&target) {
+            self.targets.push(target);
+        }
+    }
+
+    pub fn remove_target(&mut self, target: &FocusTarget<O>) {
+        if let Some(position) = self.targets.iter().position(|candidate| candidate == target) {
+            self.targets.remove(position);
+            if self.index >= self.targets.len() && !self.targets.is_empty() {
+                self.index = self.targets.len() - 1;
+            }
+        }
+    }
+
+    pub fn set_focus(&mut self, target: FocusTarget<O>) {
+        if let Some(kind) = target.to_overlay() {
+            self.overlay = Some(OverlayFocus::Simple(kind));
+            return;
+        }
+
+        if let FocusTarget::DialogButton(next_index) = target {
+            if let Some(OverlayFocus::Dialog { index, buttons, .. }) = &mut self.overlay {
+                if next_index < *buttons {
+                    *index = next_index;
+                }
+            }
+            return;
+        }
+
+        if let FocusTarget::Section(section_id) = target {
+            if let Some(position) = self
+                .targets
+                .iter()
+                .position(|candidate| matches!(candidate, FocusTarget::Section(id) if *id == section_id))
+            {
+                self.index = position;
+                self.overlay = None;
+                self.entered_section = None;
+            }
+            return;
+        }
+
+        if let Some(position) = self.targets.iter().position(|candidate| candidate == &target) {
+            self.index = position;
+            self.overlay = None;
+            self.entered_section = None;
+        }
+    }
+
+    pub fn open_overlay(&mut self, target: FocusTarget<O>) {
+        if let Some(kind) = target.to_overlay() {
+            self.overlay = Some(OverlayFocus::Simple(kind));
+        }
+    }
+
+    pub fn close_overlay(&mut self, target: FocusTarget<O>) {
+        let should_close = match (&self.overlay, target.to_overlay()) {
+            (Some(OverlayFocus::Simple(current)), Some(requested)) => current == &requested,
+            _ => false,
+        };
+
+        if should_close {
+            self.overlay = None;
+        }
+    }
+
+    pub fn toggle_overlay(&mut self, target: FocusTarget<O>) {
+        if self.is_overlay_open(&target) {
+            self.close_overlay(target);
+        } else {
+            self.open_overlay(target);
+        }
+    }
+
+    pub fn is_overlay_open(&self, target: &FocusTarget<O>) -> bool {
+        match (&self.overlay, target.to_overlay()) {
+            (Some(OverlayFocus::Simple(current)), Some(requested)) => current == &requested,
+            _ => false,
+        }
+    }
+}
+
+impl<O: Clone + PartialEq, D, P> FocusController<O, D, P> for FocusManager<O, D, P> {
+    fn apply_focus_intent(&mut self, intent: FocusIntent<O, D, P>) {
         match intent {
             FocusIntent::Next => self.next(),
             FocusIntent::Prev => self.prev(),
