@@ -3,4 +3,4 @@ target/
 finds.md
 .forge/
 .claude/
-theme/book/
+**/book/
