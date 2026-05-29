@@ -80,5 +80,8 @@ fn runtime_maps_user_actions_to_library_effects() {
 
     let output = tui.submit_command("q", &mut state).unwrap();
     assert!(output.quit_requested);
-    assert_eq!(state.handled, vec![Action::Next, Action::Settings, Action::Quit]);
+    assert_eq!(
+        state.handled,
+        vec![Action::Next, Action::Settings, Action::Quit]
+    );
 }

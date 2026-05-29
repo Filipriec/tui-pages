@@ -12,7 +12,10 @@ pub enum FocusTarget<O = ()> {
     InternalCanvasField(usize),
     Button(usize),
     Section(usize),
-    SectionItem { section: usize, item: usize },
+    SectionItem {
+        section: usize,
+        item: usize,
+    },
     Overlay(O),
     /// Focus on item `N` inside the currently open modal overlay. The crate
     /// names no modal kinds: a dialog button, a picker row, or any other

@@ -20,12 +20,20 @@ pub enum FocusIntent<O = (), M = ()> {
     },
     /// Open a modal overlay carrying `data` with `count` selectable items
     /// (`0` for a non-interactive modal such as a loading dialog).
-    ShowModal { data: M, count: usize },
+    ShowModal {
+        data: M,
+        count: usize,
+    },
     /// Replace the open modal's data and item count in place.
-    UpdateModal { data: M, count: usize },
+    UpdateModal {
+        data: M,
+        count: usize,
+    },
     ClearOverlay,
     ExitCanvasForward,
     ExitCanvasBackward,
-    EnterSection { item_count: usize },
+    EnterSection {
+        item_count: usize,
+    },
     LeaveSection,
 }

@@ -81,8 +81,6 @@ impl<A> CommandRegistry<A> {
 impl<A: Clone> CommandRegistry<A> {
     pub fn match_action(&self, input: &str) -> Option<A> {
         let input = input.trim().to_lowercase();
-        self.bindings
-            .get(&input)
-            .map(|(_, action)| action.clone())
+        self.bindings.get(&input).map(|(_, action)| action.clone())
     }
 }

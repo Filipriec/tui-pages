@@ -65,18 +65,35 @@ fn handle_key_drives_the_conventional_bindings() {
     focus.register_page(vec![FocusTarget::Button(0)]);
 
     // With no dialog open, keys are left untouched for the rest of the loop.
-    assert_eq!(dialog::handle_key(&mut focus, key(KeyCode::Enter)), DialogKey::Ignored);
+    assert_eq!(
+        dialog::handle_key(&mut focus, key(KeyCode::Enter)),
+        DialogKey::Ignored
+    );
 
-    let data = DialogData::new("Delete?", "msg", ["Delete", "Cancel"], Purpose::ConfirmDelete);
+    let data = DialogData::new(
+        "Delete?",
+        "msg",
+        ["Delete", "Cancel"],
+        Purpose::ConfirmDelete,
+    );
     focus.apply_focus_intent(data.show_intent());
 
     // Tab/Right advance, BackTab/Left retreat — all consumed while modal.
-    assert_eq!(dialog::handle_key(&mut focus, key(KeyCode::Tab)), DialogKey::Consumed);
+    assert_eq!(
+        dialog::handle_key(&mut focus, key(KeyCode::Tab)),
+        DialogKey::Consumed
+    );
     assert_eq!(dialog::active_button(&focus), Some(1));
-    assert_eq!(dialog::handle_key(&mut focus, key(KeyCode::Left)), DialogKey::Consumed);
+    assert_eq!(
+        dialog::handle_key(&mut focus, key(KeyCode::Left)),
+        DialogKey::Consumed
+    );
     assert_eq!(dialog::active_button(&focus), Some(0));
     // Unbound keys are swallowed by the modal rather than leaking through.
-    assert_eq!(dialog::handle_key(&mut focus, key(KeyCode::Char('x'))), DialogKey::Consumed);
+    assert_eq!(
+        dialog::handle_key(&mut focus, key(KeyCode::Char('x'))),
+        DialogKey::Consumed
+    );
 
     // Enter resolves to the active button and closes the dialog.
     assert_eq!(

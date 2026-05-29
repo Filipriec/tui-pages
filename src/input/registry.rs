@@ -136,9 +136,9 @@ impl<A: Clone> InputRegistry<A> {
 
         modes.iter().any(|mode| {
             self.maps.get(*mode).is_some_and(|map| {
-                map.bindings
-                    .keys()
-                    .any(|candidate| candidate.len() > sequence.len() && candidate.starts_with(sequence))
+                map.bindings.keys().any(|candidate| {
+                    candidate.len() > sequence.len() && candidate.starts_with(sequence)
+                })
             })
         })
     }

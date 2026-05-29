@@ -1,4 +1,4 @@
-use crate::focus::{FocusIntent, FocusTarget};
+use crate::focus::{FocusIntent, FocusTarget, FocusWrap};
 use crate::navigation::BufferState;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -32,6 +32,7 @@ impl NavigationCoordinator {
         router: &mut R,
         buffer: &mut BufferState<V>,
         fallback: V,
+        wrap: FocusWrap,
     ) -> (NavigationResult<V>, Option<FocusIntent>)
     where
         V: Clone + PartialEq,
@@ -39,8 +40,8 @@ impl NavigationCoordinator {
     {
         match event {
             NavigationEvent::NavigateTo(view) => Self::navigate_to(view, router, buffer),
-            NavigationEvent::NextBuffer => Self::switch_buffer(true, router, buffer),
-            NavigationEvent::PreviousBuffer => Self::switch_buffer(false, router, buffer),
+            NavigationEvent::NextBuffer => Self::switch_buffer(true, router, buffer, wrap),
+            NavigationEvent::PreviousBuffer => Self::switch_buffer(false, router, buffer, wrap),
             NavigationEvent::CloseBuffer => Self::close_buffer(router, buffer, fallback),
         }
     }
@@ -66,6 +67,7 @@ impl NavigationCoordinator {
         forward: bool,
         router: &mut R,
         buffer: &mut BufferState<V>,
+        wrap: FocusWrap,
     ) -> (NavigationResult<V>, Option<FocusIntent>)
     where
         V: Clone + PartialEq,
@@ -77,11 +79,7 @@ impl NavigationCoordinator {
 
         let old_view = buffer.history[buffer.active_index].clone();
         let len = buffer.history.len();
-        buffer.active_index = if forward {
-            (buffer.active_index + 1) % len
-        } else {
-            (buffer.active_index + len - 1) % len
-        };
+        buffer.active_index = wrap.step(buffer.active_index, len, forward);
         buffer.sync_active_pane_to_active_buffer();
 
         let new_view = buffer.history[buffer.active_index].clone();
@@ -107,7 +105,10 @@ impl NavigationCoordinator {
         let Some(closed_view) = buffer.close_active_buffer(fallback) else {
             return (NavigationResult::NoChange, None);
         };
-        let new_view = buffer.get_active_view().cloned().unwrap_or_else(|| router.current_view());
+        let new_view = buffer
+            .get_active_view()
+            .cloned()
+            .unwrap_or_else(|| router.current_view());
         buffer.replace_workspace_view(&closed_view, new_view.clone());
         router.sync_to_view(&new_view);
         (

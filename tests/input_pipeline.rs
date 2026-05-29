@@ -27,7 +27,10 @@ fn try_parse_binding_reports_typos_and_supports_chords() {
     assert_eq!(
         try_parse_binding("ctrl+shift+x z"),
         Ok(vec![
-            KeyChord::new(KeyCode::Char('x'), KeyModifiers::CONTROL | KeyModifiers::SHIFT),
+            KeyChord::new(
+                KeyCode::Char('x'),
+                KeyModifiers::CONTROL | KeyModifiers::SHIFT
+            ),
             KeyChord::new(KeyCode::Char('z'), KeyModifiers::empty()),
         ])
     );
@@ -45,7 +48,10 @@ fn try_parse_binding_reports_typos_and_supports_chords() {
     // A bare `f` binds as the letter (function keys stay `f1`..`f12`).
     assert_eq!(
         try_parse_binding("f"),
-        Ok(vec![KeyChord::new(KeyCode::Char('f'), KeyModifiers::empty())])
+        Ok(vec![KeyChord::new(
+            KeyCode::Char('f'),
+            KeyModifiers::empty()
+        )])
     );
     assert_eq!(
         try_parse_binding("f5"),

@@ -1,13 +1,15 @@
 use crate::focus::{FocusIntent, FocusQuery, FocusTarget};
 
-/// How focus navigation behaves at the ends of a list (pages, section items,
-/// and dialog buttons).
+/// How navigation behaves at the ends of a list — the single policy shared by
+/// page focus, section items, modal items, buffer switching, and pane
+/// switching.
 ///
-/// The crate does not hardcode a policy — you choose. The default is
-/// [`Clamp`](FocusWrap::Clamp), which preserves "stop at the first/last
-/// element". Set it on the builder with
+/// The crate does not hardcode a policy — you choose, and it applies
+/// uniformly. The default is [`Clamp`](FocusWrap::Clamp), which stops at the
+/// first/last element. Set it on the builder with
 /// [`focus_wrap`](crate::TuiPagesBuilder::focus_wrap) or at runtime with
-/// [`FocusManager::set_focus_wrap`].
+/// [`FocusManager::set_focus_wrap`]; the runtime reads it back for buffer and
+/// pane cycling as well.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub enum FocusWrap {
@@ -18,6 +20,24 @@ pub enum FocusWrap {
     /// Wrap around: `Next` on the last element moves to the first, and `Prev`
     /// on the first moves to the last.
     Wrap,
+}
+
+impl FocusWrap {
+    /// Step `index` one position within `0..len` in the given direction,
+    /// applying this policy. `forward == true` advances, `false` retreats.
+    ///
+    /// This is the single shared definition of "what happens at the ends of a
+    /// list", used for page focus, section items, modal items, buffers, and
+    /// panes alike. `len` must be greater than zero (callers guard empty
+    /// lists).
+    pub fn step(self, index: usize, len: usize, forward: bool) -> usize {
+        match (self, forward) {
+            (FocusWrap::Wrap, true) => (index + 1) % len,
+            (FocusWrap::Wrap, false) => (index + len - 1) % len,
+            (FocusWrap::Clamp, true) => (index + 1).min(len - 1),
+            (FocusWrap::Clamp, false) => index.saturating_sub(1),
+        }
+    }
 }
 
 /// The overlay currently holding focus.
@@ -108,10 +128,7 @@ impl<O, M> FocusManager<O, M> {
 
         if let Some(OverlayFocus::Modal { index, count, .. }) = &mut self.overlay {
             if *count > 0 {
-                *index = match wrap {
-                    FocusWrap::Clamp => (*index + 1).min(*count - 1),
-                    FocusWrap::Wrap => (*index + 1) % *count,
-                };
+                *index = wrap.step(*index, *count, true);
             }
             return;
         }
@@ -121,10 +138,7 @@ impl<O, M> FocusManager<O, M> {
         }
 
         if let Some(section) = &mut self.entered_section {
-            section.item_index = match wrap {
-                FocusWrap::Clamp => (section.item_index + 1).min(section.item_count - 1),
-                FocusWrap::Wrap => (section.item_index + 1) % section.item_count,
-            };
+            section.item_index = wrap.step(section.item_index, section.item_count, true);
             return;
         }
 
@@ -160,10 +174,7 @@ impl<O, M> FocusManager<O, M> {
 
         if let Some(OverlayFocus::Modal { index, count, .. }) = &mut self.overlay {
             if *count > 0 {
-                *index = match wrap {
-                    FocusWrap::Clamp => index.saturating_sub(1),
-                    FocusWrap::Wrap => (*index + *count - 1) % *count,
-                };
+                *index = wrap.step(*index, *count, false);
             }
             return;
         }
@@ -173,12 +184,7 @@ impl<O, M> FocusManager<O, M> {
         }
 
         if let Some(section) = &mut self.entered_section {
-            section.item_index = match wrap {
-                FocusWrap::Clamp => section.item_index.saturating_sub(1),
-                FocusWrap::Wrap => {
-                    (section.item_index + section.item_count - 1) % section.item_count
-                }
-            };
+            section.item_index = wrap.step(section.item_index, section.item_count, false);
             return;
         }
 
@@ -321,7 +327,11 @@ impl<O: Clone + PartialEq, M> FocusManager<O, M> {
     }
 
     pub fn remove_target(&mut self, target: &FocusTarget<O>) {
-        if let Some(position) = self.targets.iter().position(|candidate| candidate == target) {
+        if let Some(position) = self
+            .targets
+            .iter()
+            .position(|candidate| candidate == target)
+        {
             self.targets.remove(position);
             if self.index >= self.targets.len() && !self.targets.is_empty() {
                 self.index = self.targets.len() - 1;
@@ -345,11 +355,9 @@ impl<O: Clone + PartialEq, M> FocusManager<O, M> {
         }
 
         if let FocusTarget::Section(section_id) = target {
-            if let Some(position) = self
-                .targets
-                .iter()
-                .position(|candidate| matches!(candidate, FocusTarget::Section(id) if *id == section_id))
-            {
+            if let Some(position) = self.targets.iter().position(
+                |candidate| matches!(candidate, FocusTarget::Section(id) if *id == section_id),
+            ) {
                 self.index = position;
                 self.overlay = None;
                 self.entered_section = None;
@@ -357,7 +365,11 @@ impl<O: Clone + PartialEq, M> FocusManager<O, M> {
             return;
         }
 
-        if let Some(position) = self.targets.iter().position(|candidate| candidate == &target) {
+        if let Some(position) = self
+            .targets
+            .iter()
+            .position(|candidate| candidate == &target)
+        {
             self.index = position;
             self.overlay = None;
             self.entered_section = None;

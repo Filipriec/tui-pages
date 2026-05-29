@@ -1,6 +1,6 @@
 use tui_pages::{
     BufferState, FocusController, FocusIntent, FocusManager, FocusTarget, FocusWrap,
-    NavigationCoordinator, NavigationEvent, NavigationRouter,
+    NavigationCoordinator, NavigationEvent, NavigationRouter, PaneSplit,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -88,12 +88,64 @@ fn overlay_type_is_application_defined() {
     focus.register_page(vec![FocusTarget::Button(0)]);
 
     focus.apply_focus_intent(FocusIntent::Open(FocusTarget::Overlay(Overlay::Palette)));
-    assert_eq!(focus.current(), Some(FocusTarget::Overlay(Overlay::Palette)));
+    assert_eq!(
+        focus.current(),
+        Some(FocusTarget::Overlay(Overlay::Palette))
+    );
     assert!(focus.is_overlay_open(&FocusTarget::Overlay(Overlay::Palette)));
     assert!(!focus.is_overlay_open(&FocusTarget::Overlay(Overlay::Sidebar)));
 
     focus.apply_focus_intent(FocusIntent::ClearOverlay);
     assert_eq!(focus.current(), Some(FocusTarget::Button(0)));
+}
+
+#[test]
+fn pane_cycling_follows_focus_wrap() {
+    // Two panes; active pane starts on the second (the freshly split one).
+    let mut buffer = BufferState::new(View::Home);
+    buffer.split_active_pane(PaneSplit::Vertical);
+    assert_eq!(buffer.active_pane_index(), 1);
+
+    // Clamp: stepping forward off the last pane stays put.
+    buffer.focus_next_pane(FocusWrap::Clamp);
+    assert_eq!(buffer.active_pane_index(), 1);
+
+    // Wrap: stepping forward off the last pane returns to the first.
+    buffer.focus_next_pane(FocusWrap::Wrap);
+    assert_eq!(buffer.active_pane_index(), 0);
+    // ...and backward off the first wraps to the last.
+    buffer.focus_previous_pane(FocusWrap::Wrap);
+    assert_eq!(buffer.active_pane_index(), 1);
+}
+
+#[test]
+fn buffer_switching_follows_focus_wrap() {
+    let mut router = Router {
+        current: View::Home,
+    };
+    let mut buffer = BufferState::new(View::Home);
+    buffer.update_history(View::Form); // history [Home, Form], active on Form (index 1)
+    assert_eq!(buffer.active_index, 1);
+
+    // Clamp: NextBuffer off the last buffer is a no-op on the index.
+    NavigationCoordinator::navigate(
+        NavigationEvent::NextBuffer,
+        &mut router,
+        &mut buffer,
+        View::Home,
+        FocusWrap::Clamp,
+    );
+    assert_eq!(buffer.active_index, 1);
+
+    // Wrap: NextBuffer off the last buffer cycles back to the first.
+    NavigationCoordinator::navigate(
+        NavigationEvent::NextBuffer,
+        &mut router,
+        &mut buffer,
+        View::Home,
+        FocusWrap::Wrap,
+    );
+    assert_eq!(buffer.active_index, 0);
 }
 
 #[test]
@@ -108,9 +160,13 @@ fn navigation_returns_focus_registration_intent() {
         &mut router,
         &mut buffer,
         View::Home,
+        FocusWrap::Clamp,
     );
 
-    assert!(matches!(result, tui_pages::NavigationResult::Navigated { .. }));
+    assert!(matches!(
+        result,
+        tui_pages::NavigationResult::Navigated { .. }
+    ));
     assert!(matches!(
         focus_intent,
         Some(FocusIntent::RegisterPage(targets)) if targets == vec![

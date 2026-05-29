@@ -325,7 +325,9 @@ where
             self.focus.register_page(spec.focus_targets.clone());
         }
 
-        let response = self.input.process(key, &spec.modes, spec.accepts_text_input);
+        let response = self
+            .input
+            .process(key, &spec.modes, spec.accepts_text_input);
         match response {
             crate::input::PipelineResponse::Execute(action) => {
                 let quit_requested = self.dispatch_action(action, state)?;
@@ -336,7 +338,10 @@ where
             }
             crate::input::PipelineResponse::Type(chord) => {
                 let quit_requested = self.dispatch_text(chord, state)?;
-                Ok(TuiPagesOutput::new(TuiPagesStatus::TextHandled, quit_requested))
+                Ok(TuiPagesOutput::new(
+                    TuiPagesStatus::TextHandled,
+                    quit_requested,
+                ))
             }
             crate::input::PipelineResponse::Wait(hints) => {
                 Ok(TuiPagesOutput::new(TuiPagesStatus::Waiting(hints), false))
@@ -406,12 +411,12 @@ where
                 false
             }
             TuiEffect::NextPane => {
-                self.buffer.focus_next_pane();
+                self.buffer.focus_next_pane(self.focus.focus_wrap());
                 self.refresh_page(state);
                 false
             }
             TuiEffect::PreviousPane => {
-                self.buffer.focus_previous_pane();
+                self.buffer.focus_previous_pane(self.focus.focus_wrap());
                 self.refresh_page(state);
                 false
             }
@@ -477,11 +482,10 @@ where
         }
 
         let len = self.buffer.history.len();
-        self.buffer.active_index = if forward {
-            (self.buffer.active_index + 1) % len
-        } else {
-            (self.buffer.active_index + len - 1) % len
-        };
+        self.buffer.active_index =
+            self.focus
+                .focus_wrap()
+                .step(self.buffer.active_index, len, forward);
         self.buffer.sync_active_pane_to_active_buffer();
         self.refresh_page(state);
     }
@@ -585,7 +589,11 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
         self
     }
 
-    pub fn keymap(mut self, mode: impl Into<ModeId>, configure: impl FnOnce(&mut KeyMap<A>)) -> Self {
+    pub fn keymap(
+        mut self,
+        mode: impl Into<ModeId>,
+        configure: impl FnOnce(&mut KeyMap<A>),
+    ) -> Self {
         let mode = mode.into();
         configure(self.input_registry.map_mut(mode.as_str()));
         self

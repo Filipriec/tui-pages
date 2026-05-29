@@ -65,7 +65,11 @@ pub fn render_dialog<D>(
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(theme.border_active))
             .title(format!(" {} ", data.title))
-            .title_style(Style::default().fg(theme.title).add_modifier(Modifier::BOLD))
+            .title_style(
+                Style::default()
+                    .fg(theme.title)
+                    .add_modifier(Modifier::BOLD),
+            )
             .style(Style::default().bg(theme.background)),
         dialog_area,
     );
@@ -78,7 +82,11 @@ pub fn render_dialog<D>(
     if data.is_loading {
         f.render_widget(
             Paragraph::new(data.message.as_str())
-                .style(Style::default().fg(theme.text).add_modifier(Modifier::ITALIC))
+                .style(
+                    Style::default()
+                        .fg(theme.text)
+                        .add_modifier(Modifier::ITALIC),
+                )
                 .alignment(Alignment::Center)
                 .wrap(Wrap { trim: true }),
             inner,
@@ -118,7 +126,9 @@ pub fn render_dialog<D>(
         let active = i == active_button;
         let (text_style, border_style) = if active {
             (
-                Style::default().fg(theme.button_active).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(theme.button_active)
+                    .add_modifier(Modifier::BOLD),
                 Style::default().fg(theme.border_active),
             )
         } else {
@@ -131,7 +141,11 @@ pub fn render_dialog<D>(
             Paragraph::new(label.as_str())
                 .alignment(Alignment::Center)
                 .style(text_style)
-                .block(Block::default().borders(Borders::ALL).border_style(border_style)),
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .border_style(border_style),
+                ),
             button_chunks[i],
         );
     }

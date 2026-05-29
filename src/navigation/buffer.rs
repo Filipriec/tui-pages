@@ -1,3 +1,4 @@
+use crate::focus::FocusWrap;
 use crate::navigation::{PaneId, PaneSession, PaneSplit, WorkspaceState};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -55,7 +56,13 @@ impl<V: Clone + PartialEq> BufferState<V> {
         let pane_id = PaneId(self.workspace.next_pane_id);
         self.workspace.next_pane_id += 1;
         let insert_at = self.workspace.active_pane + 1;
-        self.workspace.panes.insert(insert_at, PaneSession { pane_id, view: view.clone() });
+        self.workspace.panes.insert(
+            insert_at,
+            PaneSession {
+                pane_id,
+                view: view.clone(),
+            },
+        );
         self.workspace.active_pane = insert_at;
         self.workspace.split = Some(split);
         self.update_history(view);
@@ -87,12 +94,12 @@ impl<V: Clone + PartialEq> BufferState<V> {
         true
     }
 
-    pub fn focus_next_pane(&mut self) -> bool {
-        self.focus_pane(true)
+    pub fn focus_next_pane(&mut self, wrap: FocusWrap) -> bool {
+        self.focus_pane(true, wrap)
     }
 
-    pub fn focus_previous_pane(&mut self) -> bool {
-        self.focus_pane(false)
+    pub fn focus_previous_pane(&mut self, wrap: FocusWrap) -> bool {
+        self.focus_pane(false, wrap)
     }
 
     pub fn sync_active_pane_to_active_buffer(&mut self) {
@@ -131,19 +138,17 @@ impl<V: Clone + PartialEq> BufferState<V> {
         Some(closed)
     }
 
-    fn focus_pane(&mut self, forward: bool) -> bool {
+    fn focus_pane(&mut self, forward: bool, wrap: FocusWrap) -> bool {
         let len = self.workspace.panes.len();
         if len <= 1 {
             return false;
         }
 
-        self.workspace.active_pane = if forward {
-            (self.workspace.active_pane + 1) % len
-        } else {
-            (self.workspace.active_pane + len - 1) % len
-        };
+        self.workspace.active_pane = wrap.step(self.workspace.active_pane, len, forward);
 
-        let view = self.workspace.panes[self.workspace.active_pane].view.clone();
+        let view = self.workspace.panes[self.workspace.active_pane]
+            .view
+            .clone();
         self.update_history(view);
         true
     }
