@@ -72,17 +72,39 @@ ActionOutcome::none()
 Modes allow different keybindings in different contexts:
 
 ```rust
-// Predefined modes
-modes::GENERAL   // Default mode
-modes::NORMAL    // Like vim normal mode
-modes::INSERT    // Like vim insert mode
-modes::SELECT    // Like vim select mode
-modes::PALETTE   // Command palette active
-modes::PICKER    // Picker dialog active
-modes::COMMAND   // Command input active
+// Built-in modes shipped by the runtime
+modes::GENERAL   // Default page-navigation mode
+modes::NORMAL    // Like vim normal mode (read-only navigation in fields)
+modes::INSERT    // Like vim insert mode (typing into a text field)
+modes::SELECT    // Like vim select mode (highlighting / selection)
+modes::COMMAND   // Command bar (`:`) is open
 modes::GLOBAL    // Active in all modes
-modes::COMMON    // Shared bindings
+modes::COMMON    // Shared bindings — active alongside `nor` and `sel`
 ```
+
+`GENERAL`, `NORMAL`, `INSERT`, and `SELECT` are managed automatically by the
+runtime. `COMMON` is for bindings you want available in both `nor` and `sel`.
+
+### Custom modes for your own components
+
+A `ModeId` is just a string key — nothing in the runtime is hardcoded to a
+specific component. Define a mode for any UI you build (a picker, a command
+palette, a sidebar) and register bindings for it the same way:
+
+```rust
+// Your component's mode — owned by your app, not the library.
+const PICKER: ModeId = ModeId::borrowed("picker");
+
+builder
+    .bind(PICKER, "j", Action::PickerDown)
+    .bind(PICKER, "k", Action::PickerUp)
+    .bind(PICKER, "enter", Action::PickerSelect);
+
+// Activate it for the page/overlay where the picker is open:
+PageSpec::new().modes(vec![modes::GLOBAL, PICKER])
+```
+
+The library exposes the mechanism; you supply the concrete modes.
 
 ## FocusWrap Policy
 

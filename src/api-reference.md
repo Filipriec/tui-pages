@@ -90,13 +90,16 @@ pub mod modes {
     pub const NORMAL: ModeId;
     pub const INSERT: ModeId;
     pub const SELECT: ModeId;
-    pub const PALETTE: ModeId;
-    pub const PICKER: ModeId;
     pub const COMMAND: ModeId;
     pub const COMMON: ModeId;
     pub const GLOBAL: ModeId;
 }
 ```
+
+These are the modes the runtime manages itself. A `ModeId` is a plain string
+key, so define your own for custom components — e.g.
+`ModeId::borrowed("picker")` — and register bindings with `.bind(mode, …)` /
+`.keymap(mode, …)`. The library does not hardcode any component mode.
 
 ### TuiEffect
 

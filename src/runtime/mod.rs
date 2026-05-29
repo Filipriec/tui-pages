@@ -50,17 +50,42 @@ impl From<String> for ModeId {
     }
 }
 
+/// Built-in mode identifiers shipped by the runtime.
+///
+/// These cover the input states the runtime itself reasons about. A [`ModeId`]
+/// is just a string key, so consumers are free to define their own modes for
+/// their own components — a picker, a palette, a sidebar — without the library
+/// knowing anything about them:
+///
+/// ```ignore
+/// const PICKER: ModeId = ModeId::borrowed("picker");
+///
+/// builder
+///     .bind(PICKER, "j", Action::PickerDown)
+///     .bind(PICKER, "k", Action::PickerUp);
+///
+/// // then activate it for the relevant page/overlay:
+/// PageSpec::new().modes(vec![modes::GLOBAL, PICKER])
+/// ```
+///
+/// Nothing in the runtime is hardcoded to a specific component mode; register
+/// whatever your UI needs.
 pub mod modes {
     use super::ModeId;
 
+    /// Default page-navigation mode (Tab, arrows, Enter on buttons).
     pub const GENERAL: ModeId = ModeId::borrowed("general");
+    /// Read-only navigation within form fields.
     pub const NORMAL: ModeId = ModeId::borrowed("nor");
+    /// Typing into a text field; plain characters flow to the focused input.
     pub const INSERT: ModeId = ModeId::borrowed("ins");
+    /// Text selection / highlighting.
     pub const SELECT: ModeId = ModeId::borrowed("sel");
-    pub const PALETTE: ModeId = ModeId::borrowed("palette");
-    pub const PICKER: ModeId = ModeId::borrowed("picker");
+    /// Command bar (`:`) is open.
     pub const COMMAND: ModeId = ModeId::borrowed("command");
+    /// Bindings shared across non-typing modes (active alongside `nor` and `sel`).
     pub const COMMON: ModeId = ModeId::borrowed("common");
+    /// Always active, regardless of the current mode.
     pub const GLOBAL: ModeId = ModeId::borrowed("global");
 }
 
