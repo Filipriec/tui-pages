@@ -1,6 +1,6 @@
 // Demonstrates the built-in dialog system (feature = "dialog").
 //
-// The runtime's dialog payload type `D` is `DialogData<Purpose>`, so the focus
+// The runtime's modal payload type `M` is `DialogData<Purpose>`, so the focus
 // manager stores the dialog content and tracks the active button. The handler
 // only opens the dialog; the modal itself is driven in the event loop (main.rs)
 // using the `dialog::*` helpers.
@@ -41,8 +41,8 @@ impl Default for AppState {
     }
 }
 
-// The dialog payload (`DialogData<Purpose>`) is the runtime's `D` type param.
-// O = () — this example has no named simple overlays, only a dialog (D).
+// The dialog content (`DialogData<Purpose>`) is the runtime's modal payload `M`.
+// O = () — this example has no named simple overlays, only a modal (the dialog).
 pub type App =
     TuiPages<View, Action, AppState, PageFn<View, AppState>, Handler, (), DialogData<Purpose>>;
 

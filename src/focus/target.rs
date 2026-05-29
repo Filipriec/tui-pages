@@ -14,8 +14,11 @@ pub enum FocusTarget<O = ()> {
     Section(usize),
     SectionItem { section: usize, item: usize },
     Overlay(O),
-    DialogButton(usize),
-    Picker,
+    /// Focus on item `N` inside the currently open modal overlay. The crate
+    /// names no modal kinds: a dialog button, a picker row, or any other
+    /// in-modal item is just a `ModalItem`. The `dialog` feature layers its
+    /// button conventions on top of this.
+    ModalItem(usize),
     Custom(String),
 }
 
@@ -32,10 +35,7 @@ impl<O> FocusTarget<O> {
     }
 
     pub fn is_overlay(&self) -> bool {
-        matches!(
-            self,
-            FocusTarget::Overlay(_) | FocusTarget::DialogButton(_) | FocusTarget::Picker
-        )
+        matches!(self, FocusTarget::Overlay(_) | FocusTarget::ModalItem(_))
     }
 
     pub fn is_top_level_navigable(&self) -> bool {

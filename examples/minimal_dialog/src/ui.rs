@@ -64,7 +64,7 @@ pub fn render(frame: &mut Frame, tui: &App, state: &AppState) {
 }
 
 fn render_button(frame: &mut Frame, area: Rect, label: &str, focus: &Option<FocusTarget>, index: usize) {
-    // While a dialog is open, focus is on a DialogButton, so neither page
+    // While a dialog is open, focus is on a ModalItem, so neither page
     // button is highlighted — exactly what we want for a modal.
     let focused = matches!(focus, Some(FocusTarget::Button(i)) if *i == index);
     let style = if focused {

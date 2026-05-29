@@ -5,8 +5,9 @@
 //! a turnkey dialog: a [`DialogData`] content type, a [`DialogResult`], and a
 //! ratatui [`render_dialog`] renderer.
 //!
-//! Usage with [`TuiPages`](crate::TuiPages) (with the dialog payload as the
-//! runtime's `D` type, e.g. `TuiPages<View, Action, State, _, _, DialogData<MyPurpose>>`):
+//! Usage with [`TuiPages`](crate::TuiPages) (with the dialog content as the
+//! runtime's modal payload `M`, e.g.
+//! `TuiPages<View, Action, State, Pages, Handler, (), DialogData<MyPurpose>>`):
 //!
 //! - **Show** — return `TuiEffect::Focus(data.show_intent())` from your handler.
 //! - **Navigate** — `FocusIntent::Next` / `Prev` move between buttons (handled
@@ -31,38 +32,36 @@ impl<D> DialogData<D> {
     /// [`TuiEffect::Focus`](crate::TuiEffect::Focus) (or apply it directly to a
     /// [`FocusManager`]). `O` is the app's overlay type and is inferred from
     /// the surrounding runtime.
-    pub fn show_intent<O, P>(self) -> FocusIntent<O, DialogData<D>, P> {
+    pub fn show_intent<O>(self) -> FocusIntent<O, DialogData<D>> {
         let buttons = self.buttons.len();
-        FocusIntent::ShowDialog {
+        FocusIntent::ShowModal {
             data: self,
-            buttons,
+            count: buttons,
         }
     }
 }
 
 /// The dialog currently shown by the focus manager, if any.
-pub fn current_dialog<O, D, P>(focus: &FocusManager<O, DialogData<D>, P>) -> Option<&DialogData<D>> {
+pub fn current_dialog<O, D>(focus: &FocusManager<O, DialogData<D>>) -> Option<&DialogData<D>> {
     match focus.overlay() {
-        Some(OverlayFocus::Dialog { data, .. }) => Some(data),
+        Some(OverlayFocus::Modal { data, .. }) => Some(data),
         _ => None,
     }
 }
 
 /// The active (highlighted) button index of the shown dialog, if any.
-pub fn active_button<O, D, P>(focus: &FocusManager<O, DialogData<D>, P>) -> Option<usize> {
+pub fn active_button<O, D>(focus: &FocusManager<O, DialogData<D>>) -> Option<usize> {
     match focus.overlay() {
-        Some(OverlayFocus::Dialog { index, .. }) => Some(*index),
+        Some(OverlayFocus::Modal { index, .. }) => Some(*index),
         _ => None,
     }
 }
 
 /// Resolve the current dialog into a [`DialogResult`] describing the selected
 /// button and the dialog's purpose. Returns `None` when no dialog is open.
-pub fn selection<O, D: Clone, P>(
-    focus: &FocusManager<O, DialogData<D>, P>,
-) -> Option<DialogResult<D>> {
+pub fn selection<O, D: Clone>(focus: &FocusManager<O, DialogData<D>>) -> Option<DialogResult<D>> {
     match focus.overlay() {
-        Some(OverlayFocus::Dialog { data, index, .. }) => Some(DialogResult::Selected {
+        Some(OverlayFocus::Modal { data, index, .. }) => Some(DialogResult::Selected {
             purpose: data.purpose.clone(),
             index: *index,
         }),
@@ -106,8 +105,8 @@ pub enum DialogKey<D> {
 /// For non-conventional bindings, drive the dialog yourself with
 /// [`current_dialog`], [`active_button`], [`selection`], and
 /// [`FocusIntent`](crate::FocusIntent) — this helper is just the common path.
-pub fn handle_key<O: Clone + PartialEq, D: Clone, P>(
-    focus: &mut FocusManager<O, DialogData<D>, P>,
+pub fn handle_key<O: Clone + PartialEq, D: Clone>(
+    focus: &mut FocusManager<O, DialogData<D>>,
     key: KeyEvent,
 ) -> DialogKey<D> {
     if current_dialog(focus).is_none() {

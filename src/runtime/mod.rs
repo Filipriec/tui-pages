@@ -128,9 +128,9 @@ where
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TuiEffect<V, O = (), D = (), P = ()> {
+pub enum TuiEffect<V, O = (), M = ()> {
     None,
-    Focus(FocusIntent<O, D, P>),
+    Focus(FocusIntent<O, M>),
     Navigate(V),
     NextBuffer,
     PreviousBuffer,
@@ -144,11 +144,11 @@ pub enum TuiEffect<V, O = (), D = (), P = ()> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ActionOutcome<V, O = (), D = (), P = ()> {
-    pub effects: Vec<TuiEffect<V, O, D, P>>,
+pub struct ActionOutcome<V, O = (), M = ()> {
+    pub effects: Vec<TuiEffect<V, O, M>>,
 }
 
-impl<V, O, D, P> Default for ActionOutcome<V, O, D, P> {
+impl<V, O, M> Default for ActionOutcome<V, O, M> {
     fn default() -> Self {
         Self {
             effects: Vec::new(),
@@ -156,24 +156,24 @@ impl<V, O, D, P> Default for ActionOutcome<V, O, D, P> {
     }
 }
 
-impl<V, O, D, P> ActionOutcome<V, O, D, P> {
+impl<V, O, M> ActionOutcome<V, O, M> {
     pub fn none() -> Self {
         Self::default()
     }
 
-    pub fn effect(effect: TuiEffect<V, O, D, P>) -> Self {
+    pub fn effect(effect: TuiEffect<V, O, M>) -> Self {
         Self {
             effects: vec![effect],
         }
     }
 
-    pub fn effects(effects: impl IntoIterator<Item = TuiEffect<V, O, D, P>>) -> Self {
+    pub fn effects(effects: impl IntoIterator<Item = TuiEffect<V, O, M>>) -> Self {
         Self {
             effects: effects.into_iter().collect(),
         }
     }
 
-    pub fn push(&mut self, effect: TuiEffect<V, O, D, P>) {
+    pub fn push(&mut self, effect: TuiEffect<V, O, M>) {
         self.effects.push(effect);
     }
 }
@@ -185,7 +185,7 @@ pub struct ActionContext<V, O = ()> {
     pub has_overlay: bool,
 }
 
-pub trait TuiActionHandler<V, A, S, O = (), D = (), P = ()> {
+pub trait TuiActionHandler<V, A, S, O = (), M = ()> {
     type Error;
 
     fn handle_action(
@@ -193,14 +193,14 @@ pub trait TuiActionHandler<V, A, S, O = (), D = (), P = ()> {
         action: A,
         ctx: ActionContext<V, O>,
         state: &mut S,
-    ) -> Result<ActionOutcome<V, O, D, P>, Self::Error>;
+    ) -> Result<ActionOutcome<V, O, M>, Self::Error>;
 
     fn handle_text(
         &mut self,
         _chord: KeyChord,
         _ctx: ActionContext<V, O>,
         _state: &mut S,
-    ) -> Result<ActionOutcome<V, O, D, P>, Self::Error> {
+    ) -> Result<ActionOutcome<V, O, M>, Self::Error> {
         Ok(ActionOutcome::none())
     }
 }
@@ -258,10 +258,10 @@ impl<A> TuiPagesOutput<A> {
 }
 
 #[derive(Debug, Clone)]
-pub struct TuiPages<V, A, S, Pages = (), Handler = (), O = (), D = (), P = ()> {
+pub struct TuiPages<V, A, S, Pages = (), Handler = (), O = (), M = ()> {
     pub input: InputPipeline<A>,
     pub commands: CommandResolver<A>,
-    pub focus: FocusManager<O, D, P>,
+    pub focus: FocusManager<O, M>,
     pub buffer: BufferState<V>,
     pages: Pages,
     handler: Handler,
@@ -269,22 +269,22 @@ pub struct TuiPages<V, A, S, Pages = (), Handler = (), O = (), D = (), P = ()> {
     _state: PhantomData<S>,
 }
 
-impl<V, A, S, O, D, P> TuiPages<V, A, S, (), (), O, D, P>
+impl<V, A, S, O, M> TuiPages<V, A, S, (), (), O, M>
 where
     V: Clone + PartialEq,
 {
-    pub fn builder(initial_view: V) -> TuiPagesBuilder<V, A, S, O, D, P, (), ()> {
+    pub fn builder(initial_view: V) -> TuiPagesBuilder<V, A, S, O, M, (), ()> {
         TuiPagesBuilder::new(initial_view)
     }
 }
 
-impl<V, A, S, Pages, Handler, O, D, P> TuiPages<V, A, S, Pages, Handler, O, D, P>
+impl<V, A, S, Pages, Handler, O, M> TuiPages<V, A, S, Pages, Handler, O, M>
 where
     V: Clone + PartialEq,
     A: Clone,
     O: Clone + PartialEq,
     Pages: PageProvider<V, S, O>,
-    Handler: TuiActionHandler<V, A, S, O, D, P>,
+    Handler: TuiActionHandler<V, A, S, O, M>,
 {
     pub fn current_view(&self) -> &V {
         self.buffer
@@ -371,7 +371,7 @@ where
         }
     }
 
-    pub fn apply_effect(&mut self, effect: TuiEffect<V, O, D, P>, state: &S) -> bool {
+    pub fn apply_effect(&mut self, effect: TuiEffect<V, O, M>, state: &S) -> bool {
         match effect {
             TuiEffect::None => false,
             TuiEffect::Focus(intent) => {
@@ -463,7 +463,7 @@ where
         Ok(self.apply_outcome(outcome, state))
     }
 
-    fn apply_outcome(&mut self, outcome: ActionOutcome<V, O, D, P>, state: &S) -> bool {
+    fn apply_outcome(&mut self, outcome: ActionOutcome<V, O, M>, state: &S) -> bool {
         let mut quit_requested = false;
         for effect in outcome.effects {
             quit_requested |= self.apply_effect(effect, state);
@@ -488,7 +488,7 @@ where
 }
 
 #[derive(Debug, Clone)]
-pub struct TuiPagesBuilder<V, A, S, O = (), D = (), P = (), Pages = (), Handler = ()> {
+pub struct TuiPagesBuilder<V, A, S, O = (), M = (), Pages = (), Handler = ()> {
     initial_view: V,
     fallback_view: Option<V>,
     input_registry: InputRegistry<A>,
@@ -500,11 +500,10 @@ pub struct TuiPagesBuilder<V, A, S, O = (), D = (), P = (), Pages = (), Handler 
     handler: Handler,
     _state: PhantomData<S>,
     _overlay: PhantomData<O>,
-    _dialog: PhantomData<D>,
-    _picker: PhantomData<P>,
+    _modal: PhantomData<M>,
 }
 
-impl<V, A, S, O, D, P> TuiPagesBuilder<V, A, S, O, D, P, (), ()> {
+impl<V, A, S, O, M> TuiPagesBuilder<V, A, S, O, M, (), ()> {
     pub fn new(initial_view: V) -> Self {
         Self {
             initial_view,
@@ -518,13 +517,12 @@ impl<V, A, S, O, D, P> TuiPagesBuilder<V, A, S, O, D, P, (), ()> {
             handler: (),
             _state: PhantomData,
             _overlay: PhantomData,
-            _dialog: PhantomData,
-            _picker: PhantomData,
+            _modal: PhantomData,
         }
     }
 }
 
-impl<V, A, S, O, D, P, Pages, Handler> TuiPagesBuilder<V, A, S, O, D, P, Pages, Handler> {
+impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handler> {
     pub fn fallback_view(mut self, fallback_view: V) -> Self {
         self.fallback_view = Some(fallback_view);
         self
@@ -543,7 +541,7 @@ impl<V, A, S, O, D, P, Pages, Handler> TuiPagesBuilder<V, A, S, O, D, P, Pages, 
     pub fn pages<NextPages>(
         self,
         pages: NextPages,
-    ) -> TuiPagesBuilder<V, A, S, O, D, P, NextPages, Handler> {
+    ) -> TuiPagesBuilder<V, A, S, O, M, NextPages, Handler> {
         TuiPagesBuilder {
             initial_view: self.initial_view,
             fallback_view: self.fallback_view,
@@ -556,15 +554,14 @@ impl<V, A, S, O, D, P, Pages, Handler> TuiPagesBuilder<V, A, S, O, D, P, Pages, 
             handler: self.handler,
             _state: PhantomData,
             _overlay: PhantomData,
-            _dialog: PhantomData,
-            _picker: PhantomData,
+            _modal: PhantomData,
         }
     }
 
     pub fn handler<NextHandler>(
         self,
         handler: NextHandler,
-    ) -> TuiPagesBuilder<V, A, S, O, D, P, Pages, NextHandler> {
+    ) -> TuiPagesBuilder<V, A, S, O, M, Pages, NextHandler> {
         TuiPagesBuilder {
             initial_view: self.initial_view,
             fallback_view: self.fallback_view,
@@ -577,13 +574,12 @@ impl<V, A, S, O, D, P, Pages, Handler> TuiPagesBuilder<V, A, S, O, D, P, Pages, 
             handler,
             _state: PhantomData,
             _overlay: PhantomData,
-            _dialog: PhantomData,
-            _picker: PhantomData,
+            _modal: PhantomData,
         }
     }
 
     /// Set how focus navigation behaves at the ends of a list — clamp (default)
-    /// or wrap-around. Applies to page focus, section items, and dialog buttons.
+    /// or wrap-around. Applies to page focus, section items, and modal items.
     pub fn focus_wrap(mut self, wrap: FocusWrap) -> Self {
         self.focus_wrap = wrap;
         self
@@ -619,11 +615,11 @@ impl<V, A, S, O, D, P, Pages, Handler> TuiPagesBuilder<V, A, S, O, D, P, Pages, 
         self
     }
 
-    pub fn build(self) -> TuiPages<V, A, S, Pages, Handler, O, D, P>
+    pub fn build(self) -> TuiPages<V, A, S, Pages, Handler, O, M>
     where
         V: Clone + PartialEq,
         Pages: PageProvider<V, S, O>,
-        Handler: TuiActionHandler<V, A, S, O, D, P>,
+        Handler: TuiActionHandler<V, A, S, O, M>,
     {
         let fallback_view = self
             .fallback_view

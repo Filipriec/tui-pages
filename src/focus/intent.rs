@@ -1,7 +1,10 @@
 use crate::focus::FocusTarget;
 
+/// `O` is the application's overlay type (see [`FocusTarget`]); `M` is the
+/// payload carried by a generic modal overlay (e.g. dialog content under the
+/// `dialog` feature). Both default to `()`.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum FocusIntent<O = (), D = (), P = ()> {
+pub enum FocusIntent<O = (), M = ()> {
     Next,
     Prev,
     Set(FocusTarget<O>),
@@ -15,9 +18,11 @@ pub enum FocusIntent<O = (), D = (), P = ()> {
         item_count: usize,
         item: usize,
     },
-    ShowDialog { data: D, buttons: usize },
-    ShowPicker(P),
-    UpdateDialog { data: D, buttons: usize },
+    /// Open a modal overlay carrying `data` with `count` selectable items
+    /// (`0` for a non-interactive modal such as a loading dialog).
+    ShowModal { data: M, count: usize },
+    /// Replace the open modal's data and item count in place.
+    UpdateModal { data: M, count: usize },
     ClearOverlay,
     ExitCanvasForward,
     ExitCanvasBackward,

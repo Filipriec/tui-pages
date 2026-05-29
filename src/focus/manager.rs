@@ -20,11 +20,17 @@ pub enum FocusWrap {
     Wrap,
 }
 
+/// The overlay currently holding focus.
+///
+/// The runtime knows only two shapes: a [`Simple`](OverlayFocus::Simple)
+/// overlay identified by the app's own type `O`, and a generic
+/// [`Modal`](OverlayFocus::Modal) carrying an arbitrary payload `M` plus a
+/// cursor over `count` items. The crate names no dialogs or pickers — those are
+/// conventions a feature (e.g. `dialog`) layers on top of `Modal`.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum OverlayFocus<O = (), D = (), P = ()> {
+pub enum OverlayFocus<O = (), M = ()> {
     Simple(O),
-    Dialog { data: D, index: usize, buttons: usize },
-    Picker { data: P },
+    Modal { data: M, index: usize, count: usize },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -35,26 +41,26 @@ struct EnteredSection {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FocusManager<O = (), D = (), P = ()> {
+pub struct FocusManager<O = (), M = ()> {
     targets: Vec<FocusTarget<O>>,
     index: usize,
-    overlay: Option<OverlayFocus<O, D, P>>,
+    overlay: Option<OverlayFocus<O, M>>,
     entered_section: Option<EnteredSection>,
     wrap: FocusWrap,
 }
 
-impl<O, D, P> Default for FocusManager<O, D, P> {
+impl<O, M> Default for FocusManager<O, M> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-pub trait FocusController<O = (), D = (), P = ()> {
-    fn apply_focus_intent(&mut self, intent: FocusIntent<O, D, P>);
+pub trait FocusController<O = (), M = ()> {
+    fn apply_focus_intent(&mut self, intent: FocusIntent<O, M>);
 }
 
 // Operations that don't inspect the overlay identity `O`.
-impl<O, D, P> FocusManager<O, D, P> {
+impl<O, M> FocusManager<O, M> {
     pub fn new() -> Self {
         Self {
             targets: Vec::new(),
@@ -79,11 +85,11 @@ impl<O, D, P> FocusManager<O, D, P> {
         &self.targets
     }
 
-    pub fn overlay(&self) -> Option<&OverlayFocus<O, D, P>> {
+    pub fn overlay(&self) -> Option<&OverlayFocus<O, M>> {
         self.overlay.as_ref()
     }
 
-    pub fn overlay_mut(&mut self) -> Option<&mut OverlayFocus<O, D, P>> {
+    pub fn overlay_mut(&mut self) -> Option<&mut OverlayFocus<O, M>> {
         self.overlay.as_mut()
     }
 
@@ -100,11 +106,11 @@ impl<O, D, P> FocusManager<O, D, P> {
     pub fn next(&mut self) {
         let wrap = self.wrap;
 
-        if let Some(OverlayFocus::Dialog { index, buttons, .. }) = &mut self.overlay {
-            if *buttons > 0 {
+        if let Some(OverlayFocus::Modal { index, count, .. }) = &mut self.overlay {
+            if *count > 0 {
                 *index = match wrap {
-                    FocusWrap::Clamp => (*index + 1).min(*buttons - 1),
-                    FocusWrap::Wrap => (*index + 1) % *buttons,
+                    FocusWrap::Clamp => (*index + 1).min(*count - 1),
+                    FocusWrap::Wrap => (*index + 1) % *count,
                 };
             }
             return;
@@ -152,11 +158,11 @@ impl<O, D, P> FocusManager<O, D, P> {
     pub fn prev(&mut self) {
         let wrap = self.wrap;
 
-        if let Some(OverlayFocus::Dialog { index, buttons, .. }) = &mut self.overlay {
-            if *buttons > 0 {
+        if let Some(OverlayFocus::Modal { index, count, .. }) = &mut self.overlay {
+            if *count > 0 {
                 *index = match wrap {
                     FocusWrap::Clamp => index.saturating_sub(1),
-                    FocusWrap::Wrap => (*index + *buttons - 1) % *buttons,
+                    FocusWrap::Wrap => (*index + *count - 1) % *count,
                 };
             }
             return;
@@ -203,16 +209,15 @@ impl<O, D, P> FocusManager<O, D, P> {
         }
     }
 
-    pub fn show_dialog(&mut self, data: D, buttons: usize) {
-        self.overlay = Some(OverlayFocus::Dialog {
+    /// Open a generic modal overlay carrying `data` with `count` selectable
+    /// items. Pass `count == 0` for a non-interactive modal (e.g. a loading
+    /// dialog). Higher-level conventions (dialogs, pickers) build on this.
+    pub fn show_modal(&mut self, data: M, count: usize) {
+        self.overlay = Some(OverlayFocus::Modal {
             data,
             index: 0,
-            buttons,
+            count,
         });
-    }
-
-    pub fn show_picker(&mut self, data: P) {
-        self.overlay = Some(OverlayFocus::Picker { data });
     }
 
     pub fn clear_overlay(&mut self) {
@@ -277,13 +282,12 @@ impl<O, D, P> FocusManager<O, D, P> {
 }
 
 // Operations that read the current focus (and therefore clone `O`).
-impl<O: Clone, D, P> FocusManager<O, D, P> {
+impl<O: Clone, M> FocusManager<O, M> {
     pub fn current(&self) -> Option<FocusTarget<O>> {
         if let Some(overlay) = &self.overlay {
             return Some(match overlay {
                 OverlayFocus::Simple(kind) => FocusTarget::Overlay(kind.clone()),
-                OverlayFocus::Dialog { index, .. } => FocusTarget::DialogButton(*index),
-                OverlayFocus::Picker { .. } => FocusTarget::Picker,
+                OverlayFocus::Modal { index, .. } => FocusTarget::ModalItem(*index),
             });
         }
 
@@ -305,7 +309,7 @@ impl<O: Clone, D, P> FocusManager<O, D, P> {
 }
 
 // Operations that compare overlays / targets by identity.
-impl<O: Clone + PartialEq, D, P> FocusManager<O, D, P> {
+impl<O: Clone + PartialEq, M> FocusManager<O, M> {
     pub fn is_focused(&self, target: &FocusTarget<O>) -> bool {
         self.current().as_ref() == Some(target)
     }
@@ -331,9 +335,9 @@ impl<O: Clone + PartialEq, D, P> FocusManager<O, D, P> {
             return;
         }
 
-        if let FocusTarget::DialogButton(next_index) = target {
-            if let Some(OverlayFocus::Dialog { index, buttons, .. }) = &mut self.overlay {
-                if next_index < *buttons {
+        if let FocusTarget::ModalItem(next_index) = target {
+            if let Some(OverlayFocus::Modal { index, count, .. }) = &mut self.overlay {
+                if next_index < *count {
                     *index = next_index;
                 }
             }
@@ -393,8 +397,8 @@ impl<O: Clone + PartialEq, D, P> FocusManager<O, D, P> {
     }
 }
 
-impl<O: Clone + PartialEq, D, P> FocusController<O, D, P> for FocusManager<O, D, P> {
-    fn apply_focus_intent(&mut self, intent: FocusIntent<O, D, P>) {
+impl<O: Clone + PartialEq, M> FocusController<O, M> for FocusManager<O, M> {
+    fn apply_focus_intent(&mut self, intent: FocusIntent<O, M>) {
         match intent {
             FocusIntent::Next => self.next(),
             FocusIntent::Prev => self.prev(),
@@ -412,17 +416,16 @@ impl<O: Clone + PartialEq, D, P> FocusController<O, D, P> for FocusManager<O, D,
                 self.register_page(targets);
                 self.enter_section_at(section, item_count, item);
             }
-            FocusIntent::ShowDialog { data, buttons } => self.show_dialog(data, buttons),
-            FocusIntent::ShowPicker(data) => self.show_picker(data),
-            FocusIntent::UpdateDialog { data, buttons } => {
-                if let Some(OverlayFocus::Dialog {
+            FocusIntent::ShowModal { data, count } => self.show_modal(data, count),
+            FocusIntent::UpdateModal { data, count } => {
+                if let Some(OverlayFocus::Modal {
                     data: current_data,
-                    buttons: current_buttons,
+                    count: current_count,
                     ..
                 }) = &mut self.overlay
                 {
                     *current_data = data;
-                    *current_buttons = buttons;
+                    *current_count = count;
                 }
             }
             FocusIntent::ClearOverlay => self.clear_overlay(),

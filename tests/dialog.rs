@@ -13,8 +13,8 @@ enum Purpose {
     ConfirmDelete,
 }
 
-// O = () (no named overlays), D = DialogData<Purpose>, P = ().
-type Focus = FocusManager<(), DialogData<Purpose>, ()>;
+// O = () (no named overlays), M = DialogData<Purpose> (the modal payload).
+type Focus = FocusManager<(), DialogData<Purpose>>;
 
 #[test]
 fn dialog_shows_navigates_and_resolves() {
@@ -31,7 +31,7 @@ fn dialog_shows_navigates_and_resolves() {
     focus.apply_focus_intent(data.show_intent());
 
     // The overlay is the dialog; focus reports the active button.
-    assert_eq!(focus.current(), Some(FocusTarget::DialogButton(0)));
+    assert_eq!(focus.current(), Some(FocusTarget::ModalItem(0)));
     assert_eq!(dialog::active_button(&focus), Some(0));
     assert_eq!(
         dialog::current_dialog(&focus).map(|d| d.button_count()),
