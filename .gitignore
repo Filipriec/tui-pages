@@ -1,3 +1,6 @@
-book
+book/
 target/
 finds.md
+.forge/
+.claude/
+theme/book/

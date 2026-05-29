@@ -10,9 +10,11 @@ create-missing = false
 
 [output.html]
 additional-js = []
-additional-css = []
+additional-css = ["theme/catppuccin.css"]
 mathjax-support = false
 katex-support = false
+default-theme = "frappe"
+preferred-dark-theme = "mocha"
 
 [output.html.search]
 limit-results = 30
