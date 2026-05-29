@@ -10,10 +10,15 @@
 //! advanced callers that want to wire the flow themselves.
 
 pub mod command;
+#[cfg(feature = "dialog")]
+pub mod dialog;
 pub mod focus;
 pub mod input;
 pub mod navigation;
 pub mod runtime;
+
+#[cfg(feature = "dialog")]
+pub use dialog::{render_dialog, DialogData, DialogResult, DialogTheme};
 
 pub use command::{CommandHint, CommandRegistry, CommandResolver, CommandResponse};
 pub use focus::{

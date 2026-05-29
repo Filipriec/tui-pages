@@ -12,6 +12,15 @@ application-owned building blocks:
 - runtime facade: key events and command input to user actions and library effects
 - navigation: buffer history, panes, router synchronization, and focus registration
 
+The core crate ships **no rendering** — you draw state with ratatui or anything
+else. The one exception is the optional `dialog` feature, an opt-in built-in
+modal dialog (content type, result type, and a ratatui renderer) that pulls in
+ratatui only when enabled:
+
+```toml
+tui-pages = { version = "0.1", features = ["dialog"] }
+```
+
 Applications keep their own action enum, page enum, app state, render code,
 side effects, canvas/editor actions, dialogs, and picker data. `tui-pages`
 only owns the coordination model: input sequences, command resolution, focus,

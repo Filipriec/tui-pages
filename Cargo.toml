@@ -7,11 +7,15 @@ description = "Coordination runtime for keyboard-driven, page-based TUI applicat
 
 [dependencies]
 crossterm = "0.28"
+ratatui = { version = "0.28", optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
 tracing = "0.1"
 
 [features]
 default = []
 serde = ["dep:serde"]
+# Built-in modal dialog: content/result types plus a ratatui renderer.
+# Pulls in ratatui; the rest of the crate stays rendering-agnostic.
+dialog = ["dep:ratatui"]
 
 [workspace]
