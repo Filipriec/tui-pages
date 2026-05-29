@@ -1,6 +1,6 @@
-# tui-pages
+# Tui-pages
 
-> **Origin:** Originally developed for TUI accounting system. This crate was extracted and optimized from it using AI(thanks claude, chatgbt and minimax).
+> **Origin:** Originally developed for TUI accounting system. This crate was extracted and optimized from it using AI(thank you claude, chatgbt and minimax).
 
 ## Docs:
 ```
@@ -12,7 +12,7 @@ You want to create complex app in tui? Me the same. And I was stuck with god obj
 This crate it that architecture. Asked AI to generalize so that you can also use it ;)
 
 ### How it worked before the generalization:
-![Full System](docs/full_system_legacy.mermaid.svg)
+<img src="docs/full_system_legacy.mermaid.svg" width="600">
 
 
 ## Architecture
