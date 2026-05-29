@@ -27,7 +27,7 @@ InputPipeline - maps typesafe `Command::Save` to string from KeyEvent or keyboar
 
 InputOrchestrator - decides where the user request should go. E.g. we press `"j"` for `Movement::Down`. This request is to be processed by FocusManager. So we just go there. 
 
-FocusManager [IMPORTANT] - this handles focus. Of the whole app. Like it holds everything. So if library wants focus, its a problem, there is system inside of it for that. But if you want to focus element, you simply tell focus manager. You are not doing it on your own, be dumb, let this do the work for you.
+FocusManager [!IMPORTANT] - this handles focus. Of the whole app. Like it holds everything. So if library wants focus, its a problem, there is system inside of it for that. But if you want to focus element, you simply tell focus manager. You are not doing it on your own, be dumb, let this do the work for you.
 
 CommandPipeline - I forgot, who cares
 
