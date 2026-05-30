@@ -1,5 +1,8 @@
 # Tui-pages
 
+[![Docs](https://img.shields.io/badge/docs-online-brightgreen)](https://tui-pages.farmeris.sk)
+
+
 > [!IMPORTANT]
 > Read this docs, its handwritten
 
