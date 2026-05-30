@@ -1,6 +1,6 @@
 [package]
 name = "tui-pages"
-version = "0.1.0"
+version = "0.7.0"
 edition = "2021"
 license = "MIT"
 description = "Coordination runtime for keyboard-driven, page-based TUI applications: input sequences, command resolution, focus, navigation, buffers, and panes."

@@ -53,13 +53,13 @@ pub use terminal::{enter as enter_terminal, TerminalGuard};
 /// `dialog` feature it also brings in the dialog content, result, theme,
 /// renderer, and the `dialog::*` driver helpers.
 pub mod prelude {
+    pub use crate::terminal;
     pub use crate::{
         modes, parse_binding, try_parse_binding, ActionContext, ActionOutcome, FocusController,
         FocusIntent, FocusManager, FocusQuery, FocusTarget, FocusWrap, KeyChord, ModeId, PageFn,
         PageFocusBuilder, PageProvider, PageSpec, ParseKeyError, TerminalGuard, TuiActionHandler,
         TuiApp, TuiEffect, TuiPages, TuiPagesOutput, TuiPagesStatus,
     };
-    pub use crate::terminal;
 
     #[cfg(feature = "dialog")]
     pub use crate::dialog::{self, DialogData, DialogKey, DialogResult, DialogTheme};
