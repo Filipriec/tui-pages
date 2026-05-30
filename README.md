@@ -1,6 +1,6 @@
 # Tui-pages
 
-[![Book](https://img.shields.io/badge/docs-online-brightgreen)](https://tui-pages.farmeris.sk)
+[![Book](https://img.shields.io/badge/mdBook-online-brightgreen)](https://tui-pages.farmeris.sk)
 [![Docs](https://img.shields.io/badge/docs-rs-orange)](https://docs.rs/tui-pages)
 
 
