@@ -3,8 +3,11 @@
 //
 // Capabilities exercised:
 //   • Views + navigation            TuiEffect::Navigate
-//   • Focus cycling + activation     FocusIntent::Next/Prev, FocusTarget::Button
-//   • Sections with items            EnterSection / LeaveSection, SectionItem
+//   • Focus cycling + activation     FocusIntent::Next/Prev/Activate, Button
+//   • Sections with items            section_with_items + Activate / LeaveSection
+//                                    — the runtime enters/leaves and moves
+//                                    within sections; the app never inspects
+//                                    focus to route a keypress.
 //   • Multi-key chord sequences      `g h`, `g n`, `g ?`
 //   • Buffer history                 NextBuffer / PreviousBuffer / CloseBuffer
 //   • Pane splits                    SplitPane / NextPane / ClosePane
@@ -42,8 +45,6 @@ pub enum View {
 pub enum Action {
     FocusNext,
     FocusPrev,
-    MoveUp,
-    MoveDown,
     Select,
     Escape,
 
@@ -87,12 +88,16 @@ impl TuiActionHandler<View, Action, AppState, Overlay> for Handler {
         state: &mut AppState,
     ) -> Result<ActionOutcome<View, Overlay>, Self::Error> {
         Ok(match action {
-            Action::FocusNext => top_level_focus(ctx.focus, FocusIntent::Next),
-            Action::FocusPrev => top_level_focus(ctx.focus, FocusIntent::Prev),
-            Action::MoveUp => inside_section(ctx.focus, FocusIntent::Prev),
-            Action::MoveDown => inside_section(ctx.focus, FocusIntent::Next),
+            // Movement is now the runtime's job. `Next`/`Prev` move within an
+            // entered section and step out to the next top-level target at its
+            // edge — so the same intent drives Tab and j/k, and the handler no
+            // longer inspects focus to decide where a keypress should go.
+            Action::FocusNext => ActionOutcome::effect(TuiEffect::Focus(FocusIntent::Next)),
+            Action::FocusPrev => ActionOutcome::effect(TuiEffect::Focus(FocusIntent::Prev)),
             Action::Select => select(ctx, state),
-            Action::Escape => escape(ctx),
+            // `LeaveSection` is a no-op when no section is entered, so Esc needs
+            // no focus check either.
+            Action::Escape => ActionOutcome::effect(TuiEffect::Focus(FocusIntent::LeaveSection)),
 
             Action::GotoHome => ActionOutcome::effect(TuiEffect::Navigate(View::Home)),
             Action::GotoNotes => ActionOutcome::effect(TuiEffect::Navigate(View::Notes)),
@@ -126,37 +131,12 @@ impl TuiActionHandler<View, Action, AppState, Overlay> for Handler {
     }
 }
 
-fn top_level_focus(
-    focus: Option<FocusTarget<Overlay>>,
-    intent: FocusIntent<Overlay>,
-) -> ActionOutcome<View, Overlay> {
-    if matches!(focus, Some(FocusTarget::SectionItem { .. })) {
-        return ActionOutcome::effects([
-            TuiEffect::Focus(FocusIntent::LeaveSection),
-            TuiEffect::Focus(intent),
-        ]);
-    }
-    ActionOutcome::effect(TuiEffect::Focus(intent))
-}
-
-fn inside_section(
-    focus: Option<FocusTarget<Overlay>>,
-    intent: FocusIntent<Overlay>,
-) -> ActionOutcome<View, Overlay> {
-    if matches!(focus, Some(FocusTarget::SectionItem { .. })) {
-        ActionOutcome::effect(TuiEffect::Focus(intent))
-    } else {
-        ActionOutcome::none()
-    }
-}
-
+// `select` now carries only genuine application meaning — which view a button
+// goes to, what selecting a note does. The "enter the focused section" case is
+// gone: pressing Enter on a section falls through to `FocusIntent::Activate`,
+// and the runtime enters it using the item count declared in `page_spec`.
 fn select(ctx: ActionContext<View, Overlay>, state: &mut AppState) -> ActionOutcome<View, Overlay> {
     match (ctx.current_view, ctx.focus) {
-        (View::Notes, Some(FocusTarget::Section(NOTES_SECTION))) => {
-            ActionOutcome::effect(TuiEffect::Focus(FocusIntent::EnterSection {
-                item_count: NOTES.len(),
-            }))
-        }
         (
             View::Notes,
             Some(FocusTarget::SectionItem {
@@ -177,15 +157,8 @@ fn select(ctx: ActionContext<View, Overlay>, state: &mut AppState) -> ActionOutc
         (View::Home, Some(FocusTarget::Button(1))) => {
             ActionOutcome::effect(TuiEffect::Navigate(View::Help))
         }
-        _ => ActionOutcome::none(),
-    }
-}
-
-fn escape(ctx: ActionContext<View, Overlay>) -> ActionOutcome<View, Overlay> {
-    if matches!(ctx.focus, Some(FocusTarget::SectionItem { .. })) {
-        ActionOutcome::effect(TuiEffect::Focus(FocusIntent::LeaveSection))
-    } else {
-        ActionOutcome::none()
+        // Enter on anything else (e.g. the Notes section header) → activate it.
+        _ => ActionOutcome::effect(TuiEffect::Focus(FocusIntent::Activate)),
     }
 }
 
@@ -193,12 +166,14 @@ fn page_spec(view: &View, _state: &AppState, _focus: Option<&FocusTarget<Overlay
     let mut focus = PageFocusBuilder::new();
     match view {
         View::Home => focus = focus.button(0).button(1),
-        View::Notes => focus = focus.section(NOTES_SECTION).button(0),
+        // The item count travels with the section, so the runtime can enter it
+        // on Activate without the handler ever passing `NOTES.len()`.
+        View::Notes => focus = focus.section_with_items(NOTES_SECTION, NOTES.len()).button(0),
         View::Help => {}
     }
 
     PageSpec::new()
-        .focus_targets(focus.build())
+        .focus(focus)
         .modes(vec![modes::GENERAL, modes::GLOBAL])
 }
 
@@ -206,13 +181,15 @@ pub fn build() -> App {
     let mut app = TuiPages::builder(View::Home)
         .pages(page_spec as PageFn<View, AppState, Overlay>)
         .handler(Handler)
-        // Focus + activation
+        // Focus + activation. Tab and j/k share one intent: the focus manager
+        // moves within a section when one is entered and steps to the next
+        // top-level target at its edge.
         .bind(modes::GENERAL, "tab", Action::FocusNext)
         .bind(modes::GENERAL, "shift+tab", Action::FocusPrev)
-        .bind(modes::GENERAL, "j", Action::MoveDown)
-        .bind(modes::GENERAL, "k", Action::MoveUp)
-        .bind(modes::GENERAL, "down", Action::MoveDown)
-        .bind(modes::GENERAL, "up", Action::MoveUp)
+        .bind(modes::GENERAL, "j", Action::FocusNext)
+        .bind(modes::GENERAL, "k", Action::FocusPrev)
+        .bind(modes::GENERAL, "down", Action::FocusNext)
+        .bind(modes::GENERAL, "up", Action::FocusPrev)
         .bind(modes::GENERAL, "enter", Action::Select)
         .bind(modes::GENERAL, "esc", Action::Escape)
         // Multi-key chords: press `g`, then h / n / ?

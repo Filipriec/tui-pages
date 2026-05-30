@@ -66,6 +66,10 @@ pub struct FocusManager<O = (), M = ()> {
     index: usize,
     overlay: Option<OverlayFocus<O, M>>,
     entered_section: Option<EnteredSection>,
+    /// `(section_id, item_count)` for sections the runtime may enter on its
+    /// own via [`activate`](Self::activate). Refreshed alongside the page's
+    /// focus targets.
+    section_items: Vec<(usize, usize)>,
     wrap: FocusWrap,
 }
 
@@ -87,6 +91,7 @@ impl<O, M> FocusManager<O, M> {
             index: 0,
             overlay: None,
             entered_section: None,
+            section_items: Vec::new(),
             wrap: FocusWrap::Clamp,
         }
     }
@@ -117,6 +122,22 @@ impl<O, M> FocusManager<O, M> {
         self.targets = targets;
         self.index = 0;
         self.entered_section = None;
+        self.section_items.clear();
+    }
+
+    /// Record the `(section_id, item_count)` pairs for the current page so the
+    /// runtime can enter a section on its own (see [`activate`](Self::activate)).
+    /// The runtime calls this from `refresh_page`; applications rarely need to.
+    pub fn set_section_items(&mut self, section_items: Vec<(usize, usize)>) {
+        self.section_items = section_items;
+    }
+
+    /// The recorded item count for `section_id`, if any.
+    fn section_item_count(&self, section_id: usize) -> Option<usize> {
+        self.section_items
+            .iter()
+            .find(|(id, _)| *id == section_id)
+            .map(|(_, count)| *count)
     }
 
     pub fn has_overlay(&self) -> bool {
@@ -137,9 +158,18 @@ impl<O, M> FocusManager<O, M> {
             return;
         }
 
-        if let Some(section) = &mut self.entered_section {
-            section.item_index = wrap.step(section.item_index, section.item_count, true);
-            return;
+        if let Some(section) = &self.entered_section {
+            let stepped = wrap.step(section.item_index, section.item_count, true);
+            if stepped != section.item_index {
+                if let Some(section) = &mut self.entered_section {
+                    section.item_index = stepped;
+                }
+                return;
+            }
+            // At the section's last item under `Clamp`: leave the section and
+            // continue to the adjacent top-level target. `self.index` still
+            // points at the `Section` target, so the scan below steps past it.
+            self.entered_section = None;
         }
 
         if self
@@ -183,9 +213,17 @@ impl<O, M> FocusManager<O, M> {
             return;
         }
 
-        if let Some(section) = &mut self.entered_section {
-            section.item_index = wrap.step(section.item_index, section.item_count, false);
-            return;
+        if let Some(section) = &self.entered_section {
+            let stepped = wrap.step(section.item_index, section.item_count, false);
+            if stepped != section.item_index {
+                if let Some(section) = &mut self.entered_section {
+                    section.item_index = stepped;
+                }
+                return;
+            }
+            // At the section's first item under `Clamp`: leave the section and
+            // continue to the adjacent top-level target before it.
+            self.entered_section = None;
         }
 
         if self
@@ -259,6 +297,24 @@ impl<O, M> FocusManager<O, M> {
                 item_index: 0,
                 item_count,
             });
+        }
+    }
+
+    /// Act on the currently focused target without the application inspecting
+    /// focus: if it is a [`Section`](FocusTarget::Section) registered with an
+    /// item count (see
+    /// [`section_with_items`](crate::PageFocusBuilder::section_with_items)),
+    /// enter it. Anything else — a button, an already-entered section, an open
+    /// overlay — is left untouched, so the application's own activation logic
+    /// (navigation, selection) stays its own concern.
+    pub fn activate(&mut self) {
+        if self.overlay.is_some() || self.entered_section.is_some() {
+            return;
+        }
+        if let Some(FocusTarget::Section(section_id)) = self.targets.get(self.index) {
+            if let Some(item_count) = self.section_item_count(*section_id) {
+                self.enter_section(item_count);
+            }
         }
     }
 
@@ -445,6 +501,7 @@ impl<O: Clone + PartialEq, M> FocusController<O, M> for FocusManager<O, M> {
             FocusIntent::ExitCanvasBackward => self.exit_canvas_backward(),
             FocusIntent::EnterSection { item_count } => self.enter_section(item_count),
             FocusIntent::LeaveSection => self.leave_section(),
+            FocusIntent::Activate => self.activate(),
         }
     }
 }

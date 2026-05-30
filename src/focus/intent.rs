@@ -36,4 +36,11 @@ pub enum FocusIntent<O = (), M = ()> {
         item_count: usize,
     },
     LeaveSection,
+    /// Act on the currently focused target: enter it if it is a section
+    /// registered with an item count, otherwise do nothing. Lets an
+    /// application route activation (Enter) to the focus manager instead of
+    /// matching on focus itself. See [`FocusManager::activate`].
+    ///
+    /// [`FocusManager::activate`]: crate::FocusManager::activate
+    Activate,
 }

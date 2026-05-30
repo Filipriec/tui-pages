@@ -92,6 +92,11 @@ pub mod modes {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PageSpec<O = ()> {
     pub focus_targets: Vec<FocusTarget<O>>,
+    /// `(section_id, item_count)` for sections the runtime may enter on its
+    /// own. Populated by [`PageSpec::focus`] from
+    /// [`PageFocusBuilder::section_with_items`](crate::PageFocusBuilder::section_with_items);
+    /// empty when sections are registered count-less.
+    pub section_items: Vec<(usize, usize)>,
     pub modes: Vec<ModeId>,
     pub accepts_text_input: bool,
 }
@@ -100,6 +105,7 @@ impl<O> Default for PageSpec<O> {
     fn default() -> Self {
         Self {
             focus_targets: Vec::new(),
+            section_items: Vec::new(),
             modes: vec![modes::GENERAL, modes::GLOBAL],
             accepts_text_input: false,
         }
@@ -113,6 +119,18 @@ impl<O> PageSpec<O> {
 
     pub fn focus_targets(mut self, targets: Vec<FocusTarget<O>>) -> Self {
         self.focus_targets = targets;
+        self
+    }
+
+    /// Set the focus targets *and* section item counts from a builder in one
+    /// call. Prefer this over [`focus_targets`](Self::focus_targets) when any
+    /// section is declared with
+    /// [`section_with_items`](crate::PageFocusBuilder::section_with_items), so
+    /// the runtime can enter the section on its own.
+    pub fn focus(mut self, builder: crate::PageFocusBuilder<O>) -> Self {
+        let (targets, section_items) = builder.into_parts();
+        self.focus_targets = targets;
+        self.section_items = section_items;
         self
     }
 
@@ -335,9 +353,24 @@ where
 
     pub fn refresh_page(&mut self, state: &S) {
         let spec = self.current_page_spec(state);
-        if self.focus.targets() != spec.focus_targets.as_slice() {
-            self.focus.register_page(spec.focus_targets);
+        self.sync_focus_to_spec(spec);
+    }
+
+    /// Register a page spec's focus targets and section item counts. Targets
+    /// are only re-registered when they actually change (so focus position is
+    /// preserved across redraws), but the section item counts are always
+    /// refreshed — a list may grow or shrink while its `Section` target stays
+    /// the same.
+    fn sync_focus_to_spec(&mut self, spec: PageSpec<O>) {
+        let PageSpec {
+            focus_targets,
+            section_items,
+            ..
+        } = spec;
+        if self.focus.targets() != focus_targets.as_slice() {
+            self.focus.register_page(focus_targets);
         }
+        self.focus.set_section_items(section_items);
     }
 
     pub fn handle_key(
@@ -346,13 +379,11 @@ where
         state: &mut S,
     ) -> TuiPagesResult<TuiPagesOutput<A>, Handler::Error> {
         let spec = self.current_page_spec(state);
-        if self.focus.targets() != spec.focus_targets.as_slice() {
-            self.focus.register_page(spec.focus_targets.clone());
-        }
+        let modes = spec.modes.clone();
+        let accepts_text_input = spec.accepts_text_input;
+        self.sync_focus_to_spec(spec);
 
-        let response = self
-            .input
-            .process(key, &spec.modes, spec.accepts_text_input);
+        let response = self.input.process(key, &modes, accepts_text_input);
         match response {
             crate::input::PipelineResponse::Execute(action) => {
                 let quit_requested = self.dispatch_action(action, state)?;
