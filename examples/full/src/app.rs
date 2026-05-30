@@ -74,7 +74,7 @@ pub struct AppState {
     pub palette_input: String,
 }
 
-pub type App = TuiPages<View, Action, AppState, PageFn<View, AppState, Overlay>, Handler, Overlay>;
+pub type App = TuiApp<View, Action, AppState, Handler, Overlay>;
 
 pub struct Handler;
 

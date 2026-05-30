@@ -36,7 +36,7 @@ pub use navigation::{
 };
 pub use runtime::{
     modes, ActionContext, ActionOutcome, ModeId, PageFn, PageProvider, PageSpec, TuiActionHandler,
-    TuiEffect, TuiPages, TuiPagesBuilder, TuiPagesError, TuiPagesOutput, TuiPagesResult,
+    TuiApp, TuiEffect, TuiPages, TuiPagesBuilder, TuiPagesError, TuiPagesOutput, TuiPagesResult,
     TuiPagesStatus,
 };
 pub use terminal::{enter as enter_terminal, TerminalGuard};
@@ -57,7 +57,7 @@ pub mod prelude {
         modes, parse_binding, try_parse_binding, ActionContext, ActionOutcome, FocusController,
         FocusIntent, FocusManager, FocusQuery, FocusTarget, FocusWrap, KeyChord, ModeId, PageFn,
         PageFocusBuilder, PageProvider, PageSpec, ParseKeyError, TerminalGuard, TuiActionHandler,
-        TuiEffect, TuiPages, TuiPagesOutput, TuiPagesStatus,
+        TuiApp, TuiEffect, TuiPages, TuiPagesOutput, TuiPagesStatus,
     };
     pub use crate::terminal;
 

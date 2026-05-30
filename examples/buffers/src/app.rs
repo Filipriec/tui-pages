@@ -43,7 +43,7 @@ pub enum Action {
     Quit,
 }
 
-pub type App = TuiPages<View, Action, (), PageFn<View, ()>, Handler>;
+pub type App = TuiApp<View, Action, (), Handler>;
 
 pub struct Handler;
 

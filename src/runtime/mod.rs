@@ -163,6 +163,28 @@ impl<O> PageSpec<O> {
 /// `page_spec as PageFn<…>`.
 pub type PageFn<V, S, O = ()> = fn(&V, &S, Option<&FocusTarget<O>>) -> PageSpec<O>;
 
+/// The common shape of a [`TuiPages`] application: pages described by a plain
+/// [`PageFn`].
+///
+/// [`TuiPages`] carries the page provider as its own type parameter so an
+/// advanced caller can plug in any [`PageProvider`]. Almost no one needs that —
+/// pages are a free function — and spelling the provider out forces the view
+/// and state types to be repeated inside `PageFn<…>`:
+///
+/// ```ignore
+/// // the long form names View / State / Overlay twice
+/// type App = TuiPages<View, Action, State, PageFn<View, State, Overlay>, Handler, Overlay>;
+/// // this alias names each once
+/// type App = TuiApp<View, Action, State, Handler, Overlay>;
+/// ```
+///
+/// `O` (overlay) and `M` (modal payload) default to `()`, so an app with
+/// neither writes `TuiApp<View, Action, State, Handler>`. Build it with
+/// [`TuiPages::builder`] + [`page_fn`](TuiPagesBuilder::page_fn); the resulting
+/// type *is* a `TuiApp`, so `fn build() -> App` lines up with no extra effort.
+pub type TuiApp<V, A, S, Handler, O = (), M = ()> =
+    TuiPages<V, A, S, PageFn<V, S, O>, Handler, O, M>;
+
 pub trait PageProvider<V, S, O = ()> {
     fn page_spec(&self, view: &V, state: &S, focus: Option<&FocusTarget<O>>) -> PageSpec<O>;
 }

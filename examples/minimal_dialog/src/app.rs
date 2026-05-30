@@ -43,8 +43,7 @@ impl Default for AppState {
 
 // The dialog content (`DialogData<Purpose>`) is the runtime's modal payload `M`.
 // O = () — this example has no named simple overlays, only a modal (the dialog).
-pub type App =
-    TuiPages<View, Action, AppState, PageFn<View, AppState>, Handler, (), DialogData<Purpose>>;
+pub type App = TuiApp<View, Action, AppState, Handler, (), DialogData<Purpose>>;
 
 pub struct Handler;
 
