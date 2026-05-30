@@ -1,10 +1,11 @@
 # Tui-pages
 
-[![Docs](https://img.shields.io/badge/docs-online-brightgreen)](https://tui-pages.farmeris.sk)
+[![Book](https://img.shields.io/badge/docs-online-brightgreen)](https://tui-pages.farmeris.sk)
+[![Docs](https://img.shields.io/badge/docs-rs-orange)](https://docs.rs/tui-pages)
 
 
 > [!IMPORTANT]
-> Read this docs, its handwritten
+> Read this readme, its handwritten. Mdbook is written with AI assistance
 
 > **Origin:** Originally developed for TUI accounting system. This crate was extracted and optimized from it using AI(thank you claude, chatgbt and minimax).
 
