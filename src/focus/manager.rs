@@ -1,8 +1,7 @@
 use crate::focus::{FocusIntent, FocusQuery, FocusTarget};
 
 /// How navigation behaves at the ends of a list — the single policy shared by
-/// page focus, section items, modal items, buffer switching, and pane
-/// switching.
+/// page focus, modal items, buffer switching, and pane switching.
 ///
 /// The crate does not hardcode a policy — you choose, and it applies
 /// uniformly. The default is [`Clamp`](FocusWrap::Clamp), which stops at the
@@ -27,9 +26,8 @@ impl FocusWrap {
     /// applying this policy. `forward == true` advances, `false` retreats.
     ///
     /// This is the single shared definition of "what happens at the ends of a
-    /// list", used for page focus, section items, modal items, buffers, and
-    /// panes alike. `len` must be greater than zero (callers guard empty
-    /// lists).
+    /// list", used for page focus, modal items, buffers, and panes alike. `len`
+    /// must be greater than zero (callers guard empty lists).
     pub fn step(self, index: usize, len: usize, forward: bool) -> usize {
         match (self, forward) {
             (FocusWrap::Wrap, true) => (index + 1) % len,
@@ -130,6 +128,20 @@ impl<O, M> FocusManager<O, M> {
     /// The runtime calls this from `refresh_page`; applications rarely need to.
     pub fn set_section_items(&mut self, section_items: Vec<(usize, usize)>) {
         self.section_items = section_items;
+        if let Some(section) = &mut self.entered_section {
+            match self
+                .section_items
+                .iter()
+                .find(|(id, _)| *id == section.section_id)
+                .map(|(_, count)| *count)
+            {
+                Some(0) | None => self.entered_section = None,
+                Some(count) => {
+                    section.item_count = count;
+                    section.item_index = section.item_index.min(count - 1);
+                }
+            }
+        }
     }
 
     /// The recorded item count for `section_id`, if any.
@@ -159,16 +171,15 @@ impl<O, M> FocusManager<O, M> {
         }
 
         if let Some(section) = &self.entered_section {
-            let stepped = wrap.step(section.item_index, section.item_count, true);
-            if stepped != section.item_index {
+            if section.item_index + 1 < section.item_count {
                 if let Some(section) = &mut self.entered_section {
-                    section.item_index = stepped;
+                    section.item_index += 1;
                 }
                 return;
             }
-            // At the section's last item under `Clamp`: leave the section and
-            // continue to the adjacent top-level target. `self.index` still
-            // points at the `Section` target, so the scan below steps past it.
+            // At the section's last item: leave the section and continue to the
+            // adjacent top-level target. `self.index` still points at the
+            // `Section` target, so the scan below steps past it.
             self.entered_section = None;
         }
 
@@ -214,15 +225,14 @@ impl<O, M> FocusManager<O, M> {
         }
 
         if let Some(section) = &self.entered_section {
-            let stepped = wrap.step(section.item_index, section.item_count, false);
-            if stepped != section.item_index {
+            if section.item_index > 0 {
                 if let Some(section) = &mut self.entered_section {
-                    section.item_index = stepped;
+                    section.item_index -= 1;
                 }
                 return;
             }
-            // At the section's first item under `Clamp`: leave the section and
-            // continue to the adjacent top-level target before it.
+            // At the section's first item: leave the section and continue to
+            // the adjacent top-level target before it.
             self.entered_section = None;
         }
 

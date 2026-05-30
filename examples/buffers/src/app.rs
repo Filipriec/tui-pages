@@ -83,7 +83,7 @@ pub fn build() -> App {
         // Buffer and pane cycling honor the wrap policy too: with Wrap, NextBuffer
         // off the last buffer returns to the first (try it at the ends).
         .focus_wrap(FocusWrap::Wrap)
-        .pages(page_spec as PageFn<View, ()>)
+        .page_fn(page_spec)
         .handler(Handler)
         // Open / switch buffers.
         .bind(modes::GENERAL, "1", Action::Open(View::Editor))

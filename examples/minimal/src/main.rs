@@ -2,14 +2,12 @@ mod app;
 mod ui;
 
 use anyhow::Result;
-use crossterm::terminal::{
-    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
-};
 use ratatui::{backend::CrosstermBackend, Terminal};
 
 fn main() -> Result<()> {
-    enable_raw_mode()?;
-    crossterm::execute!(std::io::stderr(), EnterAlternateScreen)?;
+    // One call sets up raw mode + the alternate screen and hands back a guard
+    // that restores the terminal when it drops — including if the loop panics.
+    let _guard = tui_pages::terminal::enter()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(std::io::stderr()))?;
 
     let mut tui = app::build();
@@ -24,7 +22,5 @@ fn main() -> Result<()> {
         }
     }
 
-    disable_raw_mode()?;
-    crossterm::execute!(std::io::stderr(), LeaveAlternateScreen)?;
     Ok(())
 }

@@ -82,6 +82,37 @@ fn activate_enters_a_registered_section_and_next_steps_out_at_the_edge() {
 }
 
 #[test]
+fn section_edges_step_out_even_when_page_focus_wraps() {
+    let mut focus: FocusManager = FocusManager::new();
+    focus.set_focus_wrap(FocusWrap::Wrap);
+    focus.register_page(vec![
+        FocusTarget::Button(0),
+        FocusTarget::Section(1),
+        FocusTarget::Button(2),
+    ]);
+    focus.set_section_items(vec![(1, 2)]);
+
+    focus.apply_focus_intent(FocusIntent::Next); // section header
+    focus.apply_focus_intent(FocusIntent::Activate);
+    focus.apply_focus_intent(FocusIntent::Next);
+    assert_eq!(
+        focus.current(),
+        Some(FocusTarget::SectionItem {
+            section: 1,
+            item: 1
+        })
+    );
+
+    focus.apply_focus_intent(FocusIntent::Next);
+    assert_eq!(focus.current(), Some(FocusTarget::Button(2)));
+
+    focus.apply_focus_intent(FocusIntent::Prev); // section header
+    focus.apply_focus_intent(FocusIntent::Activate);
+    focus.apply_focus_intent(FocusIntent::Prev);
+    assert_eq!(focus.current(), Some(FocusTarget::Button(0)));
+}
+
+#[test]
 fn prev_leaves_a_section_at_its_first_item() {
     let mut focus: FocusManager = FocusManager::new();
     focus.register_page(vec![FocusTarget::Button(0), FocusTarget::Section(1)]);
@@ -117,6 +148,35 @@ fn activate_is_a_no_op_off_a_section() {
     bare.register_page(vec![FocusTarget::Section(0)]);
     bare.apply_focus_intent(FocusIntent::Activate);
     assert_eq!(bare.current(), Some(FocusTarget::Section(0)));
+}
+
+#[test]
+fn entered_section_count_refreshes_without_reregistering_targets() {
+    let mut focus: FocusManager = FocusManager::new();
+    focus.register_page(vec![FocusTarget::Section(0)]);
+    focus.set_section_items(vec![(0, 4)]);
+    focus.apply_focus_intent(FocusIntent::Activate);
+    focus.apply_focus_intent(FocusIntent::Next);
+    focus.apply_focus_intent(FocusIntent::Next);
+    assert_eq!(
+        focus.current(),
+        Some(FocusTarget::SectionItem {
+            section: 0,
+            item: 2
+        })
+    );
+
+    focus.set_section_items(vec![(0, 2)]);
+    assert_eq!(
+        focus.current(),
+        Some(FocusTarget::SectionItem {
+            section: 0,
+            item: 1
+        })
+    );
+
+    focus.set_section_items(vec![(0, 0)]);
+    assert_eq!(focus.current(), Some(FocusTarget::Section(0)));
 }
 
 #[test]

@@ -90,13 +90,14 @@ pub mod modes {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct PageSpec<O = ()> {
     pub focus_targets: Vec<FocusTarget<O>>,
     /// `(section_id, item_count)` for sections the runtime may enter on its
     /// own. Populated by [`PageSpec::focus`] from
     /// [`PageFocusBuilder::section_with_items`](crate::PageFocusBuilder::section_with_items);
     /// empty when sections are registered count-less.
-    pub section_items: Vec<(usize, usize)>,
+    pub(crate) section_items: Vec<(usize, usize)>,
     pub modes: Vec<ModeId>,
     pub accepts_text_input: bool,
 }
@@ -148,13 +149,18 @@ impl<O> PageSpec<O> {
 /// A plain function that maps `(view, state, focus)` to a [`PageSpec`].
 ///
 /// Most apps describe their pages with a free function; this alias spells out
-/// the signature so the [`TuiPages`] type parameter and the `as` coercion at
-/// the call site stay readable:
+/// the signature so a `type App = TuiPages<…>` alias can name the page
+/// provider:
 ///
 /// ```ignore
 /// type App = TuiPages<View, Action, State, PageFn<View, State>, Handler>;
-/// //                  builder: .pages(page_spec as PageFn<View, State>)
+/// //                  builder: .page_fn(page_spec)   // coerces for you
 /// ```
+///
+/// Pass the function to [`page_fn`](TuiPagesBuilder::page_fn) rather than
+/// [`pages`](TuiPagesBuilder::pages): it pins this pointer type and coerces the
+/// fn item at the call site, so the application never writes
+/// `page_spec as PageFn<…>`.
 pub type PageFn<V, S, O = ()> = fn(&V, &S, Option<&FocusTarget<O>>) -> PageSpec<O>;
 
 pub trait PageProvider<V, S, O = ()> {
@@ -618,6 +624,23 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
         }
     }
 
+    /// Set the page provider to a plain `fn`, coercing it to [`PageFn`] at the
+    /// call site so the application never writes `page_spec as PageFn<…>`.
+    ///
+    /// `.pages(f)` keeps the fn *item* type, which a `type App = TuiPages<…>`
+    /// alias cannot name; this method pins the [`PageFn`] pointer type the
+    /// alias uses, so `.page_fn(page_spec)` just works:
+    ///
+    /// ```ignore
+    /// TuiPages::builder(View::Home).page_fn(page_spec).handler(Handler).build()
+    /// ```
+    pub fn page_fn(
+        self,
+        page_fn: PageFn<V, S, O>,
+    ) -> TuiPagesBuilder<V, A, S, O, M, PageFn<V, S, O>, Handler> {
+        self.pages(page_fn)
+    }
+
     pub fn handler<NextHandler>(
         self,
         handler: NextHandler,
@@ -639,7 +662,7 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
     }
 
     /// Set how focus navigation behaves at the ends of a list — clamp (default)
-    /// or wrap-around. Applies to page focus, section items, and modal items.
+    /// or wrap-around. Applies to page focus and modal items.
     pub fn focus_wrap(mut self, wrap: FocusWrap) -> Self {
         self.focus_wrap = wrap;
         self

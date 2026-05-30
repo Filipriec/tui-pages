@@ -16,6 +16,7 @@ pub mod focus;
 pub mod input;
 pub mod navigation;
 pub mod runtime;
+pub mod terminal;
 
 #[cfg(feature = "dialog")]
 pub use dialog::{render_dialog, DialogData, DialogKey, DialogResult, DialogTheme};
@@ -38,6 +39,7 @@ pub use runtime::{
     TuiEffect, TuiPages, TuiPagesBuilder, TuiPagesError, TuiPagesOutput, TuiPagesResult,
     TuiPagesStatus,
 };
+pub use terminal::{enter as enter_terminal, TerminalGuard};
 
 /// Everything a typical application needs in one glob import.
 ///
@@ -54,9 +56,10 @@ pub mod prelude {
     pub use crate::{
         modes, parse_binding, try_parse_binding, ActionContext, ActionOutcome, FocusController,
         FocusIntent, FocusManager, FocusQuery, FocusTarget, FocusWrap, KeyChord, ModeId, PageFn,
-        PageFocusBuilder, PageProvider, PageSpec, ParseKeyError, TuiActionHandler, TuiEffect,
-        TuiPages, TuiPagesOutput, TuiPagesStatus,
+        PageFocusBuilder, PageProvider, PageSpec, ParseKeyError, TerminalGuard, TuiActionHandler,
+        TuiEffect, TuiPages, TuiPagesOutput, TuiPagesStatus,
     };
+    pub use crate::terminal;
 
     #[cfg(feature = "dialog")]
     pub use crate::dialog::{self, DialogData, DialogKey, DialogResult, DialogTheme};

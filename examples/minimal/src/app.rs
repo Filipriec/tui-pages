@@ -55,7 +55,7 @@ fn page_spec(_view: &View, _state: &(), _focus: Option<&FocusTarget>) -> PageSpe
 
 pub fn build() -> App {
     let mut app = TuiPages::builder(View::Home)
-        .pages(page_spec as PageFn<View, ()>)
+        .page_fn(page_spec)
         .handler(Handler)
         .bind(modes::GENERAL, "tab", Action::FocusNext)
         .bind(modes::GENERAL, "shift+tab", Action::FocusPrev)

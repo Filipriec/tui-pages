@@ -179,7 +179,7 @@ fn page_spec(view: &View, _state: &AppState, _focus: Option<&FocusTarget<Overlay
 
 pub fn build() -> App {
     let mut app = TuiPages::builder(View::Home)
-        .pages(page_spec as PageFn<View, AppState, Overlay>)
+        .page_fn(page_spec)
         .handler(Handler)
         // Focus + activation. Tab and j/k share one intent: the focus manager
         // moves within a section when one is entered and steps to the next
