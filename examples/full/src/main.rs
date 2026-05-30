@@ -1,4 +1,7 @@
 mod app;
+mod help;
+mod home;
+mod notes;
 mod ui;
 
 use anyhow::Result;
@@ -7,8 +10,6 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 use tui_pages::{InputHint, TuiPagesStatus};
 
 fn main() -> Result<()> {
-    // The guard restores the terminal when it drops at the end of `main` — or
-    // if `run` panics on the way through.
     let _guard = tui_pages::terminal::enter()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(std::io::stderr()))?;
 
@@ -23,7 +24,6 @@ fn run(
     tui: &mut app::App,
     state: &mut app::AppState,
 ) -> Result<()> {
-    // Pending multi-key chord hints, shown in the status bar.
     let mut waiting: Vec<InputHint<app::Action>> = Vec::new();
 
     loop {
@@ -33,9 +33,9 @@ fn run(
             continue;
         };
 
-        // The command palette is built entirely from public runtime API:
-        // app-owned text state plus `tui.commands` for resolution. The crate
-        // ships no palette feature — an enormous app composes its own this way.
+        // The command palette is plain app state — tui-pages ships no palette,
+        // so we drive the text box ourselves and only hand the result to
+        // submit_command on Enter.
         if state.palette_open {
             match key.code {
                 KeyCode::Enter => {

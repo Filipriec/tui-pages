@@ -1,9 +1,9 @@
 [package]
 name = "tui-pages"
-version = "0.7.0"
+version = "0.7.1"
 edition = "2021"
 license = "MIT"
-description = "Coordination runtime for keyboard-driven, page-based TUI applications: input sequences, command resolution, focus, navigation, buffers, and panes."
+description = "Core for TUI apps with multiple pages"
 repository = "https://gitlab.com/filipriec/tui-pages"
 readme = "README.md"
 keywords = ["tui", "terminal", "ratatui", "keyboard", "ui"]

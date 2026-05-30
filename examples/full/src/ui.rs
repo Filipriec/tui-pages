@@ -1,25 +1,24 @@
-// Pure ratatui rendering. Reads tui-pages state to decide what to draw.
-
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
+    widgets::{Block, Borders, Clear, Paragraph},
     Frame,
 };
 use tui_pages::{FocusTarget, InputHint, PaneSplit};
 
-use crate::app::{self, App, AppState, Overlay, View, NOTES, NOTES_SECTION};
+use crate::app::{self, App, AppState, Overlay, View};
+use crate::{help, home, notes};
 
 pub fn render(frame: &mut Frame, tui: &App, state: &AppState, waiting: &[InputHint<app::Action>]) {
     let area = frame.area();
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3), // tabs
-            Constraint::Length(3), // buffer / pane strip
-            Constraint::Min(0),    // body
-            Constraint::Length(3), // status
+            Constraint::Length(3),
+            Constraint::Length(3),
+            Constraint::Min(0),
+            Constraint::Length(3),
         ])
         .split(area);
 
@@ -28,7 +27,6 @@ pub fn render(frame: &mut Frame, tui: &App, state: &AppState, waiting: &[InputHi
     render_body(frame, rows[2], tui, state);
     render_status(frame, rows[3], tui, state, waiting);
 
-    // Palette is app state; draw it when the app has it open.
     if state.palette_open {
         render_palette(frame, area, &state.palette_input);
     }
@@ -150,120 +148,19 @@ fn render_pane(
     frame.render_widget(outer, area);
 
     match view {
-        View::Home => render_home(frame, inner, focus),
-        View::Notes => render_notes(frame, inner, state, focus),
-        View::Help => render_help(frame, inner),
+        View::Home => home::ui::render(frame, inner, focus),
+        View::Notes => notes::ui::render(frame, inner, state, focus),
+        View::Help => help::ui::render(frame, inner),
     }
 }
 
-fn render_home(frame: &mut Frame, area: Rect, focus: Option<FocusTarget<Overlay>>) {
-    let rows = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Min(0), Constraint::Length(3), Constraint::Length(3)])
-        .split(area);
-
-    frame.render_widget(
-        Paragraph::new(vec![
-            Line::from("Welcome to the tui-pages full demo."),
-            Line::from(""),
-            Line::from("Try the multi-key chord: press g, then h / n / ?"),
-            Line::from("Or open the palette with `:` and type `q`, `n`, `home`, `quit`."),
-        ])
-        .alignment(Alignment::Center)
-        .block(Block::default().borders(Borders::ALL).title(" Home ")),
-        rows[0],
-    );
-
-    render_button(frame, rows[1], "Open Notes", focus.clone(), 0);
-    render_button(frame, rows[2], "Open Help", focus, 1);
-}
-
-fn render_notes(frame: &mut Frame, area: Rect, state: &AppState, focus: Option<FocusTarget<Overlay>>) {
-    let cols = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
-        .split(area);
-
-    let section_focused = matches!(
-        focus,
-        Some(FocusTarget::Section(NOTES_SECTION))
-            | Some(FocusTarget::SectionItem { section: NOTES_SECTION, .. })
-    );
-    let active_item = match focus {
-        Some(FocusTarget::SectionItem { section: NOTES_SECTION, item }) => Some(item),
-        _ => state.selected_note,
-    };
-
-    let items = NOTES
-        .iter()
-        .enumerate()
-        .map(|(i, n)| {
-            let mark = if Some(i) == state.selected_note { "[x]" } else { "[ ]" };
-            ListItem::new(format!("{mark} {n}"))
-        })
-        .collect::<Vec<_>>();
-
-    let mut list_state = ListState::default();
-    list_state.select(active_item);
-
-    frame.render_stateful_widget(
-        List::new(items)
-            .block(
-                Block::default()
-                    .title(" Notes ")
-                    .borders(Borders::ALL)
-                    .border_style(if section_focused {
-                        Style::default().fg(Color::Green)
-                    } else {
-                        Style::default().fg(Color::DarkGray)
-                    }),
-            )
-            .highlight_symbol("> ")
-            .highlight_style(Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-        cols[0],
-        &mut list_state,
-    );
-
-    let rows = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(3), Constraint::Min(0)])
-        .split(cols[1]);
-
-    render_button(frame, rows[0], "Back to Home", focus.clone(), 0);
-
-    let detail = match state.selected_note {
-        Some(i) => format!("Selected:\n\n  {}", NOTES[i]),
-        None => "Press Enter on the list, then j/k, then Enter to pick a note.".to_string(),
-    };
-    frame.render_widget(
-        Paragraph::new(detail)
-            .block(Block::default().borders(Borders::ALL).title(" Detail ")),
-        rows[1],
-    );
-}
-
-fn render_help(frame: &mut Frame, area: Rect) {
-    let lines = vec![
-        Line::from(Span::styled("Keybindings", Style::default().add_modifier(Modifier::BOLD))),
-        Line::from(""),
-        Line::from("Tab / Shift+Tab     cycle focus"),
-        Line::from("Enter               select (enter section / pick item / activate button)"),
-        Line::from("Esc                 leave section / close palette"),
-        Line::from("j / k  or  ↓ / ↑    move within a section"),
-        Line::from("g h | g n | g ?     jump to Home / Notes / Help  (multi-key chord)"),
-        Line::from("[  ]  x             prev / next / close buffer"),
-        Line::from("Ctrl+S / Ctrl+D     split pane vertical / horizontal"),
-        Line::from("Ctrl+N / Ctrl+W     next pane / close pane"),
-        Line::from(":                   open command palette  (try :h :n :? :q)"),
-        Line::from("Ctrl+C              quit"),
-    ];
-    frame.render_widget(
-        Paragraph::new(lines).block(Block::default().borders(Borders::ALL).title(" Help ")),
-        area,
-    );
-}
-
-fn render_button(frame: &mut Frame, area: Rect, label: &str, focus: Option<FocusTarget<Overlay>>, index: usize) {
+pub fn render_button(
+    frame: &mut Frame,
+    area: Rect,
+    label: &str,
+    focus: Option<FocusTarget<Overlay>>,
+    index: usize,
+) {
     let focused = matches!(focus, Some(FocusTarget::Button(i)) if i == index);
     let style = if focused {
         Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
