@@ -5,7 +5,7 @@
 
 
 > [!IMPORTANT]
-> Read this readme, its handwritten. Mdbook is written with AI assistance
+> Read this readme, its handwritten. mdBook is well written but AI assistance was used
 
 > **Origin:** Originally developed for TUI accounting system. This crate was extracted and optimized from it using AI(thank you claude, chatgbt and minimax).
 
