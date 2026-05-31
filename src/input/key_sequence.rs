@@ -31,7 +31,10 @@ impl std::error::Error for ParseKeyError {}
 /// Convenient for trusted, in-code bindings. For user-supplied config where a
 /// typo should surface rather than vanish, use [`try_parse_binding`].
 pub fn parse_binding(binding: &str) -> Vec<KeyChord> {
-    binding.split_whitespace().filter_map(parse_key).collect()
+    binding
+        .split_whitespace()
+        .flat_map(parse_binding_token)
+        .collect()
 }
 
 /// Parse a single chord token (e.g. `"ctrl+s"`), returning `None` if it is not
@@ -48,12 +51,40 @@ pub fn parse_key(token: &str) -> Option<KeyChord> {
 pub fn try_parse_binding(binding: &str) -> Result<Vec<KeyChord>, ParseKeyError> {
     let chords = binding
         .split_whitespace()
-        .map(try_parse_key)
+        .map(try_parse_binding_token)
         .collect::<Result<Vec<_>, _>>()?;
+    let chords = chords.into_iter().flatten().collect::<Vec<_>>();
     if chords.is_empty() {
         return Err(ParseKeyError::Empty);
     }
     Ok(chords)
+}
+
+fn parse_binding_token(token: &str) -> Vec<KeyChord> {
+    try_parse_binding_token(token).unwrap_or_default()
+}
+
+fn try_parse_binding_token(token: &str) -> Result<Vec<KeyChord>, ParseKeyError> {
+    let parts = token.split('+').collect::<Vec<_>>();
+    if parts.len() <= 1 || is_modifier_sequence(&parts) {
+        return try_parse_key(token).map(|key| vec![key]);
+    }
+
+    parts.into_iter().map(try_parse_key).collect()
+}
+
+fn is_modifier_sequence(parts: &[&str]) -> bool {
+    parts
+        .iter()
+        .take(parts.len().saturating_sub(1))
+        .all(|part| is_modifier(part))
+}
+
+fn is_modifier(part: &str) -> bool {
+    matches!(
+        part.to_ascii_lowercase().as_str(),
+        "ctrl" | "control" | "c" | "alt" | "meta" | "m" | "shift" | "s"
+    )
 }
 
 /// Parse a single chord token, returning [`ParseKeyError`] when it is not
