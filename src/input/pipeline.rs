@@ -29,9 +29,11 @@ impl<A: Clone> InputPipeline<A> {
         accepts_text_input: bool,
     ) -> PipelineResponse<A> {
         let chord = KeyChord::from_event(&event);
+        let raw_chord = KeyChord::new(event.code, event.modifiers);
         let mode_refs: Vec<&str> = modes.iter().map(|mode| mode.as_ref()).collect();
-        let is_plain_char = matches!(chord.code, KeyCode::Char(_))
-            && (chord.modifiers == KeyModifiers::empty() || chord.modifiers == KeyModifiers::SHIFT);
+        let is_plain_char = matches!(raw_chord.code, KeyCode::Char(_))
+            && (raw_chord.modifiers == KeyModifiers::empty()
+                || raw_chord.modifiers == KeyModifiers::SHIFT);
         let effective_modes: Vec<&str> = if accepts_text_input && is_plain_char {
             mode_refs
                 .iter()
@@ -73,7 +75,7 @@ impl<A: Clone> InputPipeline<A> {
                 self.tracker.add(chord);
                 PipelineResponse::Wait(self.registry.get_hints(&single, &effective_modes))
             } else {
-                PipelineResponse::Type(chord)
+                PipelineResponse::Type(raw_chord)
             }
         };
 

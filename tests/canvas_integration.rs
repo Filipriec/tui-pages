@@ -12,17 +12,23 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use tui_pages::{
     canvas::{self, AppMode, DataProvider, FormEditor},
     ActionContext, ActionOutcome, CanvasAction, CanvasDispatchOutcome, FocusIntent, FocusTarget,
-    PageFocusBuilder, PageSpec, TuiActionHandler, TuiPages, TuiPagesStatus,
+    PageFocusBuilder, PageSpec, TuiActionHandler, TuiEffect, TuiPages, TuiPagesStatus,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum View {
     Form,
+    Second,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Action {
     Canvas(CanvasAction),
+    FocusNext,
+    FocusPrev,
+    Activate,
+    ShowModal,
+    ClearOverlay,
 }
 
 impl From<CanvasAction> for Action {
@@ -47,8 +53,20 @@ impl TuiActionHandler<View, Action, State> for Handler {
         _ctx: ActionContext<View>,
         state: &mut State,
     ) -> Result<ActionOutcome<View>, Self::Error> {
-        state.actions.push(action);
-        Ok(ActionOutcome::none())
+        state.actions.push(action.clone());
+        Ok(match action {
+            Action::FocusNext => ActionOutcome::effect(TuiEffect::Focus(FocusIntent::Next)),
+            Action::FocusPrev => ActionOutcome::effect(TuiEffect::Focus(FocusIntent::Prev)),
+            Action::Activate => ActionOutcome::effect(TuiEffect::Focus(FocusIntent::Activate)),
+            Action::ShowModal => ActionOutcome::effect(TuiEffect::Focus(FocusIntent::ShowModal {
+                data: (),
+                count: 2,
+            })),
+            Action::ClearOverlay => {
+                ActionOutcome::effect(TuiEffect::Focus(FocusIntent::ClearOverlay))
+            }
+            Action::Canvas(_) => ActionOutcome::none(),
+        })
     }
 }
 
@@ -96,6 +114,19 @@ fn edit_page(_v: &View, _s: &State, _f: Option<&FocusTarget>) -> PageSpec {
 fn read_only_page(_v: &View, _s: &State, _f: Option<&FocusTarget>) -> PageSpec {
     PageSpec::new()
         .focus(PageFocusBuilder::new().canvas_field(0))
+        .canvas_mode(AppMode::ReadOnly)
+}
+
+fn mixed_focus_page(_v: &View, _s: &State, _f: Option<&FocusTarget>) -> PageSpec {
+    PageSpec::new()
+        .focus(
+            PageFocusBuilder::new()
+                .canvas_field(0)
+                .button(0)
+                .section_with_items(7, 2)
+                .canvas_field(1)
+                .internal_canvas_field(99),
+        )
         .canvas_mode(AppMode::ReadOnly)
 }
 
@@ -190,6 +221,48 @@ fn normal_mode_keymaps_drive_canvas_movement_actions() {
     );
 }
 
+#[test]
+fn suggestion_default_keybindings_route_to_canvas_actions() {
+    let mut app = TuiPages::<View, Action, State>::builder(View::Form)
+        .page_fn(edit_page)
+        .handler(Handler)
+        .canvas_defaults()
+        .build();
+    let mut state = State::default();
+    app.refresh_page(&state);
+
+    app.handle_key(
+        KeyEvent::new(KeyCode::Char(' '), KeyModifiers::CONTROL),
+        &mut state,
+    )
+    .unwrap();
+    app.handle_key(
+        KeyEvent::new(KeyCode::Char('n'), KeyModifiers::CONTROL),
+        &mut state,
+    )
+    .unwrap();
+    app.handle_key(
+        KeyEvent::new(KeyCode::Char('y'), KeyModifiers::CONTROL),
+        &mut state,
+    )
+    .unwrap();
+    app.handle_key(
+        KeyEvent::new(KeyCode::Char('g'), KeyModifiers::CONTROL),
+        &mut state,
+    )
+    .unwrap();
+
+    assert_eq!(
+        state.actions,
+        vec![
+            Action::Canvas(CanvasAction::TriggerSuggestions),
+            Action::Canvas(CanvasAction::SuggestionDown),
+            Action::Canvas(CanvasAction::SelectSuggestion),
+            Action::Canvas(CanvasAction::ExitSuggestions),
+        ]
+    );
+}
+
 // --- Glue: focus handoff at canvas boundaries --------------------------------
 
 #[test]
@@ -232,6 +305,31 @@ fn dispatch_action_applies_interior_movement_without_handoff() {
 }
 
 #[test]
+fn dispatch_key_event_maps_canvas_keymap_boundaries_to_focus() {
+    let mut read_only = std::collections::HashMap::new();
+    read_only.insert("move_down".to_string(), vec!["down".to_string()]);
+
+    let mut editor = FormEditor::new(Provider::new(&["one"]));
+    editor.set_keymap(canvas::CanvasKeyMap::from_mode_maps(
+        &read_only,
+        &std::collections::HashMap::new(),
+        &std::collections::HashMap::new(),
+    ));
+
+    let outcome: canvas::CanvasKeyDispatchOutcome<(), ()> =
+        canvas::dispatch_key_event(&mut editor, key(KeyCode::Down));
+
+    assert!(matches!(
+        outcome,
+        canvas::CanvasKeyDispatchOutcome::Focus(FocusIntent::ExitCanvasForward)
+    ));
+    assert_eq!(
+        canvas::key_dispatch_status::<Action, _, _>(&outcome),
+        Some(TuiPagesStatus::ActionHandled)
+    );
+}
+
+#[test]
 fn boundary_helper_maps_exits_to_intents() {
     let fwd: FocusIntent =
         canvas::focus_intent_for_boundary(canvas::BoundaryExit::Bottom);
@@ -239,6 +337,70 @@ fn boundary_helper_maps_exits_to_intents() {
         canvas::focus_intent_for_boundary(canvas::BoundaryExit::Top);
     assert_eq!(fwd, FocusIntent::ExitCanvasForward);
     assert_eq!(back, FocusIntent::ExitCanvasBackward);
+}
+
+#[test]
+fn canvas_focus_coexists_with_buttons_sections_modal_and_internal_targets() {
+    let mut app = TuiPages::<View, Action, State>::builder(View::Form)
+        .page_fn(mixed_focus_page)
+        .handler(Handler)
+        .bind(tui_pages::modes::NORMAL, "tab", Action::FocusNext)
+        .bind(tui_pages::modes::NORMAL, "shift+tab", Action::FocusPrev)
+        .bind(tui_pages::modes::NORMAL, "enter", Action::Activate)
+        .bind(tui_pages::modes::GLOBAL, "ctrl+o", Action::ShowModal)
+        .bind(tui_pages::modes::GLOBAL, "esc", Action::ClearOverlay)
+        .build();
+    let mut state = State::default();
+    app.refresh_page(&state);
+
+    assert_eq!(app.focus.current(), Some(FocusTarget::CanvasField(0)));
+    app.apply_effect(
+        TuiEffect::Focus(FocusIntent::ExitCanvasForward),
+        &state,
+    );
+    assert_eq!(app.focus.current(), Some(FocusTarget::Button(0)));
+    app.handle_key(key(KeyCode::Tab), &mut state).unwrap();
+    assert_eq!(app.focus.current(), Some(FocusTarget::Section(7)));
+    app.handle_key(key(KeyCode::Enter), &mut state).unwrap();
+    assert_eq!(
+        app.focus.current(),
+        Some(FocusTarget::SectionItem {
+            section: 7,
+            item: 0
+        })
+    );
+    app.handle_key(key(KeyCode::Tab), &mut state).unwrap();
+    assert_eq!(
+        app.focus.current(),
+        Some(FocusTarget::SectionItem {
+            section: 7,
+            item: 1
+        })
+    );
+    app.handle_key(key(KeyCode::Tab), &mut state).unwrap();
+    assert_eq!(app.focus.current(), Some(FocusTarget::CanvasField(1)));
+
+    app.handle_key(
+        KeyEvent::new(KeyCode::Char('o'), KeyModifiers::CONTROL),
+        &mut state,
+    )
+    .unwrap();
+    assert_eq!(app.focus.current(), Some(FocusTarget::ModalItem(0)));
+    app.handle_key(key(KeyCode::Esc), &mut state).unwrap();
+    assert_eq!(app.focus.current(), Some(FocusTarget::CanvasField(1)));
+
+    app.apply_effect(TuiEffect::Navigate(View::Second), &state);
+    app.apply_effect(TuiEffect::PreviousBuffer, &state);
+    app.apply_effect(TuiEffect::NextBuffer, &state);
+    app.apply_effect(TuiEffect::SplitPane(tui_pages::PaneSplit::Horizontal), &state);
+    app.apply_effect(TuiEffect::NextPane, &state);
+    assert!(matches!(app.focus.current(), Some(FocusTarget::CanvasField(_))));
+
+    assert!(
+        app.focus
+            .targets()
+            .contains(&FocusTarget::InternalCanvasField(99))
+    );
 }
 
 // --- Glue: PageSpec mode sync -------------------------------------------------
@@ -280,6 +442,160 @@ fn editor_executes_insert_and_delete_actions() {
     assert_eq!(editor.current_text(), "h");
 }
 
+#[test]
+fn suggestions_filter_select_escape_and_field_transition_work() {
+    #[derive(Debug)]
+    struct SuggestingProvider {
+        values: Vec<String>,
+    }
+
+    impl DataProvider for SuggestingProvider {
+        fn field_count(&self) -> usize {
+            self.values.len()
+        }
+
+        fn field_name(&self, index: usize) -> &str {
+            match index {
+                0 => "tag",
+                _ => "notes",
+            }
+        }
+
+        fn field_value(&self, index: usize) -> &str {
+            &self.values[index]
+        }
+
+        fn set_field_value(&mut self, index: usize, value: String) {
+            self.values[index] = value;
+        }
+
+        fn supports_suggestions(&self, field_index: usize) -> bool {
+            field_index == 0
+        }
+
+        fn suggestion_trigger(&self, field_index: usize) -> canvas::SuggestionTrigger {
+            if field_index == 0 {
+                canvas::SuggestionTrigger::WhenFieldStarts
+            } else {
+                canvas::SuggestionTrigger::None
+            }
+        }
+
+        fn fetch_suggestions_sync(
+            &self,
+            _field_index: usize,
+            query: &str,
+        ) -> Vec<canvas::SuggestionItem> {
+            ["alpha", "atom", "beta"]
+                .into_iter()
+                .filter(|item| item.starts_with(query))
+                .map(|item| canvas::SuggestionItem::new(item, item))
+                .collect()
+        }
+    }
+
+    let mut editor = FormEditor::new(SuggestingProvider {
+        values: vec!["a".to_string(), String::new()],
+    });
+
+    editor.execute(CanvasAction::TriggerSuggestions);
+    assert!(editor.is_suggestions_active());
+    assert_eq!(editor.suggestions().len(), 2);
+
+    editor.execute(CanvasAction::SuggestionDown);
+    editor.execute(CanvasAction::SelectSuggestion);
+    assert_eq!(editor.current_text(), "atom");
+    assert!(!editor.is_suggestions_active());
+
+    editor.execute(CanvasAction::TriggerSuggestions);
+    assert!(editor.is_suggestions_active());
+    editor.execute(CanvasAction::ExitSuggestions);
+    assert!(!editor.is_suggestions_active());
+
+    editor.execute(CanvasAction::TriggerSuggestions);
+    assert!(editor.is_suggestions_active());
+    editor.execute(CanvasAction::MoveDown);
+    assert!(!editor.is_suggestions_active());
+    assert_eq!(editor.current_field(), 1);
+}
+
+#[test]
+fn validation_blocked_navigation_surfaces_as_action_error() {
+    let mut editor = FormEditor::new(Provider::new(&["ab", "next"]));
+    editor.set_field_validation(
+        0,
+        canvas::ValidationConfigBuilder::new()
+            .with_character_limits(canvas::CharacterLimits::new_min(3))
+            .build(),
+    );
+
+    let outcome: CanvasDispatchOutcome<(), ()> =
+        canvas::dispatch_action(&mut editor, CanvasAction::MoveDown);
+
+    match outcome {
+        CanvasDispatchOutcome::Applied(canvas::ActionResult::Error(message)) => {
+            assert!(message.contains("at least 3 characters"));
+        }
+        other => panic!("expected validation error, got {other:?}"),
+    }
+    assert_eq!(editor.current_field(), 0);
+}
+
+#[test]
+fn validation_display_masks_and_character_filters_are_reachable() {
+    let mask = canvas::DisplayMask::new("(###) ###-####", '#');
+    let config = canvas::ValidationConfigBuilder::new()
+        .with_display_mask(mask)
+        .with_pattern_filters(
+            canvas::PatternFilters::new().add_filter(canvas::PositionFilter::new(
+                canvas::PositionRange::From(0),
+                canvas::CharacterFilter::Numeric,
+            )),
+        )
+        .build();
+    let mut editor = FormEditor::new(Provider::new(&[""]));
+    editor.set_field_validation(0, config);
+    editor.enter_edit_mode();
+
+    let _ = editor.insert_char('x');
+    assert_eq!(editor.current_text(), "");
+    let _ = editor.insert_char('1');
+    assert_eq!(editor.current_text(), "1");
+    assert_eq!(editor.display_text_for_field(0), "(1");
+}
+
+#[test]
+fn computed_fields_are_recomputed_and_skipped_by_navigation() {
+    struct SumProvider;
+
+    impl canvas::ComputedProvider for SumProvider {
+        fn compute_field(&mut self, context: canvas::ComputedContext) -> String {
+            let left = context.field_values[0].parse::<i32>().unwrap_or_default();
+            let right = context.field_values[1].parse::<i32>().unwrap_or_default();
+            (left + right).to_string()
+        }
+
+        fn handles_field(&self, field_index: usize) -> bool {
+            field_index == 2
+        }
+
+        fn field_dependencies(&self, _field_index: usize) -> Vec<usize> {
+            vec![0, 1]
+        }
+    }
+
+    let mut editor = FormEditor::new(Provider::new(&["2", "3", ""]));
+    let mut provider = SumProvider;
+    editor.register_computed_provider(&provider);
+    editor.recompute_all_fields(&mut provider);
+
+    assert_eq!(editor.effective_field_value(2), "5");
+    editor.execute(CanvasAction::MoveDown);
+    assert_eq!(editor.current_field(), 1);
+    editor.execute(CanvasAction::MoveDown);
+    assert_eq!(editor.current_field(), 1);
+}
+
 // --- TextInput surface (proves textinput re-export works end to end) ----------
 
 #[test]
@@ -301,12 +617,85 @@ fn text_input_accepts_suggestion_suffix() {
     use canvas::{TextInputEventOutcome, TextInputState};
 
     let mut input = TextInputState::<canvas::TextInputProvider>::from_text("doc");
+    input.enter_edit_mode();
+    input.set_cursor_position(3);
     input.set_suggestion_suffix("uments");
     let outcome = input.accept_suggestion_suffix();
 
     assert_eq!(outcome, TextInputEventOutcome::Handled);
     assert_eq!(input.text(), "documents");
     assert_eq!(input.suggestion_suffix(), None);
+}
+
+#[test]
+fn text_input_dispatch_maps_submit_and_boundary_exit() {
+    let mut input = canvas::TextInputState::<canvas::TextInputProvider>::from_text("hello");
+
+    let submitted: canvas::CanvasTextWidgetOutcome<(), ()> =
+        canvas::dispatch_text_input_key(&mut input, key(KeyCode::Enter));
+    assert_eq!(submitted, canvas::CanvasTextWidgetOutcome::Submitted);
+
+    let exit: canvas::CanvasTextWidgetOutcome<(), ()> =
+        canvas::dispatch_text_input_key(&mut input, key(KeyCode::Down));
+    assert_eq!(
+        exit,
+        canvas::CanvasTextWidgetOutcome::Focus(FocusIntent::ExitCanvasForward)
+    );
+}
+
+#[test]
+fn text_input_dispatch_handles_typing_delete_and_tab_suffix() {
+    let mut input = canvas::TextInputState::<canvas::TextInputProvider>::from_text("ab");
+    input.enter_edit_mode();
+    input.set_cursor_position(2);
+
+    assert_eq!(
+        canvas::dispatch_text_input_key::<_, (), ()>(&mut input, key(KeyCode::Char('c'))),
+        canvas::CanvasTextWidgetOutcome::Handled
+    );
+    assert_eq!(input.text(), "abc");
+
+    let _ = canvas::dispatch_text_input_key::<_, (), ()>(&mut input, key(KeyCode::Backspace));
+    assert_eq!(input.text(), "ab");
+
+    input.set_suggestion_suffix("cd");
+    let _ = canvas::dispatch_text_input_key::<_, (), ()>(&mut input, key(KeyCode::Tab));
+    assert_eq!(input.text(), "abcd");
+}
+
+#[test]
+fn textarea_dispatch_maps_vertical_boundaries_to_focus() {
+    let mut textarea = canvas::TextAreaState::<canvas::TextAreaProvider>::from_text("first\nlast");
+
+    let top: canvas::CanvasTextWidgetOutcome<(), ()> =
+        canvas::dispatch_text_area_key(&mut textarea, key(KeyCode::Up));
+    assert_eq!(
+        top,
+        canvas::CanvasTextWidgetOutcome::Focus(FocusIntent::ExitCanvasBackward)
+    );
+
+    let _ = canvas::dispatch_text_area_key::<_, (), ()>(&mut textarea, key(KeyCode::Down));
+    let bottom: canvas::CanvasTextWidgetOutcome<(), ()> =
+        canvas::dispatch_text_area_key(&mut textarea, key(KeyCode::Down));
+    assert_eq!(
+        bottom,
+        canvas::CanvasTextWidgetOutcome::Focus(FocusIntent::ExitCanvasForward)
+    );
+}
+
+#[test]
+fn textarea_dispatch_handles_multiline_editing_paste_and_movement() {
+    let mut textarea = canvas::TextAreaState::<canvas::TextAreaProvider>::from_text("");
+
+    let _ = canvas::dispatch_text_area_key::<_, (), ()>(&mut textarea, key(KeyCode::Char('a')));
+    let _ = canvas::dispatch_text_area_key::<_, (), ()>(&mut textarea, key(KeyCode::Enter));
+    let _ = canvas::dispatch_text_area_key::<_, (), ()>(&mut textarea, key(KeyCode::Char('b')));
+    assert_eq!(textarea.text(), "a\nb");
+
+    assert_eq!(textarea.paste("\nc"), canvas::TextAreaEventOutcome::Handled);
+    assert_eq!(textarea.text(), "a\nb\nc");
+    let _ = canvas::dispatch_text_area_key::<_, (), ()>(&mut textarea, key(KeyCode::Up));
+    assert_eq!(textarea.current_field(), 1);
 }
 
 // --- Full-surface re-export proof ---------------------------------------------
@@ -328,9 +717,11 @@ fn every_canvas_surface_is_reachable_through_tui_pages() {
     // `render_canvas_default` draws into a ratatui `Frame`; we only prove the
     // path resolves (rendering needs a live terminal/frame to call).
     let _render = canvas::render_canvas_default::<Provider>;
+    let _render_with_suggestions = canvas::render_canvas_with_suggestions_default::<Provider>;
 
     // Cursor style.
     let _cursor: Option<canvas::CursorManager> = None;
+    let _cursor_mode = canvas::update_cursor_style_for_mode;
 
     // Suggestions.
     let _trigger = canvas::SuggestionTrigger::WhenFieldStarts;
@@ -354,7 +745,10 @@ fn every_canvas_surface_is_reachable_through_tui_pages() {
     let empty = std::collections::HashMap::new();
     let _km = canvas::CanvasKeyMap::from_mode_maps(&empty, &empty, &empty);
     let _: Option<canvas::KeyEventOutcome> = None;
+    let _: Option<canvas::CanvasKeyAction> = None;
     let _: Option<canvas::HostKeyEventOutcome> = None;
+    let _: Option<canvas::CanvasKeyDispatchOutcome> = None;
+    let _: Option<canvas::CanvasTextWidgetOutcome> = None;
 
     // Crossterm session helpers.
     let _: Option<canvas::CrosstermInputOptions> = None;
@@ -362,5 +756,14 @@ fn every_canvas_surface_is_reachable_through_tui_pages() {
     // Touch a value so the bindings are not all dead.
     assert!(_action.is_editing_action());
     assert!(_result.is_success());
-    let _ = (_theme, _opts, _trigger, _query, _km, _render);
+    let _ = (
+        _theme,
+        _opts,
+        _trigger,
+        _query,
+        _km,
+        _render,
+        _render_with_suggestions,
+        _cursor_mode,
+    );
 }

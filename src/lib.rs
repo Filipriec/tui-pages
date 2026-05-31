@@ -27,11 +27,16 @@ pub use command::{CommandHint, CommandRegistry, CommandResolver, CommandResponse
 #[cfg(feature = "canvas")]
 pub use crate::canvas::{
     accepts_text_input as canvas_accepts_text_input, dispatch_action as dispatch_canvas_action,
+    dispatch_key_event as dispatch_canvas_key_event,
+    dispatch_text_area_key as dispatch_canvas_text_area_key,
+    dispatch_text_input_key as dispatch_canvas_text_input_key,
     focus_intent_for_boundary as canvas_focus_intent_for_boundary,
     mode_for_app_mode as canvas_mode_for_app_mode, modes_for_app_mode as canvas_modes_for_app_mode,
+    render_canvas_with_suggestions, render_canvas_with_suggestions_default,
     text_chord_to_action as canvas_text_chord_to_action,
-    text_chord_to_canvas_action, BoundaryExit as CanvasBoundaryExit, CanvasAction,
-    CanvasDispatchOutcome,
+    text_chord_to_canvas_action, update_cursor_style_for_editor,
+    update_cursor_style_for_mode, BoundaryExit as CanvasBoundaryExit, CanvasAction,
+    CanvasDispatchOutcome, CanvasKeyDispatchOutcome, CanvasTextWidgetOutcome,
 };
 pub use focus::{
     FocusController, FocusIntent, FocusManager, FocusQuery, FocusTarget, FocusWrap, Focusable,
@@ -78,6 +83,9 @@ pub mod prelude {
     pub use crate::render_dialog;
     #[cfg(feature = "canvas")]
     pub use crate::canvas::{
-        dispatch_action as dispatch_canvas_action, CanvasAction, CanvasDispatchOutcome,
+        dispatch_action as dispatch_canvas_action, dispatch_key_event as dispatch_canvas_key_event,
+        dispatch_text_area_key as dispatch_canvas_text_area_key,
+        dispatch_text_input_key as dispatch_canvas_text_input_key, CanvasAction,
+        CanvasDispatchOutcome, CanvasKeyDispatchOutcome, CanvasTextWidgetOutcome,
     };
 }
