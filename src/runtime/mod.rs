@@ -337,6 +337,7 @@ pub struct TuiPages<V, A, S, Pages = (), Handler = (), O = (), M = ()> {
     pages: Pages,
     handler: Handler,
     fallback_view: V,
+    pub(crate) text_input_mapper: Option<fn(KeyChord) -> Option<A>>,
     _state: PhantomData<S>,
 }
 
@@ -411,7 +412,21 @@ where
         let accepts_text_input = spec.accepts_text_input;
         self.sync_focus_to_spec(spec);
 
-        let response = self.input.process(key, &modes, accepts_text_input);
+        let focus_accepts_mapped_text = accepts_text_input
+            && self
+                .focus
+                .current()
+                .as_ref()
+                .map(FocusTarget::is_canvas)
+                .unwrap_or(false);
+        let response = match self.input.process(key, &modes, accepts_text_input) {
+            crate::input::PipelineResponse::Type(chord) if focus_accepts_mapped_text => self
+                .text_input_mapper
+                .and_then(|mapper| mapper(chord))
+                .map(crate::input::PipelineResponse::Execute)
+                .unwrap_or(crate::input::PipelineResponse::Type(chord)),
+            response => response,
+        };
         match response {
             crate::input::PipelineResponse::Execute(action) => {
                 let quit_requested = self.dispatch_action(action, state)?;
@@ -579,11 +594,12 @@ where
 pub struct TuiPagesBuilder<V, A, S, O = (), M = (), Pages = (), Handler = ()> {
     initial_view: V,
     fallback_view: Option<V>,
-    input_registry: InputRegistry<A>,
+    pub(crate) input_registry: InputRegistry<A>,
     command_registry: CommandRegistry<A>,
     input_timeout_ms: u64,
     command_timeout_ms: u64,
     focus_wrap: FocusWrap,
+    pub(crate) text_input_mapper: Option<fn(KeyChord) -> Option<A>>,
     pages: Pages,
     handler: Handler,
     _state: PhantomData<S>,
@@ -601,6 +617,7 @@ impl<V, A, S, O, M> TuiPagesBuilder<V, A, S, O, M, (), ()> {
             input_timeout_ms: 1000,
             command_timeout_ms: 1000,
             focus_wrap: FocusWrap::default(),
+            text_input_mapper: None,
             pages: (),
             handler: (),
             _state: PhantomData,
@@ -638,6 +655,7 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
             input_timeout_ms: self.input_timeout_ms,
             command_timeout_ms: self.command_timeout_ms,
             focus_wrap: self.focus_wrap,
+            text_input_mapper: self.text_input_mapper,
             pages,
             handler: self.handler,
             _state: PhantomData,
@@ -675,6 +693,7 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
             input_timeout_ms: self.input_timeout_ms,
             command_timeout_ms: self.command_timeout_ms,
             focus_wrap: self.focus_wrap,
+            text_input_mapper: self.text_input_mapper,
             pages: self.pages,
             handler,
             _state: PhantomData,
@@ -687,6 +706,17 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
     /// or wrap-around. Applies to page focus and modal items.
     pub fn focus_wrap(mut self, wrap: FocusWrap) -> Self {
         self.focus_wrap = wrap;
+        self
+    }
+
+    /// Map raw text-input chords into application actions before
+    /// [`TuiActionHandler::handle_text`] is called.
+    ///
+    /// The mapper only runs when the current focus target is a canvas target
+    /// and the current [`PageSpec`] accepts text input. This keeps command bars,
+    /// palettes, and other text overlays on their normal `handle_text` path.
+    pub fn text_input_mapper(mut self, mapper: fn(KeyChord) -> Option<A>) -> Self {
+        self.text_input_mapper = Some(mapper);
         self
     }
 
@@ -745,6 +775,7 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
             pages: self.pages,
             handler: self.handler,
             fallback_view,
+            text_input_mapper: self.text_input_mapper,
             _state: PhantomData,
         }
     }

@@ -19,13 +19,14 @@ ratatui = { workspace = true, optional = true }
 crossterm = { workspace = true }
 serde  = { workspace = true, optional = true }
 tracing = { workspace = true }
+canvas = { path = "../canvas", optional = true }
 
 [features]
 default = []
+canvas = ["dep:canvas"]
 # Derives serde on the input/mode types. KeyChord embeds crossterm's KeyCode /
 # KeyModifiers, so we also turn on crossterm's own serde impls.
 serde = ["dep:serde", "crossterm/serde"]
 # Built-in modal dialog: content/result types plus a ratatui renderer.
 # Pulls in ratatui; the rest of the crate stays rendering-agnostic.
 dialog = ["dep:ratatui"]
-

@@ -10,6 +10,8 @@
 //! advanced callers that want to wire the flow themselves.
 
 pub mod command;
+#[cfg(feature = "canvas")]
+pub mod canvas;
 #[cfg(feature = "dialog")]
 pub mod dialog;
 pub mod focus;
@@ -22,6 +24,15 @@ pub mod terminal;
 pub use dialog::{render_dialog, DialogData, DialogKey, DialogResult, DialogTheme};
 
 pub use command::{CommandHint, CommandRegistry, CommandResolver, CommandResponse};
+#[cfg(feature = "canvas")]
+pub use crate::canvas::{
+    accepts_text_input as canvas_accepts_text_input, dispatch_action as dispatch_canvas_action,
+    focus_intent_for_boundary as canvas_focus_intent_for_boundary,
+    mode_for_app_mode as canvas_mode_for_app_mode, modes_for_app_mode as canvas_modes_for_app_mode,
+    text_chord_to_action as canvas_text_chord_to_action,
+    text_chord_to_canvas_action, BoundaryExit as CanvasBoundaryExit, CanvasAction,
+    CanvasDispatchOutcome,
+};
 pub use focus::{
     FocusController, FocusIntent, FocusManager, FocusQuery, FocusTarget, FocusWrap, Focusable,
     OverlayFocus, PageFocusBuilder,
@@ -65,4 +76,8 @@ pub mod prelude {
     pub use crate::dialog::{self, DialogData, DialogKey, DialogResult, DialogTheme};
     #[cfg(feature = "dialog")]
     pub use crate::render_dialog;
+    #[cfg(feature = "canvas")]
+    pub use crate::canvas::{
+        dispatch_action as dispatch_canvas_action, CanvasAction, CanvasDispatchOutcome,
+    };
 }
