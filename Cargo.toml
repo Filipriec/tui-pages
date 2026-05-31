@@ -23,7 +23,40 @@ canvas = { path = "../canvas", optional = true }
 
 [features]
 default = []
+
+# Base canvas integration: typed `CanvasAction`s, `FormEditor`, focus handoff,
+# and the default vim-style keymaps. Rendering-agnostic on its own — enable
+# `canvas-gui` for the ratatui renderers. Canvas's default `textmode-vim` stays
+# on through default features, satisfying its "exactly one text mode" contract.
 canvas = ["dep:canvas"]
+# Canvas GUI: ratatui renderers, themes, and display options. Pulls in ratatui.
+canvas-gui = ["canvas", "canvas/gui", "dep:ratatui"]
+# Async-filtered autocomplete suggestions.
+canvas-suggestions = ["canvas", "canvas/suggestions"]
+# Terminal cursor-shape control tied to the editor mode.
+canvas-cursor-style = ["canvas", "canvas/cursor-style"]
+# Field validation: rules, display masks, character filters, and summaries.
+canvas-validation = ["canvas", "canvas/validation"]
+# Computed (derived) fields.
+canvas-computed = ["canvas", "canvas/computed"]
+# Multiline text-area widget (implies canvas-gui).
+canvas-textarea = ["canvas-gui", "canvas/textarea"]
+# Single-line text-input widget (implies canvas-gui).
+canvas-textinput = ["canvas-gui", "canvas/textinput"]
+# Canvas-owned raw `KeyEvent` handling (implies canvas-gui).
+canvas-keymap = ["canvas-gui", "canvas/keymap"]
+# Convenience switch enabling every canvas surface at once.
+canvas-all = [
+    "canvas-gui",
+    "canvas-suggestions",
+    "canvas-cursor-style",
+    "canvas-validation",
+    "canvas-computed",
+    "canvas-textarea",
+    "canvas-textinput",
+    "canvas-keymap",
+]
+
 # Derives serde on the input/mode types. KeyChord embeds crossterm's KeyCode /
 # KeyModifiers, so we also turn on crossterm's own serde impls.
 serde = ["dep:serde", "crossterm/serde"]

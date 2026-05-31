@@ -4,15 +4,15 @@ Goal: `tui-pages` should support the full `canvas` crate out of the box, with ho
 
 ## Feature Plumbing
 
-- [ ] Add `tui-pages` feature flags mirroring canvas capabilities: `canvas-gui`, `canvas-suggestions`, `canvas-validation`, `canvas-cursor-style`, `canvas-computed`, `canvas-textarea`, `canvas-textinput`, `canvas-keymap`, and an `canvas-all` convenience feature.
-- [ ] Ensure each `tui-pages` feature enables the matching `canvas` feature and any required local dependency such as `ratatui`.
-- [ ] Keep base `canvas` support optional and non-breaking for users who do not enable it.
+- [x] Add `tui-pages` feature flags mirroring canvas capabilities: `canvas-gui`, `canvas-suggestions`, `canvas-validation`, `canvas-cursor-style`, `canvas-computed`, `canvas-textarea`, `canvas-textinput`, `canvas-keymap`, and an `canvas-all` convenience feature.
+- [x] Ensure each `tui-pages` feature enables the matching `canvas` feature and any required local dependency such as `ratatui`. (`canvas-gui`/`-textarea`/`-textinput`/`-keymap` pull in `ratatui`; canvas's default `textmode-vim` keeps its "exactly one text mode" contract satisfied.)
+- [x] Keep base `canvas` support optional and non-breaking for users who do not enable it. (Default build has no canvas; verified across the full feature matrix.)
 
 ## Public API
 
-- [ ] Re-export all relevant canvas public types behind matching features: renderers, themes/options, suggestions, validation, computed, textarea, text input, cursor, keymap, action/result types.
-- [ ] Keep exports grouped under `tui_pages::canvas` and add common reexports to `prelude` only when they are genuinely ergonomic.
-- [ ] Provide stable helper names so apps do not need to import from both crates for normal usage.
+- [x] Re-export all relevant canvas public types behind matching features: renderers, themes/options, suggestions, validation, computed, textarea, text input, cursor, keymap, action/result types.
+- [x] Keep exports grouped under `tui_pages::canvas` and add common reexports to `prelude` only when they are genuinely ergonomic. (Feature-gated types live under `tui_pages::canvas`; only `CanvasAction`/`CanvasDispatchOutcome`/`dispatch_canvas_action` are in the prelude.)
+- [x] Provide stable helper names so apps do not need to import from both crates for normal usage. (Includes `*_for_host` handoff helpers and `CrosstermInput*` session helpers behind the relevant features.)
 
 ## Runtime Integration
 
