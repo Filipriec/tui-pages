@@ -4,9 +4,14 @@ Goal: `tui-pages` should support the full `canvas` crate out of the box, with ho
 
 ## Feature Plumbing
 
-- [x] Add `tui-pages` feature flags mirroring canvas capabilities: `canvas-gui`, `canvas-suggestions`, `canvas-validation`, `canvas-cursor-style`, `canvas-computed`, `canvas-textarea`, `canvas-textinput`, `canvas-keymap`, and an `canvas-all` convenience feature.
-- [x] Ensure each `tui-pages` feature enables the matching `canvas` feature and any required local dependency such as `ratatui`. (`canvas-gui`/`-textarea`/`-textinput`/`-keymap` pull in `ratatui`; canvas's default `textmode-vim` keeps its "exactly one text mode" contract satisfied.)
-- [x] Keep base `canvas` support optional and non-breaking for users who do not enable it. (Default build has no canvas; verified across the full feature matrix.)
+> Design decision: canvas support is **not** split into sub-features. A single
+> `canvas` feature turns on every canvas surface at once (full support). There
+> is no `canvas-gui`/`canvas-validation`/etc. — enabling `canvas` enables them
+> all.
+
+- [x] Add a single `canvas` feature that enables every canvas capability (GUI, suggestions, cursor style, validation, computed, textarea, textinput, keymap) in one switch.
+- [x] Ensure `canvas` enables every matching `canvas/*` feature plus `ratatui`. (Canvas's default `textmode-vim` rides along, satisfying its "exactly one text mode" contract.)
+- [x] Keep `canvas` support optional and non-breaking for users who do not enable it. (Default build has no canvas; verified.)
 
 ## Public API
 
@@ -85,7 +90,7 @@ Goal: `tui-pages` should support the full `canvas` crate out of the box, with ho
 
 - [ ] Migrate client-side canvas glue into `tui-pages` where it is generic.
 - [ ] Keep app-specific logic, async fetching, persistence, and business side effects outside `tui-pages`.
-- [ ] Add compile tests or integration tests for common feature combinations: base, gui, suggestions, validation, textarea, textinput, keymap, all.
+- [x] Add compile/integration tests for canvas. Since support is a single `canvas` feature (no split), `tests/canvas_integration.rs` covers the whole surface: typed-text routing, default keymaps, focus-boundary handoff, `PageSpec` mode sync, editor `execute`, textinput typing/paste/suggestion-suffix, plus a compile-time proof that every canvas surface (GUI, suggestions, validation, computed, textarea, textinput, keymap, cursor, crossterm session) is reachable through `tui_pages::canvas`. 13 tests, all green; the file is `#![cfg(feature = "canvas")]` so the default build is unaffected.
 
 ## Done Definition
 

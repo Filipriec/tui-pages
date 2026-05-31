@@ -11,34 +11,31 @@ use crate::input::{KeyChord, KeyMap};
 use crate::runtime::{modes, ModeId, PageSpec, TuiPagesBuilder};
 use crossterm::event::{KeyCode, KeyModifiers};
 
-// --- Base canvas surface (always available with the `canvas` feature) ---
-pub use ::canvas::{
-    ActionResult, AppMode, CanvasAction, DataProvider, EditorState, FormEditor,
-};
+// The `canvas` feature enables full canvas support — every surface below is
+// available unconditionally. We do not split canvas into sub-features.
+
+// --- Base surface ---
+pub use ::canvas::{ActionResult, AppMode, CanvasAction, DataProvider, EditorState, FormEditor};
 pub use ::canvas::integration::focus_handoff::{
     execute_action_for_host, execute_action_for_host_with_options, BoundaryExit, HostActionOutcome,
 };
 
-// Keymap-driven host handoff: convert raw `KeyEvent`s / `KeyEventOutcome`s into
-// boundary-aware focus handoff without app-side glue.
-#[cfg(feature = "canvas-keymap")]
+// --- Keymap-driven host handoff ---
 pub use ::canvas::integration::focus_handoff::{
     boundary_from_key_outcome, handle_key_event_for_host, key_outcome_for_vertical_navigation,
     map_key_event_outcome_for_host, HostKeyEventOutcome,
 };
+pub use ::canvas::{CanvasKeyMap, KeyEventOutcome};
 
 // --- Cursor style ---
-#[cfg(feature = "canvas-cursor-style")]
 pub use ::canvas::CursorManager;
 
 // --- Suggestions ---
-#[cfg(feature = "canvas-suggestions")]
-pub use ::canvas::{SuggestionItem, SuggestionQuery, SuggestionTrigger};
-#[cfg(all(feature = "canvas-gui", feature = "canvas-suggestions"))]
-pub use ::canvas::render_suggestions_dropdown;
+pub use ::canvas::{
+    render_suggestions_dropdown, SuggestionItem, SuggestionQuery, SuggestionTrigger,
+};
 
 // --- Validation ---
-#[cfg(feature = "canvas-validation")]
 pub use ::canvas::{
     AppliedValidation, CharacterFilter, CharacterLimits, CustomFormatter, DefaultPositionMapper,
     DisplayMask, FormattingResult, PatternFilters, PositionFilter, PositionMapper, PositionRange,
@@ -47,11 +44,9 @@ pub use ::canvas::{
 };
 
 // --- Computed fields ---
-#[cfg(feature = "canvas-computed")]
 pub use ::canvas::{ComputedContext, ComputedProvider, ComputedState};
 
 // --- GUI: renderers, themes, display options ---
-#[cfg(feature = "canvas-gui")]
 pub use ::canvas::{
     render_canvas, render_canvas_default, render_canvas_with_options, CanvasDisplayOptions,
     CanvasTheme, DefaultCanvasTheme, FormInputEventOutcome, OverflowMode,
@@ -60,23 +55,16 @@ pub use ::canvas::{
 // Crossterm terminal-input session helpers (raw mode, bracketed paste, mouse
 // capture) — the canvas-side complement to [`crate::terminal`] for apps wiring
 // up text widgets that need paste support.
-#[cfg(feature = "canvas-gui")]
 pub use ::canvas::integration::crossterm_input::{
     CrosstermInputGuard, CrosstermInputOptions, CrosstermInputSession,
 };
 
-// --- Canvas-owned keymap ---
-#[cfg(feature = "canvas-keymap")]
-pub use ::canvas::{CanvasKeyMap, KeyEventOutcome};
-
 // --- Text area ---
-#[cfg(feature = "canvas-textarea")]
 pub use ::canvas::{
     TextArea, TextAreaDataProvider, TextAreaEditor, TextAreaProvider, TextAreaState,
 };
 
 // --- Text input ---
-#[cfg(feature = "canvas-textinput")]
 pub use ::canvas::{
     TextInput, TextInputDataProvider, TextInputEditor, TextInputEventOutcome, TextInputProvider,
     TextInputState,
