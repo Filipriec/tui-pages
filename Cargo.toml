@@ -1,7 +1,8 @@
 [package]
 name = "tui-pages"
 version = "0.7.2"
-edition = "2021"
+# version.workspace = true
+edition.workspace = true
 license = "MIT"
 description = "Core for TUI apps with multiple pages"
 repository = "https://gitlab.com/filipriec/tui-pages"
@@ -14,10 +15,10 @@ exclude = ["examples/", ".claude/", ".forge/"]
 all-features = true
 
 [dependencies]
-crossterm = "0.28"
-ratatui = { version = "0.28", optional = true }
-serde = { version = "1", features = ["derive"], optional = true }
-tracing = "0.1"
+ratatui = { workspace = true, optional = true }
+crossterm = { workspace = true }
+serde  = { workspace = true, optional = true }
+tracing = { workspace = true }
 
 [features]
 default = []
@@ -28,4 +29,3 @@ serde = ["dep:serde", "crossterm/serde"]
 # Pulls in ratatui; the rest of the crate stays rendering-agnostic.
 dialog = ["dep:ratatui"]
 
-[workspace]

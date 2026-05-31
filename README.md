@@ -17,7 +17,7 @@ mdbook serve mdbook --open
 ## Motivation
 You want to create complex TUI app? Me too. I did it and was stuck with god object mutating shared reference everywhere(I know, skill issues). So I had to rewrite the whole architecture.    
 
-This crate it that architecture. Asked AI to generalize it for you ;)
+This crate is that architecture. Asked AI to generalize it for you ;)
 
 ## Actual docs
 ### How it worked before the generalization:
