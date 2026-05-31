@@ -70,7 +70,14 @@ fn try_parse_binding_token(token: &str) -> Result<Vec<KeyChord>, ParseKeyError> 
         return try_parse_key(token).map(|key| vec![key]);
     }
 
-    parts.into_iter().map(try_parse_key).collect()
+    parts
+        .into_iter()
+        .map(try_parse_key)
+        .collect::<Result<Vec<_>, _>>()
+        // A failure here means the token is neither a valid chord nor a valid
+        // sequence (e.g. a typo'd modifier like `ctrl+shft+x`). Report the whole
+        // token the user wrote, not the fragment that happened to fail first.
+        .map_err(|_| ParseKeyError::UnknownKey(token.to_string()))
 }
 
 fn is_modifier_sequence(parts: &[&str]) -> bool {
