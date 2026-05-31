@@ -15,9 +15,21 @@ git submodule update --init --recursive
 mdbook serve mdbook --open
 ```
 ## Motivation
-You want to create complex TUI app? Me too. I did it and was stuck with god object mutating shared reference everywhere(I know, skill issues). So I had to rewrite the whole architecture.    
+You want to create complex TUI app? Me too. I did it and was stuck with god object mutating shared reference everywhere(I know, skill issues). So I had to rewrite the whole architecture. This crate it that architecture. Asked AI to generalize it for you ;)
 
-This crate it that architecture. Asked AI to generalize it for you ;)
+Its a full framework. You get all the functionality out of the box. 
+
+## Why you **should** use this crate
+
+It fixes TUI problems. But how?
+Ill simplify. Imagine 0..n element IDs. Now Im at ID 1 and want to move next. So Ill move to 2. Thats all this library is. There is a functionality programmed on top of such "list". And what do you do? You just write "this page will have 3 buttons, assign id 0, 1, 2 to those".
+What are the implications:
+1. Fully preprogrammed functionality. You assign elements, crate handles vim or vscode like movements.  
+2. You get focus manager. Its preprogrammed on the list, so it will always work.
+3. Most important. Scalability across pages. I developed complex system, with many pages. And I need most of the functionality to work the same across them(mainly movement, texts, buttons...). If you have multiple pages, I cant imagine writing the app different way.
+
+Restrictions:
+There are none, you can extend this however you want.
 
 ## Actual docs
 ### How it worked before the generalization:
