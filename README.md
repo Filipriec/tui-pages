@@ -22,7 +22,7 @@ Its a full framework. You get all the functionality out of the box.
 ## Why you **should** use this crate
 
 It fixes TUI problems. But how?
-Ill simplify. Imagine 0..n element IDs. Now Im at ID 1 and want to move next. So Ill move to 2. Thats all this library is. There is a functionality programmed on top of such "list". And what do you do? You just write "this page will have 3 buttons, assign id 0, 1, 2 to those".
+Ill simplify. Imagine 0..n element IDs. Now Im at ID 1 and want to move next. So Ill move to 2. Thats what this library is. There is a functionality programmed on top of such "list". And what do you do? You just write "this page will have 3 buttons, assign id 0, 1, 2 to those".
 What are the implications:
 1. Fully preprogrammed functionality. You assign elements, crate handles vim or vscode like movements.  
 2. You get focus manager. Its preprogrammed on the list, so it will always work.
