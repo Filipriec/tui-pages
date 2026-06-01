@@ -1,7 +1,4 @@
-//! Shared navigation actions for editor-style default keybinding presets (Vim, Emacs, Helix).
-//!
-//! Each preset binds different keys to the same [`NavigationAction`] variants. Pick **one**
-//! preset on the builder (`.vim_defaults()`, `.emacs_defaults()`, or `.helix_defaults()`).
+//! Shared navigation actions for all editor presets in this directory.
 
 use crate::focus::FocusIntent;
 use crate::input::{parse_binding, KeyMap};

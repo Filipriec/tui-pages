@@ -1,17 +1,10 @@
-//! Default **Helix**-style keybindings for page-level focus and navigation.
-//!
-//! Movement follows [Helix normal mode](https://docs.helix-editor.com/keymap.html) (`h`/`j`/`k`/`l`
-//! and arrows). Buffer goto uses `g` `n` / `g` `p`; window keys use `C-w` chords from Helix window mode.
-//!
-//! Enable with [`.helix_defaults()`](TuiPagesBuilder::helix_defaults). Requires `A: From<NavigationAction>`.
+//! Helix preset — see [`README.md`](README.md).
 
 use crate::input::KeyMap;
-use crate::keybind::{bind_str, NavigationAction};
 use crate::runtime::{modes, TuiPagesBuilder};
 
-/// Helix normal-mode movement on [`modes::GENERAL`].
-///
-/// Same letter keys as Helix normal movement table (`move_char_left`, `move_visual_line_down`, …).
+use super::action::{bind_str, NavigationAction};
+
 pub fn bind_helix_general_defaults<A>(map: &mut KeyMap<A>)
 where
     A: From<NavigationAction>,
@@ -33,7 +26,6 @@ where
     bind_str(map, "esc", NavigationAction::LeaveSection);
 }
 
-/// Global quit (`ctrl+c`). Helix uses this for comment toggle in-editor; for TUI apps we map quit.
 pub fn bind_helix_global_defaults<A>(map: &mut KeyMap<A>)
 where
     A: From<NavigationAction>,
@@ -41,16 +33,6 @@ where
     bind_str(map, "ctrl+c", NavigationAction::Quit);
 }
 
-/// Helix goto + window-mode chords on [`modes::GENERAL`].
-///
-/// | Keys | Helix | Maps to |
-/// |------|-------|---------|
-/// | `g` `n` | goto next buffer | next buffer |
-/// | `g` `p` | goto previous buffer | previous buffer |
-/// | `C-w` `v` | vsplit | vertical split |
-/// | `C-w` `s` | hsplit | horizontal split |
-/// | `C-w` `q` | wclose | close pane |
-/// | `C-w` `w` | rotate_view | next pane |
 pub fn bind_helix_navigation_defaults<A>(map: &mut KeyMap<A>)
 where
     A: From<NavigationAction>,
@@ -71,14 +53,12 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
 where
     A: From<NavigationAction>,
 {
-    /// Helix movement (`h`/`j`/`k`/`l`, …) and global `ctrl+c` quit.
     pub fn helix_defaults(mut self) -> Self {
         bind_helix_general_defaults(self.input_registry.map_mut(modes::GENERAL.as_str()));
         bind_helix_global_defaults(self.input_registry.map_mut(modes::GLOBAL.as_str()));
         self
     }
 
-    /// Adds Helix `g n`/`g p` and `C-w` window bindings.
     pub fn helix_navigation_defaults(mut self) -> Self {
         bind_helix_navigation_defaults(self.input_registry.map_mut(modes::GENERAL.as_str()));
         self

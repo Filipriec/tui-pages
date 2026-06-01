@@ -1,23 +1,14 @@
-//! Default **Vim**-style keybindings for page-level focus and navigation.
-//!
-//! Based on common Vim normal-mode motion on focus targets (see `:help motion.txt`).
-//! Enable with [`.vim_defaults()`](TuiPagesBuilder::vim_defaults).
-//!
-//! Use [`NavigationAction`] and [`try_standard_navigation_action`] in your handler.
-//! [`VimAction`] is a type alias for [`NavigationAction`].
+//! Vim preset — see [`README.md`](README.md).
 
 use crate::input::KeyMap;
-use crate::keybind::{bind_str, NavigationAction};
 use crate::runtime::{modes, TuiPagesBuilder};
 
-pub use crate::keybind::{
-    navigation_action_outcome, try_standard_navigation_action,
-};
+use super::action::{bind_str, NavigationAction};
+pub use super::action::{navigation_action_outcome, try_standard_navigation_action};
 
 /// Alias for [`NavigationAction`] when using the Vim preset.
 pub type VimAction = NavigationAction;
 
-/// Alias for [`try_standard_navigation_action`].
 pub fn try_standard_vim_action<A, V, O, M>(action: &A) -> Option<crate::runtime::ActionOutcome<V, O, M>>
 where
     A: PartialEq + From<VimAction>,
@@ -25,12 +16,10 @@ where
     try_standard_navigation_action(action)
 }
 
-/// Alias for [`navigation_action_outcome`].
 pub fn vim_action_outcome<V, O, M>(action: VimAction) -> crate::runtime::ActionOutcome<V, O, M> {
     navigation_action_outcome(action)
 }
 
-/// Vim normal-mode style focus bindings on [`modes::GENERAL`].
 pub fn bind_vim_general_defaults<A>(map: &mut KeyMap<A>)
 where
     A: From<NavigationAction>,
@@ -48,7 +37,6 @@ where
     bind_str(map, "esc", NavigationAction::LeaveSection);
 }
 
-/// Global quit (`ctrl+c`).
 pub fn bind_vim_global_defaults<A>(map: &mut KeyMap<A>)
 where
     A: From<NavigationAction>,
@@ -56,7 +44,6 @@ where
     bind_str(map, "ctrl+c", NavigationAction::Quit);
 }
 
-/// Vim-style buffer/pane keys on [`modes::GENERAL`].
 pub fn bind_vim_navigation_defaults<A>(map: &mut KeyMap<A>)
 where
     A: From<NavigationAction>,
@@ -75,14 +62,12 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
 where
     A: From<NavigationAction>,
 {
-    /// Vim focus bindings: `j`/`k`/`h`/`l`, tab, enter, esc; global `ctrl+c` quit.
     pub fn vim_defaults(mut self) -> Self {
         bind_vim_general_defaults(self.input_registry.map_mut(modes::GENERAL.as_str()));
         bind_vim_global_defaults(self.input_registry.map_mut(modes::GLOBAL.as_str()));
         self
     }
 
-    /// Adds Vim-style buffer/pane bindings (`]`, `[`, `ctrl+w`, …).
     pub fn vim_navigation_defaults(mut self) -> Self {
         bind_vim_navigation_defaults(self.input_registry.map_mut(modes::GENERAL.as_str()));
         self
