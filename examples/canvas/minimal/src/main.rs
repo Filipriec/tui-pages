@@ -1,30 +1,20 @@
+//! Everything that is *not* the `tui-pages` contract
+
+mod app;
+
 use anyhow::Result;
 use crossterm::event::Event;
-use ratatui::{backend::CrosstermBackend, Terminal};
+use ratatui::layout::{Alignment, Constraint, Layout};
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::{backend::CrosstermBackend, Frame, Terminal};
 use tui_pages::canvas;
 use tui_pages::prelude::*;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum View {
-    Form,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum Action {
-    Canvas(canvas::CanvasAction),
-    Select,
-    Quit,
-}
-
-impl From<canvas::CanvasAction> for Action {
-    fn from(action: canvas::CanvasAction) -> Self {
-        Self::Canvas(action)
-    }
-}
-
+/// The form's backing data: two fields the editor reads and writes.
 #[derive(Debug)]
-struct Contact {
-    values: Vec<String>,
+pub struct Contact {
+    pub values: Vec<String>,
 }
 
 impl Default for Contact {
@@ -57,111 +47,79 @@ impl canvas::DataProvider for Contact {
     }
 }
 
-struct State {
-    editor: canvas::FormEditor<Contact>,
-    message: String,
+/// Application state: just the form editor in this example.
+pub struct State {
+    pub editor: canvas::FormEditor<Contact>,
 }
 
 impl Default for State {
     fn default() -> Self {
         Self {
             editor: canvas::FormEditor::new(Contact::default()),
-            message: "i edits, Esc exits edit mode, Tab leaves the form, Ctrl+C quits".to_string(),
         }
     }
 }
 
-struct Handler;
-
-impl TuiActionHandler<View, Action, State> for Handler {
-    type Error = std::convert::Infallible;
-
-    fn handle_action(
-        &mut self,
-        action: Action,
-        ctx: ActionContext<View>,
-        state: &mut State,
-    ) -> Result<ActionOutcome<View>, Self::Error> {
-        Ok(match action {
-            Action::Quit => ActionOutcome::effect(TuiEffect::Quit),
-            Action::Select => match ctx.focus {
-                Some(FocusTarget::Button(0)) => ActionOutcome::effect(TuiEffect::Quit),
-                _ => ActionOutcome::none(),
-            },
-            Action::Canvas(action) => match canvas::dispatch_action(&mut state.editor, action) {
-                canvas::CanvasDispatchOutcome::Focus(intent) => {
-                    ActionOutcome::effect(TuiEffect::Focus(intent))
-                }
-                canvas::CanvasDispatchOutcome::Applied(result) => {
-                    state.message = match result {
-                        canvas::ActionResult::Success => "form handled the key".to_string(),
-                        canvas::ActionResult::Message(message)
-                        | canvas::ActionResult::Error(message) => message,
-                        _ => "form handled the key".to_string(),
-                    };
-                    ActionOutcome::none()
-                }
-            },
-        })
-    }
+/// The "Clear" button's effect: wipe both fields by resetting the editor. The
+/// handler in `app.rs` calls this; the runtime knows nothing about it.
+pub fn clear_form(state: &mut State) {
+    state.editor = canvas::FormEditor::new(Contact {
+        values: vec![String::new(), String::new()],
+    });
 }
 
-fn page_spec(_view: &View, state: &State, focus: Option<&FocusTarget>) -> PageSpec {
-    let spec = PageSpec::new().focus(PageFocusBuilder::new().canvas_field(0).button(0));
-    if matches!(focus, Some(FocusTarget::Button(0))) {
-        spec
-    } else {
-        spec.canvas_editor(&state.editor)
-    }
-}
+/// The two buttons below the form.
+const BUTTON_LABELS: [&str; 2] = ["Clear", "Quit"];
 
-fn build() -> TuiApp<View, Action, State, Handler> {
-    TuiPages::builder(View::Form)
-        .page_fn(page_spec)
-        .handler(Handler)
-        .canvas_defaults()
-        .bind(modes::GENERAL, "enter", Action::Select)
-        .bind(modes::GLOBAL, "ctrl+c", Action::Quit)
-        .build()
+/// Draw the form and the two buttons. `focused_button` is the index of the
+/// focused button, or `None` while focus is inside the canvas.
+fn render(frame: &mut Frame, focused_button: Option<usize>, state: &State) {
+    let area = frame.area();
+    let rows = Layout::vertical([
+        Constraint::Length(6), // the two form fields
+        Constraint::Length(3), // the two buttons
+        Constraint::Min(0),
+    ])
+    .split(area);
+
+    canvas::render_canvas_with_suggestions_default(frame, area, rows[0], &state.editor);
+
+    let cols =
+        Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).split(rows[1]);
+    for (index, label) in BUTTON_LABELS.iter().enumerate() {
+        let focused = focused_button == Some(index);
+        let style = if focused {
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::Cyan)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default()
+        };
+        frame.render_widget(
+            Paragraph::new(*label)
+                .alignment(Alignment::Center)
+                .style(style)
+                .block(Block::default().borders(Borders::ALL)),
+            cols[index],
+        );
+    }
 }
 
 fn main() -> Result<()> {
     let _guard = tui_pages::terminal::enter()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(std::io::stderr()))?;
-    let mut tui = build();
+    let mut tui = app::build();
     let mut state = State::default();
     tui.refresh_page(&state);
 
     loop {
-        terminal.draw(|frame| {
-            let area = frame.area();
-            let rows = ratatui::layout::Layout::vertical([
-                ratatui::layout::Constraint::Length(7),
-                ratatui::layout::Constraint::Length(3),
-                ratatui::layout::Constraint::Min(0),
-            ])
-            .split(area);
+        let focused_button = match tui.focus.current() {
+            Some(FocusTarget::Button(index)) => Some(index),
+            _ => None,
+        };
 
-            canvas::render_canvas_with_suggestions_default(
-                frame,
-                area,
-                rows[0],
-                &state.editor,
-            );
-            frame.render_widget(
-                ratatui::widgets::Paragraph::new(state.message.as_str()).block(
-                    ratatui::widgets::Block::default()
-                        .borders(ratatui::widgets::Borders::ALL)
-                        .title(" status "),
-                ),
-                rows[1],
-            );
-            frame.render_widget(
-                ratatui::widgets::Paragraph::new("Quit")
-                    .block(ratatui::widgets::Block::default().borders(ratatui::widgets::Borders::ALL)),
-                rows[2],
-            );
-        })?;
+        terminal.draw(|frame| render(frame, focused_button, &state))?;
 
         let Event::Key(key) = crossterm::event::read()? else {
             continue;
