@@ -328,7 +328,14 @@ impl<A> TuiPagesOutput<A> {
     }
 }
 
-#[derive(Debug, Clone)]
+pub(crate) struct KeyHookOutcome<V, A, O, M> {
+    pub status: TuiPagesStatus<A>,
+    pub outcome: ActionOutcome<V, O, M>,
+}
+
+pub(crate) type KeyHook<V, A, S, O, M> =
+    Box<dyn FnMut(KeyEvent, ActionContext<V, O>, &mut S) -> Option<KeyHookOutcome<V, A, O, M>>>;
+
 pub struct TuiPages<V, A, S, Pages = (), Handler = (), O = (), M = ()> {
     pub input: InputPipeline<A>,
     pub commands: CommandResolver<A>,
@@ -338,6 +345,7 @@ pub struct TuiPages<V, A, S, Pages = (), Handler = (), O = (), M = ()> {
     handler: Handler,
     fallback_view: V,
     pub(crate) text_input_mapper: Option<fn(KeyChord) -> Option<A>>,
+    pub(crate) key_hooks: Vec<KeyHook<V, A, S, O, M>>,
     _state: PhantomData<S>,
 }
 
@@ -411,6 +419,23 @@ where
         let modes = spec.modes.clone();
         let accepts_text_input = spec.accepts_text_input;
         self.sync_focus_to_spec(spec);
+
+        let ctx = ActionContext {
+            current_view: self.current_view().clone(),
+            focus: self.focus.current(),
+            has_overlay: self.focus.has_overlay(),
+        };
+        let mut hook_response = None;
+        for hook in &mut self.key_hooks {
+            if let Some(response) = hook(key, ctx.clone(), state) {
+                hook_response = Some(response);
+                break;
+            }
+        }
+        if let Some(response) = hook_response {
+            let quit_requested = self.apply_outcome(response.outcome, state);
+            return Ok(TuiPagesOutput::new(response.status, quit_requested));
+        }
 
         let focus_accepts_mapped_text = accepts_text_input
             && self
@@ -590,16 +615,16 @@ where
     }
 }
 
-#[derive(Debug, Clone)]
 pub struct TuiPagesBuilder<V, A, S, O = (), M = (), Pages = (), Handler = ()> {
     initial_view: V,
     fallback_view: Option<V>,
     pub(crate) input_registry: InputRegistry<A>,
     command_registry: CommandRegistry<A>,
-    input_timeout_ms: u64,
+    pub(crate) input_timeout_ms: u64,
     command_timeout_ms: u64,
     focus_wrap: FocusWrap,
     pub(crate) text_input_mapper: Option<fn(KeyChord) -> Option<A>>,
+    pub(crate) key_hooks: Vec<KeyHook<V, A, S, O, M>>,
     pages: Pages,
     handler: Handler,
     _state: PhantomData<S>,
@@ -618,6 +643,7 @@ impl<V, A, S, O, M> TuiPagesBuilder<V, A, S, O, M, (), ()> {
             command_timeout_ms: 1000,
             focus_wrap: FocusWrap::default(),
             text_input_mapper: None,
+            key_hooks: Vec::new(),
             pages: (),
             handler: (),
             _state: PhantomData,
@@ -656,6 +682,7 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
             command_timeout_ms: self.command_timeout_ms,
             focus_wrap: self.focus_wrap,
             text_input_mapper: self.text_input_mapper,
+            key_hooks: self.key_hooks,
             pages,
             handler: self.handler,
             _state: PhantomData,
@@ -694,6 +721,7 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
             command_timeout_ms: self.command_timeout_ms,
             focus_wrap: self.focus_wrap,
             text_input_mapper: self.text_input_mapper,
+            key_hooks: self.key_hooks,
             pages: self.pages,
             handler,
             _state: PhantomData,
@@ -776,6 +804,7 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
             handler: self.handler,
             fallback_view,
             text_input_mapper: self.text_input_mapper,
+            key_hooks: self.key_hooks,
             _state: PhantomData,
         }
     }

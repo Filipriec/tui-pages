@@ -698,6 +698,167 @@ fn textarea_dispatch_handles_multiline_editing_paste_and_movement() {
     assert_eq!(textarea.current_field(), 1);
 }
 
+// --- Builder widgets ----------------------------------------------------------
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum WidgetAction {
+    Quit,
+}
+
+struct WidgetState {
+    editor: FormEditor<Provider>,
+    textarea: canvas::TextAreaState<canvas::TextAreaProvider>,
+    textinput: canvas::TextInputState<canvas::TextInputProvider>,
+    textarea_entered: bool,
+    textinput_entered: bool,
+}
+
+impl Default for WidgetState {
+    fn default() -> Self {
+        Self {
+            editor: FormEditor::new(Provider::new(&[""])),
+            textarea: canvas::TextAreaState::from_text(""),
+            textinput: canvas::TextInputState::from_text(""),
+            textarea_entered: false,
+            textinput_entered: false,
+        }
+    }
+}
+
+struct WidgetHandler;
+
+impl TuiActionHandler<View, WidgetAction, WidgetState> for WidgetHandler {
+    type Error = std::convert::Infallible;
+
+    fn handle_action(
+        &mut self,
+        action: WidgetAction,
+        _ctx: ActionContext<View>,
+        _state: &mut WidgetState,
+    ) -> Result<ActionOutcome<View>, Self::Error> {
+        Ok(match action {
+            WidgetAction::Quit => ActionOutcome::effect(TuiEffect::Quit),
+        })
+    }
+}
+
+fn widget_page(_v: &View, _s: &WidgetState, _f: Option<&FocusTarget>) -> PageSpec {
+    PageSpec::new().focus(PageFocusBuilder::new().canvas_field(0).button(0))
+}
+
+#[test]
+fn canvas_form_editor_builder_dispatches_without_canvas_actions_in_app_action() {
+    let mut app = TuiPages::<View, WidgetAction, WidgetState>::builder(View::Form)
+        .page_fn(widget_page)
+        .handler(WidgetHandler)
+        .canvas_form_editor(|state: &mut WidgetState| &mut state.editor)
+        .bind(tui_pages::modes::GLOBAL, "ctrl+c", WidgetAction::Quit)
+        .build();
+    let mut state = WidgetState::default();
+    app.refresh_page(&state);
+
+    app.handle_key(key(KeyCode::Char('i')), &mut state).unwrap();
+    app.handle_key(
+        KeyEvent::new(KeyCode::Char('A'), KeyModifiers::SHIFT),
+        &mut state,
+    )
+    .unwrap();
+
+    assert_eq!(state.editor.data_provider().field_value(0), "A");
+}
+
+#[test]
+fn canvas_form_editor_builder_hands_off_focus_at_boundaries() {
+    let mut app = TuiPages::<View, WidgetAction, WidgetState>::builder(View::Form)
+        .page_fn(widget_page)
+        .handler(WidgetHandler)
+        .canvas_form_editor(|state: &mut WidgetState| &mut state.editor)
+        .build();
+    let mut state = WidgetState::default();
+    app.refresh_page(&state);
+
+    let output = app.handle_key(key(KeyCode::Down), &mut state).unwrap();
+
+    assert_eq!(output.status, TuiPagesStatus::ActionHandled);
+    assert_eq!(app.focus.current(), Some(FocusTarget::Button(0)));
+}
+
+#[test]
+fn canvas_textarea_widget_builder_owns_enter_edit_and_exit_flow() {
+    let mut app = TuiPages::<View, WidgetAction, WidgetState>::builder(View::Form)
+        .page_fn(widget_page)
+        .handler(WidgetHandler)
+        .canvas_textarea_widget(
+            0,
+            |state: &mut WidgetState| &mut state.textarea,
+            |state: &mut WidgetState| &mut state.textarea_entered,
+        )
+        .build();
+    let mut state = WidgetState::default();
+    app.refresh_page(&state);
+
+    app.handle_key(key(KeyCode::Enter), &mut state).unwrap();
+    app.handle_key(key(KeyCode::Char('i')), &mut state).unwrap();
+    app.handle_key(
+        KeyEvent::new(KeyCode::Char('A'), KeyModifiers::SHIFT),
+        &mut state,
+    )
+    .unwrap();
+    app.handle_key(key(KeyCode::Esc), &mut state).unwrap();
+    app.handle_key(key(KeyCode::Esc), &mut state).unwrap();
+
+    assert_eq!(state.textarea.text(), "A");
+    assert!(!state.textarea_entered);
+}
+
+#[test]
+fn canvas_textarea_widget_builder_treats_unentered_widget_as_one_focus_stop() {
+    let mut app = TuiPages::<View, WidgetAction, WidgetState>::builder(View::Form)
+        .page_fn(widget_page)
+        .handler(WidgetHandler)
+        .canvas_textarea_widget(
+            0,
+            |state: &mut WidgetState| &mut state.textarea,
+            |state: &mut WidgetState| &mut state.textarea_entered,
+        )
+        .build();
+    let mut state = WidgetState::default();
+    app.refresh_page(&state);
+
+    app.handle_key(key(KeyCode::Char('j')), &mut state).unwrap();
+
+    assert_eq!(app.focus.current(), Some(FocusTarget::Button(0)));
+    assert!(!state.textarea_entered);
+}
+
+#[test]
+fn canvas_textinput_widget_builder_dispatches_raw_text_and_submit_focus() {
+    let mut app = TuiPages::<View, WidgetAction, WidgetState>::builder(View::Form)
+        .page_fn(widget_page)
+        .handler(WidgetHandler)
+        .canvas_textinput_widget(
+            0,
+            |state: &mut WidgetState| &mut state.textinput,
+            |state: &mut WidgetState| &mut state.textinput_entered,
+        )
+        .build();
+    let mut state = WidgetState::default();
+    app.refresh_page(&state);
+
+    app.handle_key(key(KeyCode::Enter), &mut state).unwrap();
+    app.handle_key(key(KeyCode::Char('i')), &mut state).unwrap();
+    app.handle_key(
+        KeyEvent::new(KeyCode::Char('A'), KeyModifiers::SHIFT),
+        &mut state,
+    )
+    .unwrap();
+    app.handle_key(key(KeyCode::Enter), &mut state).unwrap();
+
+    assert_eq!(state.textinput.text(), "A");
+    assert!(!state.textinput_entered);
+    assert_eq!(app.focus.current(), Some(FocusTarget::Button(0)));
+}
+
 // --- Full-surface re-export proof ---------------------------------------------
 
 /// Compile-time proof that the single `canvas` feature re-exports every canvas
