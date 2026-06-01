@@ -1,203 +1,194 @@
+//! Everything that is *not* the `tui-pages` contract: the textarea state, the
+//! side-effect functions the handler calls, the ratatui rendering, and the
+//! event loop.
+//!
+//! The textarea is a single top-level focus stop. `j`/`k` step past it to the
+//! buttons; Enter *enters* it. Once entered it is modal: NORMAL hands keys to
+//! the runtime (move the cursor between lines, `i` to insert), INSERT hands raw
+//! keys to the textarea's full editor (newlines, joins, wrapping), and `Esc`
+//! steps back out (INSERT -> NORMAL -> top-level stop).
+
+mod app;
+
 use anyhow::Result;
-use crossterm::event::Event;
-use ratatui::{
-    backend::CrosstermBackend,
-    layout::{Constraint, Layout},
-    style::{Color, Style},
-    widgets::{Block, Borders, Paragraph},
-    Terminal,
-};
+use crossterm::event::{Event, KeyCode, KeyModifiers};
+use ratatui::layout::{Alignment, Constraint, Layout};
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::{backend::CrosstermBackend, Frame, Terminal};
 use tui_pages::canvas;
 use tui_pages::prelude::*;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum View {
-    Editor,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Action {
-    Select,
-    Quit,
-}
-
-struct State {
-    body: canvas::TextAreaState<canvas::TextAreaProvider>,
-    title: canvas::TextInputState<canvas::TextInputProvider>,
-    message: String,
+/// Application state: a single multi-line textarea plus whether it is currently
+/// entered (selected for inner navigation) or just a top-level focus stop.
+pub struct State {
+    pub body: canvas::TextAreaState<canvas::TextAreaProvider>,
+    pub in_textarea: bool,
 }
 
 impl Default for State {
     fn default() -> Self {
-        let mut body = canvas::TextAreaState::from_text("Write multiple lines here.\nTab inserts spaces.");
+        let mut body = canvas::TextAreaState::from_text(
+            "Enter selects this textarea.\nThen i edits, Esc leaves edit mode.\nj/k move between lines once you are inside.\nWhile it is just a stop, j/k jump straight to the buttons.",
+        );
         body.use_wrap();
-
-        let mut title = canvas::TextInputState::from_text("Draft");
-        title.set_suggestion_suffix(" title");
-
         Self {
             body,
-            title,
-            message: "Textarea and TextInput are dispatched through tui-pages canvas helpers."
-                .to_string(),
+            in_textarea: false,
         }
     }
 }
 
-struct Handler;
+/// The "Clear" button's effect: empty the textarea (back in NORMAL, un-entered).
+/// The handler in `app.rs` calls this; the runtime knows nothing about it.
+pub fn clear_textarea(state: &mut State) {
+    let mut body = canvas::TextAreaState::from_text("");
+    body.use_wrap();
+    state.body = body;
+}
 
-impl TuiActionHandler<View, Action, State> for Handler {
-    type Error = std::convert::Infallible;
+/// The two buttons below the textarea.
+const BUTTON_LABELS: [&str; 2] = ["Clear", "Quit"];
 
-    fn handle_action(
-        &mut self,
-        action: Action,
-        ctx: ActionContext<View>,
-        _state: &mut State,
-    ) -> Result<ActionOutcome<View>, Self::Error> {
-        Ok(match action {
-            Action::Select => match ctx.focus {
-                Some(FocusTarget::Button(0)) => ActionOutcome::effect(TuiEffect::Quit),
-                _ => ActionOutcome::none(),
-            },
-            Action::Quit => ActionOutcome::effect(TuiEffect::Quit),
-        })
+/// Clear a lone `Shift` modifier on character keys so the textarea's
+/// modifier-free insert path accepts capitals and shifted symbols. Ctrl/Alt
+/// combos (real shortcuts) are left untouched.
+fn normalize_shift(mut key: crossterm::event::KeyEvent) -> crossterm::event::KeyEvent {
+    if matches!(key.code, KeyCode::Char(_)) && key.modifiers == KeyModifiers::SHIFT {
+        key.modifiers = KeyModifiers::NONE;
+    }
+    key
+}
+
+fn mode_label(mode: canvas::AppMode) -> &'static str {
+    match mode {
+        canvas::AppMode::Edit => "INSERT",
+        canvas::AppMode::ReadOnly => "NORMAL",
+        canvas::AppMode::Highlight => "VISUAL",
+        canvas::AppMode::Command => "COMMAND",
+        canvas::AppMode::General => "GENERAL",
     }
 }
 
-fn page_spec(_view: &View, _state: &State, focus: Option<&FocusTarget>) -> PageSpec {
-    let spec = PageSpec::new().focus(
-        PageFocusBuilder::new()
-            .canvas_field(0)
-            .canvas_field(1)
-            .button(0),
-    );
-    if matches!(focus, Some(FocusTarget::Button(0))) {
-        spec
+/// Draw the textarea and the two buttons. `on_textarea` is true when the
+/// textarea holds focus (as a stop); `entered` is true once it has been
+/// selected for inner navigation; `mode` is its editor mode.
+fn render(
+    frame: &mut Frame,
+    focused_button: Option<usize>,
+    on_textarea: bool,
+    entered: bool,
+    mode: canvas::AppMode,
+    state: &mut State,
+) {
+    let rows = Layout::vertical([
+        Constraint::Min(3),    // the textarea
+        Constraint::Length(3), // the two buttons
+    ])
+    .split(frame.area());
+
+    // The block title shows the mode once entered, and a hint otherwise; the
+    // border distinguishes "entered" (green) from "selected stop" (cyan).
+    let (title, border) = if entered {
+        (
+            format!(" Body — {} ", mode_label(mode)),
+            Style::default().fg(Color::Green),
+        )
+    } else if on_textarea {
+        (
+            String::from(" Body (Enter to edit) "),
+            Style::default().fg(Color::Cyan),
+        )
     } else {
-        spec.canvas_mode(canvas::AppMode::Edit)
+        (String::from(" Body "), Style::default().fg(Color::DarkGray))
+    };
+    let block = Block::default()
+        .title(title)
+        .borders(Borders::ALL)
+        .border_style(border);
+    let inner = block.inner(rows[0]);
+    frame.render_widget(block, rows[0]);
+    frame.render_stateful_widget(
+        canvas::TextArea::default().block(Block::default()),
+        inner,
+        &mut state.body,
+    );
+    // Show the cursor only while inside the textarea.
+    if entered {
+        frame.set_cursor_position(state.body.cursor(inner, None));
     }
-}
 
-fn build() -> TuiApp<View, Action, State, Handler> {
-    TuiPages::builder(View::Editor)
-        .page_fn(page_spec)
-        .handler(Handler)
-        .bind(modes::GENERAL, "enter", Action::Select)
-        .bind(modes::GLOBAL, "ctrl+c", Action::Quit)
-        .build()
+    // The two buttons.
+    let cols =
+        Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).split(rows[1]);
+    for (index, label) in BUTTON_LABELS.iter().enumerate() {
+        let focused = focused_button == Some(index);
+        let style = if focused {
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::Cyan)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default()
+        };
+        frame.render_widget(
+            Paragraph::new(*label)
+                .alignment(Alignment::Center)
+                .style(style)
+                .block(Block::default().borders(Borders::ALL)),
+            cols[index],
+        );
+    }
 }
 
 fn main() -> Result<()> {
     let _guard = tui_pages::terminal::enter()?;
-    let _input = canvas::CrosstermInputSession::install()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(std::io::stderr()))?;
-    let mut tui = build();
+    let mut tui = app::build();
     let mut state = State::default();
     tui.refresh_page(&state);
 
     loop {
-        terminal.draw(|frame| {
-            let rows = Layout::vertical([
-                Constraint::Length(3),
-                Constraint::Min(6),
-                Constraint::Length(3),
-                Constraint::Length(3),
-            ])
-            .split(frame.area());
+        let current = tui.focus.current();
+        let on_textarea = matches!(&current, Some(FocusTarget::CanvasField(_)));
+        // Leaving the textarea (focus moved to a button) always un-enters it, so
+        // coming back lands on the top-level stop rather than back inside.
+        if !on_textarea {
+            state.in_textarea = false;
+        }
+        let focused_button = match &current {
+            Some(FocusTarget::Button(index)) => Some(*index),
+            _ => None,
+        };
+        let entered = on_textarea && state.in_textarea;
+        let mode = state.body.mode();
+        let editing = entered && mode == canvas::AppMode::Edit;
 
-            let title_focus = matches!(tui.focus.current(), Some(FocusTarget::CanvasField(0)));
-            let title_block = block("Title", title_focus);
-            let title_area = title_block.inner(rows[0]);
-            frame.render_widget(title_block, rows[0]);
-            frame.render_stateful_widget(
-                canvas::TextInput::default().block(Block::default()),
-                title_area,
-                &mut state.title,
-            );
-
-            let body_focus = matches!(tui.focus.current(), Some(FocusTarget::CanvasField(1)));
-            let body_block = block("Body", body_focus);
-            let body_area = body_block.inner(rows[1]);
-            frame.render_widget(body_block, rows[1]);
-            frame.render_stateful_widget(
-                canvas::TextArea::default().block(Block::default()),
-                body_area,
-                &mut state.body,
-            );
-
-            frame.render_widget(
-                Paragraph::new(state.message.as_str())
-                    .style(Style::default().fg(Color::DarkGray))
-                    .block(Block::default().borders(Borders::ALL).title(" status ")),
-                rows[2],
-            );
-            frame.render_widget(
-                Paragraph::new("Quit").block(Block::default().borders(Borders::ALL)),
-                rows[3],
-            );
-
-            match tui.focus.current() {
-                Some(FocusTarget::CanvasField(0)) => {
-                    frame.set_cursor_position(state.title.cursor(title_area, None));
-                }
-                Some(FocusTarget::CanvasField(1)) => {
-                    frame.set_cursor_position(state.body.cursor(body_area, None));
-                }
-                _ => {}
-            }
-        })?;
+        terminal.draw(|frame| render(frame, focused_button, on_textarea, entered, mode, &mut state))?;
 
         let Event::Key(key) = crossterm::event::read()? else {
             continue;
         };
 
-        let handled = match tui.focus.current() {
-            Some(FocusTarget::CanvasField(0)) => handle_text_widget(
-                canvas::dispatch_text_input_key(&mut state.title, key),
-                &mut tui,
-                &state,
-            ),
-            Some(FocusTarget::CanvasField(1)) => handle_text_widget(
-                canvas::dispatch_text_area_key(&mut state.body, key),
-                &mut tui,
-                &state,
-            ),
-            _ => false,
-        };
+        // INSERT mode (entered): the textarea owns the keys. Esc returns to
+        // NORMAL; Ctrl+C still quits. Everything else flows through the runtime.
+        if editing {
+            match (key.code, key.modifiers) {
+                (KeyCode::Char('c'), KeyModifiers::CONTROL) => break,
+                (KeyCode::Esc, _) => {
+                    let _ = state.body.exit_edit_mode();
+                }
+                _ => {
+                    let _ = state.body.input(normalize_shift(key));
+                }
+            }
+            continue;
+        }
 
-        if !handled && tui.handle_key(key, &mut state)?.quit_requested {
+        if tui.handle_key(key, &mut state)?.quit_requested {
             break;
         }
     }
 
     Ok(())
-}
-
-fn handle_text_widget(
-    outcome: canvas::CanvasTextWidgetOutcome,
-    tui: &mut TuiApp<View, Action, State, Handler>,
-    state: &State,
-) -> bool {
-    match outcome {
-        canvas::CanvasTextWidgetOutcome::Handled => true,
-        canvas::CanvasTextWidgetOutcome::Submitted => true,
-        canvas::CanvasTextWidgetOutcome::Focus(intent) => {
-            tui.apply_effect(TuiEffect::Focus(intent), state);
-            true
-        }
-        canvas::CanvasTextWidgetOutcome::NotHandled => false,
-    }
-}
-
-fn block(title: &'static str, focused: bool) -> Block<'static> {
-    let style = if focused {
-        Style::default().fg(Color::Green)
-    } else {
-        Style::default().fg(Color::DarkGray)
-    };
-    Block::default()
-        .title(format!(" {title} "))
-        .borders(Borders::ALL)
-        .border_style(style)
 }
