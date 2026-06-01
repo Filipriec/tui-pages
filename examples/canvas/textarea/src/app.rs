@@ -71,11 +71,7 @@ pub fn build() -> TuiApp<View, Action, State, Handler> {
         // Attach the textarea widget - it handles enter/edit/exit flow internally.
         // Canvas actions (i/a for modes, j/k/h/l for movement) are handled by
         // the builder and never reach our Action type.
-        .canvas_textarea_widget(
-            0, // focus index
-            |state: &mut State| &mut state.body,
-            |state: &mut State| &mut state.entered,
-        )
+        .canvas_textarea_widget(0)
         // Top-level / button navigation (general mode). On a button these step
         // between buttons; on the un-entered textarea the widget builder turns
         // j/k into a canvas-boundary exit so they treat it as a single stop.

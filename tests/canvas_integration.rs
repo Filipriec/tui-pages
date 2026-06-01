@@ -725,6 +725,52 @@ impl Default for WidgetState {
     }
 }
 
+impl canvas::CanvasWidgetState for WidgetState {
+    fn canvas_form_editor(
+        &mut self,
+        id: usize,
+    ) -> Option<&mut dyn canvas::CanvasFormEditorHost> {
+        match id {
+            0 => Some(&mut self.editor),
+            _ => None,
+        }
+    }
+
+    fn canvas_textarea(
+        &mut self,
+        focus_index: usize,
+    ) -> Option<&mut dyn canvas::CanvasTextAreaHost> {
+        match focus_index {
+            0 => Some(&mut self.textarea),
+            _ => None,
+        }
+    }
+
+    fn canvas_textarea_entered(&mut self, focus_index: usize) -> Option<&mut bool> {
+        match focus_index {
+            0 => Some(&mut self.textarea_entered),
+            _ => None,
+        }
+    }
+
+    fn canvas_textinput(
+        &mut self,
+        focus_index: usize,
+    ) -> Option<&mut dyn canvas::CanvasTextInputHost> {
+        match focus_index {
+            0 => Some(&mut self.textinput),
+            _ => None,
+        }
+    }
+
+    fn canvas_textinput_entered(&mut self, focus_index: usize) -> Option<&mut bool> {
+        match focus_index {
+            0 => Some(&mut self.textinput_entered),
+            _ => None,
+        }
+    }
+}
+
 struct WidgetHandler;
 
 impl TuiActionHandler<View, WidgetAction, WidgetState> for WidgetHandler {
@@ -751,7 +797,7 @@ fn canvas_form_editor_builder_dispatches_without_canvas_actions_in_app_action() 
     let mut app = TuiPages::<View, WidgetAction, WidgetState>::builder(View::Form)
         .page_fn(widget_page)
         .handler(WidgetHandler)
-        .canvas_form_editor(|state: &mut WidgetState| &mut state.editor)
+        .canvas_form_editor(0)
         .bind(tui_pages::modes::GLOBAL, "ctrl+c", WidgetAction::Quit)
         .build();
     let mut state = WidgetState::default();
@@ -772,7 +818,7 @@ fn canvas_form_editor_builder_hands_off_focus_at_boundaries() {
     let mut app = TuiPages::<View, WidgetAction, WidgetState>::builder(View::Form)
         .page_fn(widget_page)
         .handler(WidgetHandler)
-        .canvas_form_editor(|state: &mut WidgetState| &mut state.editor)
+        .canvas_form_editor(0)
         .build();
     let mut state = WidgetState::default();
     app.refresh_page(&state);
@@ -788,11 +834,7 @@ fn canvas_textarea_widget_builder_owns_enter_edit_and_exit_flow() {
     let mut app = TuiPages::<View, WidgetAction, WidgetState>::builder(View::Form)
         .page_fn(widget_page)
         .handler(WidgetHandler)
-        .canvas_textarea_widget(
-            0,
-            |state: &mut WidgetState| &mut state.textarea,
-            |state: &mut WidgetState| &mut state.textarea_entered,
-        )
+        .canvas_textarea_widget(0)
         .build();
     let mut state = WidgetState::default();
     app.refresh_page(&state);
@@ -816,11 +858,7 @@ fn canvas_textarea_widget_builder_treats_unentered_widget_as_one_focus_stop() {
     let mut app = TuiPages::<View, WidgetAction, WidgetState>::builder(View::Form)
         .page_fn(widget_page)
         .handler(WidgetHandler)
-        .canvas_textarea_widget(
-            0,
-            |state: &mut WidgetState| &mut state.textarea,
-            |state: &mut WidgetState| &mut state.textarea_entered,
-        )
+        .canvas_textarea_widget(0)
         .build();
     let mut state = WidgetState::default();
     app.refresh_page(&state);
@@ -836,11 +874,7 @@ fn canvas_textinput_widget_builder_dispatches_raw_text_and_submit_focus() {
     let mut app = TuiPages::<View, WidgetAction, WidgetState>::builder(View::Form)
         .page_fn(widget_page)
         .handler(WidgetHandler)
-        .canvas_textinput_widget(
-            0,
-            |state: &mut WidgetState| &mut state.textinput,
-            |state: &mut WidgetState| &mut state.textinput_entered,
-        )
+        .canvas_textinput_widget(0)
         .build();
     let mut state = WidgetState::default();
     app.refresh_page(&state);

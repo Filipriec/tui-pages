@@ -9,8 +9,8 @@
 use crate::focus::{FocusIntent, FocusTarget};
 use crate::input::{InputPipeline, InputRegistry, KeyChord, KeyMap, PipelineResponse};
 use crate::runtime::{
-    modes, ActionContext, ActionOutcome, KeyHookOutcome, ModeId, PageSpec, TuiEffect,
-    TuiPagesBuilder, TuiPagesStatus,
+    modes, ActionContext, ActionOutcome, KeyHook, KeyHookKind, KeyHookOutcome, ModeId, PageSpec,
+    TuiEffect, TuiPagesBuilder, TuiPagesStatus,
 };
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::{layout::Rect, Frame};
@@ -122,6 +122,102 @@ impl<O, M> CanvasTextWidgetOutcome<O, M> {
             CanvasTextWidgetOutcome::Focus(intent) => Some(intent),
             _ => None,
         }
+    }
+}
+
+pub trait CanvasFormEditorHost {
+    fn mode(&self) -> AppMode;
+    fn dispatch_canvas_action(&mut self, action: CanvasAction) -> CanvasDispatchOutcome;
+}
+
+impl<D> CanvasFormEditorHost for FormEditor<D>
+where
+    D: DataProvider,
+{
+    fn mode(&self) -> AppMode {
+        FormEditor::mode(self)
+    }
+
+    fn dispatch_canvas_action(&mut self, action: CanvasAction) -> CanvasDispatchOutcome {
+        dispatch_action(self, action)
+    }
+}
+
+pub trait CanvasTextAreaHost {
+    fn mode(&self) -> AppMode;
+    fn input_key(&mut self, key: KeyEvent) -> TextAreaEventOutcome;
+    fn exit_edit_mode(&mut self);
+    fn dispatch_canvas_action(&mut self, action: CanvasAction) -> HostActionOutcome;
+}
+
+impl<P> CanvasTextAreaHost for TextAreaState<P>
+where
+    P: TextAreaDataProvider,
+{
+    fn mode(&self) -> AppMode {
+        self.editor().mode()
+    }
+
+    fn input_key(&mut self, key: KeyEvent) -> TextAreaEventOutcome {
+        self.input(key)
+    }
+
+    fn exit_edit_mode(&mut self) {
+        let _ = self.editor_mut().exit_edit_mode();
+    }
+
+    fn dispatch_canvas_action(&mut self, action: CanvasAction) -> HostActionOutcome {
+        execute_action_for_host_with_options(self.editor_mut(), action, false)
+    }
+}
+
+pub trait CanvasTextInputHost {
+    fn mode(&self) -> AppMode;
+    fn input_key(&mut self, key: KeyEvent) -> CanvasTextWidgetOutcome;
+    fn exit_edit_mode(&mut self);
+    fn dispatch_canvas_action(&mut self, action: CanvasAction) -> HostActionOutcome;
+}
+
+impl<P> CanvasTextInputHost for TextInputState<P>
+where
+    P: TextInputDataProvider,
+{
+    fn mode(&self) -> AppMode {
+        self.editor().mode()
+    }
+
+    fn input_key(&mut self, key: KeyEvent) -> CanvasTextWidgetOutcome {
+        dispatch_text_input_key(self, key)
+    }
+
+    fn exit_edit_mode(&mut self) {
+        let _ = self.editor_mut().exit_edit_mode();
+    }
+
+    fn dispatch_canvas_action(&mut self, action: CanvasAction) -> HostActionOutcome {
+        execute_action_for_host_with_options(self.editor_mut(), action, false)
+    }
+}
+
+pub trait CanvasWidgetState {
+    fn canvas_form_editor(&mut self, _id: usize) -> Option<&mut dyn CanvasFormEditorHost> {
+        None
+    }
+
+    fn canvas_textarea(&mut self, _focus_index: usize) -> Option<&mut dyn CanvasTextAreaHost> {
+        None
+    }
+
+    fn canvas_textarea_entered(&mut self, _focus_index: usize) -> Option<&mut bool> {
+        None
+    }
+
+    fn canvas_textinput(&mut self, _focus_index: usize) -> Option<&mut dyn CanvasTextInputHost> {
+        None
+    }
+
+    fn canvas_textinput_entered(&mut self, _focus_index: usize) -> Option<&mut bool> {
+        None
     }
 }
 
@@ -572,14 +668,20 @@ fn hook_status_outcome<V, A, O, M>(
     hook_outcome(status, ActionOutcome::none())
 }
 
-fn form_dispatch_hook_outcome<V, A, O, M>(
-    outcome: CanvasDispatchOutcome<O, M>,
+fn form_host_dispatch_hook_outcome<V, A, O, M>(
+    outcome: CanvasDispatchOutcome,
 ) -> Option<KeyHookOutcome<V, A, O, M>> {
     match outcome {
         CanvasDispatchOutcome::Applied(_) => {
             hook_status_outcome(TuiPagesStatus::ActionHandled)
         }
-        CanvasDispatchOutcome::Focus(intent) => hook_focus_outcome(intent),
+        CanvasDispatchOutcome::Focus(FocusIntent::ExitCanvasForward) => {
+            hook_focus_outcome(FocusIntent::ExitCanvasForward)
+        }
+        CanvasDispatchOutcome::Focus(FocusIntent::ExitCanvasBackward) => {
+            hook_focus_outcome(FocusIntent::ExitCanvasBackward)
+        }
+        CanvasDispatchOutcome::Focus(_) => hook_status_outcome(TuiPagesStatus::ActionHandled),
     }
 }
 
@@ -601,6 +703,183 @@ fn pipeline_hook_outcome<V, A, O, M>(
         PipelineResponse::Wait(_) => hook_status_outcome(TuiPagesStatus::Waiting(Vec::new())),
         PipelineResponse::Cancel => hook_status_outcome(TuiPagesStatus::Cancelled),
         PipelineResponse::Execute(_) | PipelineResponse::Type(_) => None,
+    }
+}
+
+pub(crate) fn dispatch_canvas_key_hook<V, A, S, O, M>(
+    kind: &mut KeyHookKind,
+    key: KeyEvent,
+    ctx: ActionContext<V, O>,
+    state: &mut S,
+) -> Option<KeyHookOutcome<V, A, O, M>>
+where
+    S: CanvasWidgetState,
+{
+    match kind {
+        KeyHookKind::CanvasFormEditor { id, pipeline } => {
+            if !ctx.focus.as_ref().is_some_and(FocusTarget::is_canvas) {
+                return None;
+            }
+
+            let editor = state.canvas_form_editor(*id)?;
+            let mode = editor.mode();
+            let modes = modes_for_app_mode(mode);
+            match pipeline.process(key, &modes, accepts_text_input(mode)) {
+                PipelineResponse::Execute(action) => {
+                    form_host_dispatch_hook_outcome(editor.dispatch_canvas_action(action))
+                }
+                PipelineResponse::Type(chord) if accepts_text_input(mode) => {
+                    text_chord_to_canvas_action(chord).and_then(|action| {
+                        form_host_dispatch_hook_outcome(editor.dispatch_canvas_action(action))
+                    })
+                }
+                response => pipeline_hook_outcome(response),
+            }
+        }
+        KeyHookKind::CanvasTextArea {
+            focus_index,
+            pipeline,
+        } => {
+            if !focused_canvas_field(&ctx, *focus_index) {
+                if let Some(entered) = state.canvas_textarea_entered(*focus_index) {
+                    *entered = false;
+                }
+                return None;
+            }
+
+            let is_entered = state
+                .canvas_textarea_entered(*focus_index)
+                .is_some_and(|entered| *entered);
+            if !is_entered {
+                if key.kind != KeyEventKind::Press {
+                    return None;
+                }
+                if matches!(key.code, KeyCode::Enter) {
+                    if let Some(entered) = state.canvas_textarea_entered(*focus_index) {
+                        *entered = true;
+                    }
+                    return hook_status_outcome(TuiPagesStatus::ActionHandled);
+                }
+                return focus_intent_for_top_level_key(key).and_then(hook_focus_outcome);
+            }
+
+            let mode = state.canvas_textarea(*focus_index)?.mode();
+            if mode == AppMode::Edit {
+                return match (key.code, key.modifiers) {
+                    (KeyCode::Char('c'), KeyModifiers::CONTROL) => None,
+                    (KeyCode::Esc, _) => {
+                        state.canvas_textarea(*focus_index)?.exit_edit_mode();
+                        hook_status_outcome(TuiPagesStatus::ActionHandled)
+                    }
+                    _ => match state
+                        .canvas_textarea(*focus_index)?
+                        .input_key(normalize_shift(key))
+                    {
+                        TextAreaEventOutcome::Handled => {
+                            hook_status_outcome(TuiPagesStatus::TextHandled)
+                        }
+                        TextAreaEventOutcome::Ignored => None,
+                    },
+                };
+            }
+
+            if matches!(key.code, KeyCode::Esc) && key.kind == KeyEventKind::Press {
+                if let Some(entered) = state.canvas_textarea_entered(*focus_index) {
+                    *entered = false;
+                }
+                return hook_status_outcome(TuiPagesStatus::ActionHandled);
+            }
+
+            let modes = modes_for_app_mode(mode);
+            match pipeline.process(key, &modes, accepts_text_input(mode)) {
+                PipelineResponse::Execute(action) => widget_action_hook_outcome(
+                    state.canvas_textarea(*focus_index)?.dispatch_canvas_action(action),
+                ),
+                response => pipeline_hook_outcome(response),
+            }
+        }
+        KeyHookKind::CanvasTextInput {
+            focus_index,
+            pipeline,
+        } => {
+            if !focused_canvas_field(&ctx, *focus_index) {
+                if let Some(entered) = state.canvas_textinput_entered(*focus_index) {
+                    *entered = false;
+                }
+                return None;
+            }
+
+            let is_entered = state
+                .canvas_textinput_entered(*focus_index)
+                .is_some_and(|entered| *entered);
+            if !is_entered {
+                if key.kind != KeyEventKind::Press {
+                    return None;
+                }
+                if matches!(key.code, KeyCode::Enter) {
+                    if let Some(entered) = state.canvas_textinput_entered(*focus_index) {
+                        *entered = true;
+                    }
+                    return hook_status_outcome(TuiPagesStatus::ActionHandled);
+                }
+                return focus_intent_for_top_level_key(key).and_then(hook_focus_outcome);
+            }
+
+            let mode = state.canvas_textinput(*focus_index)?.mode();
+            if mode == AppMode::Edit {
+                return match (key.code, key.modifiers) {
+                    (KeyCode::Char('c'), KeyModifiers::CONTROL) => None,
+                    (KeyCode::Esc, _) => {
+                        state.canvas_textinput(*focus_index)?.exit_edit_mode();
+                        hook_status_outcome(TuiPagesStatus::ActionHandled)
+                    }
+                    _ => match state
+                        .canvas_textinput(*focus_index)?
+                        .input_key(normalize_shift(key))
+                    {
+                        CanvasTextWidgetOutcome::Handled => {
+                            hook_status_outcome(TuiPagesStatus::TextHandled)
+                        }
+                        CanvasTextWidgetOutcome::Submitted => {
+                            if let Some(entered) = state.canvas_textinput_entered(*focus_index) {
+                                *entered = false;
+                            }
+                            hook_focus_outcome(FocusIntent::ExitCanvasForward)
+                        }
+                        CanvasTextWidgetOutcome::Focus(intent) => {
+                            if let Some(entered) = state.canvas_textinput_entered(*focus_index) {
+                                *entered = false;
+                            }
+                            match intent {
+                                FocusIntent::ExitCanvasForward => {
+                                    hook_focus_outcome(FocusIntent::ExitCanvasForward)
+                                }
+                                FocusIntent::ExitCanvasBackward => {
+                                    hook_focus_outcome(FocusIntent::ExitCanvasBackward)
+                                }
+                                _ => hook_status_outcome(TuiPagesStatus::ActionHandled),
+                            }
+                        }
+                        CanvasTextWidgetOutcome::NotHandled => None,
+                    },
+                };
+            }
+
+            if matches!(key.code, KeyCode::Esc) && key.kind == KeyEventKind::Press {
+                if let Some(entered) = state.canvas_textinput_entered(*focus_index) {
+                    *entered = false;
+                }
+                return hook_status_outcome(TuiPagesStatus::ActionHandled);
+            }
+
+            let modes = modes_for_app_mode(mode);
+            match pipeline.process(key, &modes, accepts_text_input(mode)) {
+                PipelineResponse::Execute(action) => widget_action_hook_outcome(
+                    state.canvas_textinput(*focus_index)?.dispatch_canvas_action(action),
+                ),
+                response => pipeline_hook_outcome(response),
+            }
+        }
     }
 }
 
@@ -640,184 +919,40 @@ where
     }
 }
 
-impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handler> {
-    pub fn canvas_form_editor<D, GetEditor>(mut self, mut editor: GetEditor) -> Self
-    where
-        D: DataProvider + 'static,
-        GetEditor: for<'a> FnMut(&'a mut S) -> &'a mut FormEditor<D> + 'static,
-        V: 'static,
-        A: 'static,
-        S: 'static,
-        O: 'static,
-        M: 'static,
-    {
-        let mut pipeline = canvas_action_pipeline(self.input_timeout_ms);
-        self.key_hooks.push(Box::new(move |key, ctx, state| {
-            if !ctx.focus.as_ref().is_some_and(FocusTarget::is_canvas) {
-                return None;
-            }
-
-            let editor = editor(state);
-            let mode = editor.mode();
-            let modes = modes_for_app_mode(mode);
-            match pipeline.process(key, &modes, accepts_text_input(mode)) {
-                PipelineResponse::Execute(action) => {
-                    form_dispatch_hook_outcome(dispatch_action(editor, action))
-                }
-                PipelineResponse::Type(chord) if accepts_text_input(mode) => {
-                    text_chord_to_canvas_action(chord).and_then(|action| {
-                        form_dispatch_hook_outcome(dispatch_action(editor, action))
-                    })
-                }
-                response => pipeline_hook_outcome(response),
-            }
-        }));
+impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handler>
+where
+    S: CanvasWidgetState,
+{
+    pub fn canvas_form_editor(mut self, id: usize) -> Self {
+        self.key_hooks.push(KeyHook {
+            kind: KeyHookKind::CanvasFormEditor {
+                id,
+                pipeline: canvas_action_pipeline(self.input_timeout_ms),
+            },
+            dispatch: dispatch_canvas_key_hook::<V, A, S, O, M>,
+        });
         self
     }
 
-    pub fn canvas_textarea_widget<P, GetTextarea, GetEntered>(
-        mut self,
-        focus_index: usize,
-        mut textarea: GetTextarea,
-        mut entered: GetEntered,
-    ) -> Self
-    where
-        P: TextAreaDataProvider + 'static,
-        GetTextarea: for<'a> FnMut(&'a mut S) -> &'a mut TextAreaState<P> + 'static,
-        GetEntered: for<'a> FnMut(&'a mut S) -> &'a mut bool + 'static,
-        V: 'static,
-        A: 'static,
-        S: 'static,
-        O: 'static,
-        M: 'static,
-    {
-        let mut pipeline = canvas_action_pipeline(self.input_timeout_ms);
-        self.key_hooks.push(Box::new(move |key, ctx, state| {
-            if !focused_canvas_field(&ctx, focus_index) {
-                *entered(state) = false;
-                return None;
-            }
-
-            if !*entered(state) {
-                if key.kind != KeyEventKind::Press {
-                    return None;
-                }
-                if matches!(key.code, KeyCode::Enter) {
-                    *entered(state) = true;
-                    return hook_status_outcome(TuiPagesStatus::ActionHandled);
-                }
-                return focus_intent_for_top_level_key(key).and_then(hook_focus_outcome);
-            }
-
-            let mode = textarea(state).mode();
-            if mode == AppMode::Edit {
-                return match (key.code, key.modifiers) {
-                    (KeyCode::Char('c'), KeyModifiers::CONTROL) => None,
-                    (KeyCode::Esc, _) => {
-                        let _ = textarea(state).exit_edit_mode();
-                        hook_status_outcome(TuiPagesStatus::ActionHandled)
-                    }
-                    _ => match textarea(state).input(normalize_shift(key)) {
-                        TextAreaEventOutcome::Handled => {
-                            hook_status_outcome(TuiPagesStatus::TextHandled)
-                        }
-                        TextAreaEventOutcome::Ignored => None,
-                    },
-                };
-            }
-
-            if matches!(key.code, KeyCode::Esc) && key.kind == KeyEventKind::Press {
-                *entered(state) = false;
-                return hook_status_outcome(TuiPagesStatus::ActionHandled);
-            }
-
-            let modes = modes_for_app_mode(mode);
-            match pipeline.process(key, &modes, accepts_text_input(mode)) {
-                PipelineResponse::Execute(action) => widget_action_hook_outcome(
-                    execute_action_for_host_with_options(
-                        textarea(state).editor_mut(),
-                        action,
-                        false,
-                    ),
-                ),
-                response => pipeline_hook_outcome(response),
-            }
-        }));
+    pub fn canvas_textarea_widget(mut self, focus_index: usize) -> Self {
+        self.key_hooks.push(KeyHook {
+            kind: KeyHookKind::CanvasTextArea {
+                focus_index,
+                pipeline: canvas_action_pipeline(self.input_timeout_ms),
+            },
+            dispatch: dispatch_canvas_key_hook::<V, A, S, O, M>,
+        });
         self
     }
 
-    pub fn canvas_textinput_widget<P, GetInput, GetEntered>(
-        mut self,
-        focus_index: usize,
-        mut input: GetInput,
-        mut entered: GetEntered,
-    ) -> Self
-    where
-        P: TextInputDataProvider + 'static,
-        GetInput: for<'a> FnMut(&'a mut S) -> &'a mut TextInputState<P> + 'static,
-        GetEntered: for<'a> FnMut(&'a mut S) -> &'a mut bool + 'static,
-        V: 'static,
-        A: 'static,
-        S: 'static,
-        O: 'static,
-        M: 'static,
-    {
-        let mut pipeline = canvas_action_pipeline(self.input_timeout_ms);
-        self.key_hooks.push(Box::new(move |key, ctx, state| {
-            if !focused_canvas_field(&ctx, focus_index) {
-                *entered(state) = false;
-                return None;
-            }
-
-            if !*entered(state) {
-                if key.kind != KeyEventKind::Press {
-                    return None;
-                }
-                if matches!(key.code, KeyCode::Enter) {
-                    *entered(state) = true;
-                    return hook_status_outcome(TuiPagesStatus::ActionHandled);
-                }
-                return focus_intent_for_top_level_key(key).and_then(hook_focus_outcome);
-            }
-
-            let mode = input(state).mode();
-            if mode == AppMode::Edit {
-                return match (key.code, key.modifiers) {
-                    (KeyCode::Char('c'), KeyModifiers::CONTROL) => None,
-                    (KeyCode::Esc, _) => {
-                        let _ = input(state).exit_edit_mode();
-                        hook_status_outcome(TuiPagesStatus::ActionHandled)
-                    }
-                    _ => match dispatch_text_input_key(input(state), normalize_shift(key)) {
-                        CanvasTextWidgetOutcome::Handled => {
-                            hook_status_outcome(TuiPagesStatus::TextHandled)
-                        }
-                        CanvasTextWidgetOutcome::Submitted => {
-                            *entered(state) = false;
-                            hook_focus_outcome(FocusIntent::ExitCanvasForward)
-                        }
-                        CanvasTextWidgetOutcome::Focus(intent) => {
-                            *entered(state) = false;
-                            hook_focus_outcome(intent)
-                        }
-                        CanvasTextWidgetOutcome::NotHandled => None,
-                    },
-                };
-            }
-
-            if matches!(key.code, KeyCode::Esc) && key.kind == KeyEventKind::Press {
-                *entered(state) = false;
-                return hook_status_outcome(TuiPagesStatus::ActionHandled);
-            }
-
-            let modes = modes_for_app_mode(mode);
-            match pipeline.process(key, &modes, accepts_text_input(mode)) {
-                PipelineResponse::Execute(action) => widget_action_hook_outcome(
-                    execute_action_for_host_with_options(input(state).editor_mut(), action, false),
-                ),
-                response => pipeline_hook_outcome(response),
-            }
-        }));
+    pub fn canvas_textinput_widget(mut self, focus_index: usize) -> Self {
+        self.key_hooks.push(KeyHook {
+            kind: KeyHookKind::CanvasTextInput {
+                focus_index,
+                pipeline: canvas_action_pipeline(self.input_timeout_ms),
+            },
+            dispatch: dispatch_canvas_key_hook::<V, A, S, O, M>,
+        });
         self
     }
 }

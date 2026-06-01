@@ -64,7 +64,7 @@ pub fn build() -> TuiApp<View, Action, State, Handler> {
         .handler(Handler)
         // Attach the form editor - it handles canvas actions internally
         // so they never reach our Action type.
-        .canvas_form_editor(|state: &mut State| &mut state.editor)
+        .canvas_form_editor(0)
         // Navigation is a flat line of four stops — field 0, field 1, Clear, Quit.
         // On a button (general mode) the page navigates with Tab/Enter, plus
         // vim keys so j/k/h/l flow continues straight off the canvas: `k` on the

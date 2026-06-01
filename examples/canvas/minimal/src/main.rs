@@ -52,6 +52,18 @@ pub struct State {
     pub editor: canvas::FormEditor<Contact>,
 }
 
+impl canvas::CanvasWidgetState for State {
+    fn canvas_form_editor(
+        &mut self,
+        id: usize,
+    ) -> Option<&mut dyn canvas::CanvasFormEditorHost> {
+        match id {
+            0 => Some(&mut self.editor),
+            _ => None,
+        }
+    }
+}
+
 impl Default for State {
     fn default() -> Self {
         Self {

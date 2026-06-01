@@ -29,6 +29,25 @@ pub struct State {
     pub entered: bool,
 }
 
+impl canvas::CanvasWidgetState for State {
+    fn canvas_textarea(
+        &mut self,
+        focus_index: usize,
+    ) -> Option<&mut dyn canvas::CanvasTextAreaHost> {
+        match focus_index {
+            0 => Some(&mut self.body),
+            _ => None,
+        }
+    }
+
+    fn canvas_textarea_entered(&mut self, focus_index: usize) -> Option<&mut bool> {
+        match focus_index {
+            0 => Some(&mut self.entered),
+            _ => None,
+        }
+    }
+}
+
 impl Default for State {
     fn default() -> Self {
         let mut body = canvas::TextAreaState::from_text(

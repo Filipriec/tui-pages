@@ -333,9 +333,37 @@ pub(crate) struct KeyHookOutcome<V, A, O, M> {
     pub outcome: ActionOutcome<V, O, M>,
 }
 
-pub(crate) type KeyHook<V, A, S, O, M> =
-    Box<dyn FnMut(KeyEvent, ActionContext<V, O>, &mut S) -> Option<KeyHookOutcome<V, A, O, M>>>;
+#[derive(Debug, Clone)]
+pub(crate) enum KeyHookKind {
+    #[cfg(feature = "canvas")]
+    CanvasFormEditor {
+        id: usize,
+        pipeline: InputPipeline<crate::canvas::CanvasAction>,
+    },
+    #[cfg(feature = "canvas")]
+    CanvasTextArea {
+        focus_index: usize,
+        pipeline: InputPipeline<crate::canvas::CanvasAction>,
+    },
+    #[cfg(feature = "canvas")]
+    CanvasTextInput {
+        focus_index: usize,
+        pipeline: InputPipeline<crate::canvas::CanvasAction>,
+    },
+}
 
+#[derive(Debug, Clone)]
+pub(crate) struct KeyHook<V, A, S, O, M> {
+    pub kind: KeyHookKind,
+    pub dispatch: fn(
+        &mut KeyHookKind,
+        KeyEvent,
+        ActionContext<V, O>,
+        &mut S,
+    ) -> Option<KeyHookOutcome<V, A, O, M>>,
+}
+
+#[derive(Debug, Clone)]
 pub struct TuiPages<V, A, S, Pages = (), Handler = (), O = (), M = ()> {
     pub input: InputPipeline<A>,
     pub commands: CommandResolver<A>,
@@ -427,7 +455,7 @@ where
         };
         let mut hook_response = None;
         for hook in &mut self.key_hooks {
-            if let Some(response) = hook(key, ctx.clone(), state) {
+            if let Some(response) = (hook.dispatch)(&mut hook.kind, key, ctx.clone(), state) {
                 hook_response = Some(response);
                 break;
             }
@@ -615,6 +643,7 @@ where
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct TuiPagesBuilder<V, A, S, O = (), M = (), Pages = (), Handler = ()> {
     initial_view: V,
     fallback_view: Option<V>,
