@@ -1,6 +1,6 @@
 //! Editor-style default keybinding presets (Vim, Emacs, Helix, …).
 //!
-//! All preset sources live in this directory. See [`README.md`](README.md) in this folder.
+//! All preset sources live in this module directory. See [`README.md`](README.md) in this folder.
 //!
 //! # Usage
 //!

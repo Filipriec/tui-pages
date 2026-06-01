@@ -1,4 +1,4 @@
-//! Shared navigation actions for all editor presets in this directory.
+//! Shared navigation actions for all editor presets in this module.
 
 use crate::focus::FocusIntent;
 use crate::input::{parse_binding, KeyMap};

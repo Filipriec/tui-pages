@@ -16,13 +16,10 @@ pub mod canvas;
 pub mod dialog;
 pub mod focus;
 pub mod input;
+pub mod keybindings;
 pub mod navigation;
 pub mod runtime;
 pub mod terminal;
-
-/// Editor preset keymaps (Vim, Emacs, Helix, …) live under `keybindings/` at the repo root.
-#[path = "../keybindings/mod.rs"]
-pub mod keybindings;
 
 #[cfg(feature = "dialog")]
 pub use dialog::{render_dialog, DialogData, DialogKey, DialogResult, DialogTheme};
