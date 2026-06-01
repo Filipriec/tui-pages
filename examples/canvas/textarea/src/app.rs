@@ -18,10 +18,16 @@ pub enum View {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {
-    FocusNext,
-    FocusPrev,
-    Activate,
-    Quit,
+    /// Standard navigation actions provided by the keybinding presets.
+    /// Activate is per-page — the handler decides what "enter" means for the
+    /// currently focused target (here: clear textarea / quit).
+    Nav(NavigationAction),
+}
+
+impl From<NavigationAction> for Action {
+    fn from(value: NavigationAction) -> Self {
+        Action::Nav(value)
+    }
 }
 
 pub struct Handler;
@@ -32,16 +38,13 @@ impl TuiActionHandler<View, Action, State> for Handler {
     fn handle_action(
         &mut self,
         action: Action,
-        _ctx: ActionContext<View>,
+        ctx: ActionContext<View>,
         state: &mut State,
     ) -> Result<ActionOutcome<View>, Self::Error> {
         Ok(match action {
-            Action::Quit => ActionOutcome::effect(TuiEffect::Quit),
-            Action::FocusNext => ActionOutcome::effect(TuiEffect::Focus(FocusIntent::Next)),
-            Action::FocusPrev => ActionOutcome::effect(TuiEffect::Focus(FocusIntent::Prev)),
             // Enter: activate the focused button. The textarea widget builder
             // handles Enter on the textarea to enter edit mode.
-            Action::Activate => match _ctx.focus {
+            Action::Nav(NavigationAction::Activate) => match ctx.focus {
                 Some(FocusTarget::Button(0)) => {
                     clear_textarea(state);
                     ActionOutcome::none()
@@ -49,6 +52,7 @@ impl TuiActionHandler<View, Action, State> for Handler {
                 Some(FocusTarget::Button(1)) => ActionOutcome::effect(TuiEffect::Quit),
                 _ => ActionOutcome::none(),
             },
+            Action::Nav(nav) => ActionOutcome::effect(nav.to_effect()),
         })
     }
 }
@@ -72,16 +76,9 @@ pub fn build() -> TuiApp<View, Action, State, Handler> {
         // Canvas actions (i/a for modes, j/k/h/l for movement) are handled by
         // the builder and never reach our Action type.
         .canvas_textarea_widget(0)
-        // Top-level / button navigation (general mode). On a button these step
-        // between buttons; on the un-entered textarea the widget builder turns
-        // j/k into a canvas-boundary exit so they treat it as a single stop.
-        .bind(modes::GENERAL, "tab", Action::FocusNext)
-        .bind(modes::GENERAL, "backtab", Action::FocusPrev)
-        .bind(modes::GENERAL, "j", Action::FocusNext)
-        .bind(modes::GENERAL, "k", Action::FocusPrev)
-        .bind(modes::GENERAL, "l", Action::FocusNext)
-        .bind(modes::GENERAL, "h", Action::FocusPrev)
-        .bind(modes::GENERAL, "enter", Action::Activate)
-        .bind(modes::GLOBAL, "ctrl+c", Action::Quit)
+        // Vim preset covers button navigation and the un-entered textarea as a
+        // single focus stop: j/k/h/l + Tab/Backtab, Enter to activate, Ctrl-C
+        // to quit. The widget builder turns j/k into a canvas-boundary exit.
+        .vim_defaults()
         .build()
 }

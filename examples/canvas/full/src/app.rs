@@ -37,14 +37,20 @@ pub enum View {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {
-    FocusNext,
-    FocusPrev,
+    /// Standard navigation actions provided by the keybinding presets.
+    /// Activate is per-page — the page decides what "enter" means for the
+    /// currently focused target (button) on its own page.
+    Nav(NavigationAction),
     GotoForm,
     GotoEditor,
     GotoHelp,
     OpenPalette,
-    Select,
-    Quit,
+}
+
+impl From<NavigationAction> for Action {
+    fn from(value: NavigationAction) -> Self {
+        Action::Nav(value)
+    }
 }
 
 /// The Form page's backing data: two fields the editor reads and writes.
@@ -211,8 +217,8 @@ fn global_action(
     state: &mut AppState,
 ) -> Option<ActionOutcome<View, Overlay, DialogData<Purpose>>> {
     Some(match action {
-        Action::FocusNext => ActionOutcome::effect(TuiEffect::Focus(FocusIntent::Next)),
-        Action::FocusPrev => ActionOutcome::effect(TuiEffect::Focus(FocusIntent::Prev)),
+        Action::Nav(NavigationAction::Activate) => return None,
+        Action::Nav(nav) => ActionOutcome::effect(nav.to_effect()),
         Action::GotoForm => ActionOutcome::effect(TuiEffect::Navigate(View::Form)),
         Action::GotoEditor => ActionOutcome::effect(TuiEffect::Navigate(View::Editor)),
         Action::GotoHelp => ActionOutcome::effect(TuiEffect::Navigate(View::Help)),
@@ -223,9 +229,6 @@ fn global_action(
                 Overlay::CommandBar,
             ))))
         }
-        Action::Quit => ActionOutcome::effect(TuiEffect::Quit),
-        // Select depends on where you are — let the page decide.
-        Action::Select => return None,
     })
 }
 
@@ -250,24 +253,20 @@ pub fn build() -> App {
         // those never reach our Action type.
         .canvas_form_editor(0)
         .canvas_textarea_widget(0)
-        // Top-level / button navigation (general mode). j/k/h/l flow continues
-        // straight off the canvas boundary onto the buttons.
-        .bind(modes::GENERAL, "tab", Action::FocusNext)
-        .bind(modes::GENERAL, "backtab", Action::FocusPrev)
-        .bind(modes::GENERAL, "j", Action::FocusNext)
-        .bind(modes::GENERAL, "k", Action::FocusPrev)
-        .bind(modes::GENERAL, "l", Action::FocusNext)
-        .bind(modes::GENERAL, "h", Action::FocusPrev)
-        .bind(modes::GENERAL, "enter", Action::Select)
+        // Vim preset covers the standard focus line (j/k/h/l + Tab/Backtab,
+        // Enter to activate, Esc to leave section, Ctrl-C to quit). j/k/h/l
+        // flow continues straight off the canvas boundary onto the buttons.
+        // The remaining bindings are app-specific: the `g`-prefixed view
+        // switches and the `:` command palette.
+        .vim_defaults()
         .bind(modes::GENERAL, ":", Action::OpenPalette)
         .bind(modes::GLOBAL, "g f", Action::GotoForm)
         .bind(modes::GLOBAL, "g e", Action::GotoEditor)
         .bind(modes::GLOBAL, "g ?", Action::GotoHelp)
-        .bind(modes::GLOBAL, "ctrl+c", Action::Quit)
         // Command palette entries (`:` then type, Enter runs).
         .command("Go to Form", ["f", "form"], Action::GotoForm)
         .command("Go to Editor", ["e", "editor"], Action::GotoEditor)
         .command("Go to Help", ["?", "help"], Action::GotoHelp)
-        .command("Quit", ["q", "quit"], Action::Quit)
+        .command("Quit", ["q", "quit"], Action::Nav(NavigationAction::Quit))
         .build()
 }

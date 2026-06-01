@@ -15,10 +15,16 @@ pub enum View {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {
-    FocusNext,
-    FocusPrev,
-    Activate,
-    Quit,
+    /// Standard navigation actions provided by the keybinding presets.
+    /// Activate is per-page — the handler decides what "enter" means for the
+    /// currently focused target (here: clear input / quit).
+    Nav(NavigationAction),
+}
+
+impl From<NavigationAction> for Action {
+    fn from(value: NavigationAction) -> Self {
+        Action::Nav(value)
+    }
 }
 
 pub struct Handler;
@@ -33,12 +39,9 @@ impl TuiActionHandler<View, Action, State> for Handler {
         state: &mut State,
     ) -> Result<ActionOutcome<View>, Self::Error> {
         Ok(match action {
-            Action::Quit => ActionOutcome::effect(TuiEffect::Quit),
-            Action::FocusNext => ActionOutcome::effect(TuiEffect::Focus(FocusIntent::Next)),
-            Action::FocusPrev => ActionOutcome::effect(TuiEffect::Focus(FocusIntent::Prev)),
             // Enter on a button activates it. Enter on the input is handled by the
             // widget builder (it enters edit mode) and never reaches here.
-            Action::Activate => match ctx.focus {
+            Action::Nav(NavigationAction::Activate) => match ctx.focus {
                 Some(FocusTarget::Button(0)) => {
                     clear_input(state);
                     ActionOutcome::none()
@@ -46,6 +49,7 @@ impl TuiActionHandler<View, Action, State> for Handler {
                 Some(FocusTarget::Button(1)) => ActionOutcome::effect(TuiEffect::Quit),
                 _ => ActionOutcome::none(),
             },
+            Action::Nav(nav) => ActionOutcome::effect(nav.to_effect()),
         })
     }
 }
@@ -63,15 +67,9 @@ pub fn build() -> TuiApp<View, Action, State, Handler> {
         // Attach the text input widget - it handles enter/edit/exit and the
         // inline suggestion suffix internally.
         .canvas_textinput_widget(0)
-        // Top-level / button navigation (general mode). On the un-entered input
-        // j/k treat it as a single stop and step to the buttons.
-        .bind(modes::GENERAL, "tab", Action::FocusNext)
-        .bind(modes::GENERAL, "backtab", Action::FocusPrev)
-        .bind(modes::GENERAL, "j", Action::FocusNext)
-        .bind(modes::GENERAL, "k", Action::FocusPrev)
-        .bind(modes::GENERAL, "l", Action::FocusNext)
-        .bind(modes::GENERAL, "h", Action::FocusPrev)
-        .bind(modes::GENERAL, "enter", Action::Activate)
-        .bind(modes::GLOBAL, "ctrl+c", Action::Quit)
+        // Vim preset covers the focus line: j/k/h/l on the un-entered input
+        // (a single stop) and stepping through the buttons, Tab/Backtab,
+        // Enter to activate, Ctrl-C to quit.
+        .vim_defaults()
         .build()
 }

@@ -11,7 +11,7 @@
 // `tui.buffer`. That is the whole point — you describe intent, the runtime
 // owns the buffer state machine.
 
-use tui_pages::{prelude::*, PaneSplit};
+use tui_pages::prelude::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum View {
@@ -30,17 +30,18 @@ impl View {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
-    Open(View),         // -> TuiEffect::Navigate: open / switch to a buffer
-    NextBuffer,         // -> cycle the buffer history forward
-    PrevBuffer,         // -> cycle the buffer history backward
-    CloseBuffer,        // -> drop the active buffer
-    Split(PaneSplit),   // -> split the active pane
-    NextPane,           // -> move focus to the next pane
-    PrevPane,           // -> move focus to the previous pane
-    ClosePane,          // -> close the active pane
-    Quit,
+    /// Standard navigation actions provided by the keybinding presets
+    /// (buffer / pane cycling, splits, quit).
+    Nav(NavigationAction),
+    Open(View),
+}
+
+impl From<NavigationAction> for Action {
+    fn from(value: NavigationAction) -> Self {
+        Action::Nav(value)
+    }
 }
 
 pub type App = TuiApp<View, Action, (), Handler>;
@@ -56,17 +57,9 @@ impl TuiActionHandler<View, Action, ()> for Handler {
         _ctx: ActionContext<View>,
         _state: &mut (),
     ) -> Result<ActionOutcome<View>, Self::Error> {
-        // Each action maps to exactly one buffer/pane effect.
         let effect = match action {
             Action::Open(view) => TuiEffect::Navigate(view),
-            Action::NextBuffer => TuiEffect::NextBuffer,
-            Action::PrevBuffer => TuiEffect::PreviousBuffer,
-            Action::CloseBuffer => TuiEffect::CloseBuffer,
-            Action::Split(split) => TuiEffect::SplitPane(split),
-            Action::NextPane => TuiEffect::NextPane,
-            Action::PrevPane => TuiEffect::PreviousPane,
-            Action::ClosePane => TuiEffect::ClosePane,
-            Action::Quit => TuiEffect::Quit,
+            Action::Nav(nav) => nav.to_effect(),
         };
         Ok(ActionOutcome::effect(effect))
     }
@@ -85,21 +78,15 @@ pub fn build() -> App {
         .focus_wrap(FocusWrap::Wrap)
         .page_fn(page_spec)
         .handler(Handler)
-        // Open / switch buffers.
+        // Vim preset covers the standard navigation: next/prev/close buffer
+        // (]/[/x), next/prev/close pane (ctrl+n/ctrl+p/ctrl+w), vertical and
+        // horizontal splits (ctrl+s/ctrl+d), and quit (ctrl+c). The 1/2/3
+        // shortcuts to open a specific view are app-specific and stay below.
+        .vim_defaults()
+        .vim_navigation_defaults()
         .bind(modes::GENERAL, "1", Action::Open(View::Editor))
         .bind(modes::GENERAL, "2", Action::Open(View::Terminal))
         .bind(modes::GENERAL, "3", Action::Open(View::Docs))
-        // Cycle the buffer history.
-        .bind(modes::GENERAL, "tab", Action::NextBuffer)
-        .bind(modes::GENERAL, "shift+tab", Action::PrevBuffer)
-        .bind(modes::GENERAL, "w", Action::CloseBuffer)
-        // Split / navigate / close panes.
-        .bind(modes::GENERAL, "v", Action::Split(PaneSplit::Vertical))
-        .bind(modes::GENERAL, "s", Action::Split(PaneSplit::Horizontal))
-        .bind(modes::GENERAL, "o", Action::NextPane)
-        .bind(modes::GENERAL, "p", Action::PrevPane)
-        .bind(modes::GENERAL, "x", Action::ClosePane)
-        .bind(modes::GLOBAL, "ctrl+c", Action::Quit)
         .build();
     app.refresh_page(&());
     app

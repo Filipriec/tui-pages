@@ -20,10 +20,16 @@ pub enum Purpose {
 
 #[derive(Debug, Clone, Copy)]
 pub enum Action {
-    FocusNext,
-    FocusPrev,
-    Select,
-    Quit,
+    /// Standard navigation actions provided by the keybinding presets.
+    /// Activate is per-page — the handler decides what "enter" means for the
+    /// currently focused target (here: open a dialog / quit).
+    Nav(NavigationAction),
+}
+
+impl From<NavigationAction> for Action {
+    fn from(value: NavigationAction) -> Self {
+        Action::Nav(value)
+    }
 }
 
 #[derive(Debug)]
@@ -57,11 +63,7 @@ impl TuiActionHandler<View, Action, AppState, (), DialogData<Purpose>> for Handl
         state: &mut AppState,
     ) -> Result<ActionOutcome<View, (), DialogData<Purpose>>, Self::Error> {
         Ok(match action {
-            Action::FocusNext => ActionOutcome::effect(TuiEffect::Focus(FocusIntent::Next)),
-            Action::FocusPrev => ActionOutcome::effect(TuiEffect::Focus(FocusIntent::Prev)),
-            Action::Quit => ActionOutcome::effect(TuiEffect::Quit),
-
-            Action::Select => match ctx.focus {
+            Action::Nav(NavigationAction::Activate) => match ctx.focus {
                 // "Delete an item" — open a confirmation dialog.
                 Some(FocusTarget::Button(0)) => {
                     if let Some(first) = state.items.first() {
@@ -82,6 +84,7 @@ impl TuiActionHandler<View, Action, AppState, (), DialogData<Purpose>> for Handl
                 Some(FocusTarget::Button(1)) => ActionOutcome::effect(TuiEffect::Quit),
                 _ => ActionOutcome::none(),
             },
+            Action::Nav(nav) => ActionOutcome::effect(nav.to_effect()),
         })
     }
 }
@@ -96,10 +99,10 @@ pub fn build() -> App {
     let mut app = TuiPages::builder(View::Main)
         .page_fn(page_spec)
         .handler(Handler)
-        .bind(modes::GENERAL, "tab", Action::FocusNext)
-        .bind(modes::GENERAL, "shift+tab", Action::FocusPrev)
-        .bind(modes::GENERAL, "enter", Action::Select)
-        .bind(modes::GLOBAL, "ctrl+c", Action::Quit)
+        // Vim preset covers focus movement (tab/arrows/hjkl), activate (enter),
+        // leave section (esc), and quit (ctrl+c). The "Delete" action is the
+        // app-specific payload that opens the dialog on activate.
+        .vim_defaults()
         .build();
     app.refresh_page(&AppState::default());
     app

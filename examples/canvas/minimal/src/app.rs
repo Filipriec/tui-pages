@@ -10,10 +10,16 @@ pub enum View {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {
-    FocusNext,
-    FocusPrev,
-    Activate,
-    Quit,
+    /// Standard navigation actions provided by the keybinding presets.
+    /// Activate is per-page — the handler decides what "enter" means for the
+    /// currently focused target (here: clear form / quit).
+    Nav(NavigationAction),
+}
+
+impl From<NavigationAction> for Action {
+    fn from(value: NavigationAction) -> Self {
+        Action::Nav(value)
+    }
 }
 
 pub struct Handler;
@@ -24,14 +30,11 @@ impl TuiActionHandler<View, Action, State> for Handler {
     fn handle_action(
         &mut self,
         action: Action,
-        _ctx: ActionContext<View>,
+        ctx: ActionContext<View>,
         state: &mut State,
     ) -> Result<ActionOutcome<View>, Self::Error> {
         Ok(match action {
-            Action::Quit => ActionOutcome::effect(TuiEffect::Quit),
-            Action::FocusNext => ActionOutcome::effect(TuiEffect::Focus(FocusIntent::Next)),
-            Action::FocusPrev => ActionOutcome::effect(TuiEffect::Focus(FocusIntent::Prev)),
-            Action::Activate => match _ctx.focus {
+            Action::Nav(NavigationAction::Activate) => match ctx.focus {
                 Some(FocusTarget::Button(0)) => {
                     clear_form(state);
                     ActionOutcome::none()
@@ -39,6 +42,7 @@ impl TuiActionHandler<View, Action, State> for Handler {
                 Some(FocusTarget::Button(1)) => ActionOutcome::effect(TuiEffect::Quit),
                 _ => ActionOutcome::none(),
             },
+            Action::Nav(nav) => ActionOutcome::effect(nav.to_effect()),
         })
     }
 }
@@ -65,19 +69,10 @@ pub fn build() -> TuiApp<View, Action, State, Handler> {
         // Attach the form editor - it handles canvas actions internally
         // so they never reach our Action type.
         .canvas_form_editor(0)
-        // Navigation is a flat line of four stops — field 0, field 1, Clear, Quit.
-        // On a button (general mode) the page navigates with Tab/Enter, plus
-        // vim keys so j/k/h/l flow continues straight off the canvas: `k` on the
-        // first button re-enters the form (its last field), `j`/`l` step to the
-        // next button. Inside the canvas, `canvas_defaults` already bound j/k to
-        // field movement, and the editor hands off at the field boundary.
-        .bind(modes::GENERAL, "tab", Action::FocusNext)
-        .bind(modes::GENERAL, "backtab", Action::FocusPrev)
-        .bind(modes::GENERAL, "j", Action::FocusNext)
-        .bind(modes::GENERAL, "k", Action::FocusPrev)
-        .bind(modes::GENERAL, "l", Action::FocusNext)
-        .bind(modes::GENERAL, "h", Action::FocusPrev)
-        .bind(modes::GENERAL, "enter", Action::Activate)
-        .bind(modes::GLOBAL, "ctrl+c", Action::Quit)
+        // Vim preset covers the flat focus line (field 0, field 1, Clear, Quit):
+        // j/k/h/l plus Tab/Backtab on the page, Enter to activate, Ctrl-C to quit.
+        // Inside the canvas, `canvas_defaults` already bound j/k to field
+        // movement, and the editor hands off at the field boundary.
+        .vim_defaults()
         .build()
 }

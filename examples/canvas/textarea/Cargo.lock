@@ -834,6 +834,7 @@ dependencies = [
  "canvas",
  "crossterm",
  "ratatui",
+ "toml",
  "tracing",
 ]
 

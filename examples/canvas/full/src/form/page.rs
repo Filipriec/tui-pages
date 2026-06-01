@@ -22,7 +22,7 @@ pub fn handle(
     state: &mut AppState,
 ) -> ActionOutcome<View, Overlay, DialogData<Purpose>> {
     match action {
-        Action::Select => match ctx.focus {
+        Action::Nav(NavigationAction::Activate) => match ctx.focus {
             // Login: open a modal dialog previewing the data being posted.
             // `show_intent` turns the dialog into a focus effect; the focus
             // manager owns it until the event loop resolves it.

@@ -8,12 +8,16 @@ pub enum View {
     About,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
-    FocusNext,
-    FocusPrev,
-    Select,
-    Quit,
+    /// Standard navigation actions provided by the keybinding presets.
+    Nav(NavigationAction),
+}
+
+impl From<NavigationAction> for Action {
+    fn from(value: NavigationAction) -> Self {
+        Action::Nav(value)
+    }
 }
 
 pub type App = TuiApp<View, Action, (), Handler>;
@@ -29,21 +33,20 @@ impl TuiActionHandler<View, Action, ()> for Handler {
         ctx: ActionContext<View>,
         _state: &mut (),
     ) -> Result<ActionOutcome<View>, Self::Error> {
-        Ok(match action {
-            Action::FocusNext => ActionOutcome::effect(TuiEffect::Focus(FocusIntent::Next)),
-            Action::FocusPrev => ActionOutcome::effect(TuiEffect::Focus(FocusIntent::Prev)),
-            Action::Quit => ActionOutcome::effect(TuiEffect::Quit),
-            Action::Select => match (ctx.current_view, ctx.focus) {
+        match action {
+            // Activate is per-page — let the page decide what "enter" means
+            // for the currently focused target.
+            Action::Nav(NavigationAction::Activate) => match (ctx.current_view, ctx.focus) {
                 (View::Home, Some(FocusTarget::Button(0))) => {
-                    ActionOutcome::effect(TuiEffect::Navigate(View::About))
+                    Ok(ActionOutcome::effect(TuiEffect::Navigate(View::About)))
                 }
                 (View::About, Some(FocusTarget::Button(0))) => {
-                    ActionOutcome::effect(TuiEffect::Navigate(View::Home))
+                    Ok(ActionOutcome::effect(TuiEffect::Navigate(View::Home)))
                 }
-                (_, Some(FocusTarget::Button(1))) => ActionOutcome::effect(TuiEffect::Quit),
-                _ => ActionOutcome::none(),
+                _ => Ok(ActionOutcome::none()),
             },
-        })
+            Action::Nav(nav) => Ok(ActionOutcome::effect(nav.to_effect())),
+        }
     }
 }
 
@@ -57,10 +60,9 @@ pub fn build() -> App {
     let mut app = TuiPages::builder(View::Home)
         .page_fn(page_spec)
         .handler(Handler)
-        .bind(modes::GENERAL, "tab", Action::FocusNext)
-        .bind(modes::GENERAL, "shift+tab", Action::FocusPrev)
-        .bind(modes::GENERAL, "enter", Action::Select)
-        .bind(modes::GLOBAL, "ctrl+c", Action::Quit)
+        // Vim preset covers the full surface: focus movement (tab/arrows/hjkl),
+        // activate (enter), leave section (esc), and quit (ctrl+c).
+        .vim_defaults()
         .build();
     app.refresh_page(&());
     app

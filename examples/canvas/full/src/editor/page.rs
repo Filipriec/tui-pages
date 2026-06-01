@@ -23,7 +23,7 @@ pub fn handle(
     match action {
         // Enter on a button activates it. Enter on the textarea is handled by the
         // widget builder (it enters edit mode) and never reaches here.
-        Action::Select => match ctx.focus {
+        Action::Nav(NavigationAction::Activate) => match ctx.focus {
             Some(FocusTarget::Button(0)) => {
                 logic::clear_textarea(state);
                 ActionOutcome::none()
