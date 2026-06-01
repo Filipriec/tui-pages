@@ -1,0 +1,12 @@
+[package]
+name = "canvas_minimal_suggestions_input"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[dependencies]
+tui-pages = { path = "../../..", features = ["canvas"] }
+crossterm = "0.28"
+ratatui = "0.29"
+anyhow = "1"
