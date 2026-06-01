@@ -173,7 +173,10 @@ where
 
 pub trait CanvasTextInputHost {
     fn mode(&self) -> AppMode;
+    fn text(&self) -> String;
     fn input_key(&mut self, key: KeyEvent) -> CanvasTextWidgetOutcome;
+    fn set_suggestion_suffix(&mut self, suffix: String);
+    fn clear_suggestion_suffix(&mut self);
     fn exit_edit_mode(&mut self);
     fn dispatch_canvas_action(&mut self, action: CanvasAction) -> HostActionOutcome;
 }
@@ -186,8 +189,20 @@ where
         self.editor().mode()
     }
 
+    fn text(&self) -> String {
+        TextInputState::text(self)
+    }
+
     fn input_key(&mut self, key: KeyEvent) -> CanvasTextWidgetOutcome {
         dispatch_text_input_key(self, key)
+    }
+
+    fn set_suggestion_suffix(&mut self, suffix: String) {
+        TextInputState::set_suggestion_suffix(self, suffix);
+    }
+
+    fn clear_suggestion_suffix(&mut self) {
+        TextInputState::clear_suggestion_suffix(self);
     }
 
     fn exit_edit_mode(&mut self) {
@@ -217,6 +232,14 @@ pub trait CanvasWidgetState {
     }
 
     fn canvas_textinput_entered(&mut self, _focus_index: usize) -> Option<&mut bool> {
+        None
+    }
+
+    fn canvas_textinput_suggestion_suffix(
+        &mut self,
+        _focus_index: usize,
+        _text: &str,
+    ) -> Option<String> {
         None
     }
 }
@@ -706,6 +729,24 @@ fn pipeline_hook_outcome<V, A, O, M>(
     }
 }
 
+fn refresh_textinput_suggestion_suffix<S>(state: &mut S, focus_index: usize)
+where
+    S: CanvasWidgetState,
+{
+    let Some(text) = state.canvas_textinput(focus_index).map(|input| input.text()) else {
+        return;
+    };
+    let suffix = state.canvas_textinput_suggestion_suffix(focus_index, &text);
+    let Some(input) = state.canvas_textinput(focus_index) else {
+        return;
+    };
+    if let Some(suffix) = suffix {
+        input.set_suggestion_suffix(suffix);
+    } else {
+        input.clear_suggestion_suffix();
+    }
+}
+
 pub(crate) fn dispatch_canvas_key_hook<V, A, S, O, M>(
     kind: &mut KeyHookKind,
     key: KeyEvent,
@@ -838,6 +879,7 @@ where
                         .input_key(normalize_shift(key))
                     {
                         CanvasTextWidgetOutcome::Handled => {
+                            refresh_textinput_suggestion_suffix(state, *focus_index);
                             hook_status_outcome(TuiPagesStatus::TextHandled)
                         }
                         CanvasTextWidgetOutcome::Submitted => {

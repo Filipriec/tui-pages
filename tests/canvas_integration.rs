@@ -769,6 +769,17 @@ impl canvas::CanvasWidgetState for WidgetState {
             _ => None,
         }
     }
+
+    fn canvas_textinput_suggestion_suffix(
+        &mut self,
+        focus_index: usize,
+        text: &str,
+    ) -> Option<String> {
+        match (focus_index, text) {
+            (0, "a") => Some("dmin".to_string()),
+            _ => None,
+        }
+    }
 }
 
 struct WidgetHandler;
@@ -891,6 +902,29 @@ fn canvas_textinput_widget_builder_dispatches_raw_text_and_submit_focus() {
     assert_eq!(state.textinput.text(), "A");
     assert!(!state.textinput_entered);
     assert_eq!(app.focus.current(), Some(FocusTarget::Button(0)));
+}
+
+#[test]
+fn canvas_textinput_widget_builder_updates_inline_suggestion_suffix() {
+    let mut app = TuiPages::<View, WidgetAction, WidgetState>::builder(View::Form)
+        .page_fn(widget_page)
+        .handler(WidgetHandler)
+        .canvas_textinput_widget(0)
+        .build();
+    let mut state = WidgetState::default();
+    app.refresh_page(&state);
+
+    app.handle_key(key(KeyCode::Enter), &mut state).unwrap();
+    app.handle_key(key(KeyCode::Char('i')), &mut state).unwrap();
+    app.handle_key(key(KeyCode::Char('a')), &mut state).unwrap();
+
+    assert_eq!(state.textinput.text(), "a");
+    assert_eq!(state.textinput.suggestion_suffix(), Some("dmin"));
+
+    app.handle_key(key(KeyCode::Tab), &mut state).unwrap();
+
+    assert_eq!(state.textinput.text(), "admin");
+    assert_eq!(state.textinput.suggestion_suffix(), None);
 }
 
 // --- Full-surface re-export proof ---------------------------------------------
