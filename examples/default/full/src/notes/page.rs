@@ -21,7 +21,7 @@ pub fn handle(
     state: &mut AppState,
 ) -> ActionOutcome<View, Overlay> {
     match action {
-        Action::Select => match &ctx.focus {
+        Action::Nav(NavigationAction::Activate) => match &ctx.focus {
             Some(FocusTarget::SectionItem {
                 section: logic::SECTION,
                 item,

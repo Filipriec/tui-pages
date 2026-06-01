@@ -15,7 +15,7 @@ pub fn handle(
     _state: &mut AppState,
 ) -> ActionOutcome<View, Overlay> {
     match action {
-        Action::Select => match &ctx.focus {
+        Action::Nav(NavigationAction::Activate) => match &ctx.focus {
             Some(FocusTarget::Button(i)) => match logic::destination(*i) {
                 Some(view) => ActionOutcome::effect(TuiEffect::Navigate(view)),
                 None => ActionOutcome::none(),

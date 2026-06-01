@@ -3,7 +3,6 @@
 // its own folder (home/, notes/, help/).
 
 use tui_pages::prelude::*;
-use tui_pages::PaneSplit;
 
 use crate::{help, home, notes};
 
@@ -19,29 +18,21 @@ pub enum View {
     Help,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
-    FocusNext,
-    FocusPrev,
-    Escape,
-
+    /// Standard navigation actions provided by the keybinding presets
+    /// (focus movement, leave section, quit, buffer/pane splits, etc.).
+    Nav(NavigationAction),
     GotoHome,
     GotoNotes,
     GotoHelp,
-
-    NextBuffer,
-    PrevBuffer,
-    CloseBuffer,
-
-    SplitVertical,
-    SplitHorizontal,
-    NextPane,
-    ClosePane,
-
     OpenPalette,
-    Quit,
+}
 
-    Select,
+impl From<NavigationAction> for Action {
+    fn from(value: NavigationAction) -> Self {
+        Action::Nav(value)
+    }
 }
 
 #[derive(Debug, Default)]
@@ -81,25 +72,15 @@ impl TuiActionHandler<View, Action, AppState, Overlay> for Handler {
 
 fn global_action(action: Action, state: &mut AppState) -> Option<ActionOutcome<View, Overlay>> {
     let outcome = match action {
-        Action::FocusNext => ActionOutcome::effect(TuiEffect::Focus(FocusIntent::Next)),
-        Action::FocusPrev => ActionOutcome::effect(TuiEffect::Focus(FocusIntent::Prev)),
-        Action::Escape => ActionOutcome::effect(TuiEffect::Focus(FocusIntent::LeaveSection)),
-
+        Action::Nav(nav) => match nav {
+            // Activate is per-page — let the page decide what "enter" means
+            // for the currently focused target.
+            NavigationAction::Activate => return None,
+            nav => ActionOutcome::effect(nav.to_effect()),
+        },
         Action::GotoHome => ActionOutcome::effect(TuiEffect::Navigate(View::Home)),
         Action::GotoNotes => ActionOutcome::effect(TuiEffect::Navigate(View::Notes)),
         Action::GotoHelp => ActionOutcome::effect(TuiEffect::Navigate(View::Help)),
-
-        Action::NextBuffer => ActionOutcome::effect(TuiEffect::NextBuffer),
-        Action::PrevBuffer => ActionOutcome::effect(TuiEffect::PreviousBuffer),
-        Action::CloseBuffer => ActionOutcome::effect(TuiEffect::CloseBuffer),
-
-        Action::SplitVertical => ActionOutcome::effect(TuiEffect::SplitPane(PaneSplit::Vertical)),
-        Action::SplitHorizontal => {
-            ActionOutcome::effect(TuiEffect::SplitPane(PaneSplit::Horizontal))
-        }
-        Action::NextPane => ActionOutcome::effect(TuiEffect::NextPane),
-        Action::ClosePane => ActionOutcome::effect(TuiEffect::ClosePane),
-
         Action::OpenPalette => {
             state.palette_open = true;
             state.palette_input.clear();
@@ -107,11 +88,6 @@ fn global_action(action: Action, state: &mut AppState) -> Option<ActionOutcome<V
                 Overlay::CommandBar,
             ))))
         }
-
-        Action::Quit => ActionOutcome::effect(TuiEffect::Quit),
-
-        // Select depends on where you are — let the page decide.
-        Action::Select => return None,
     };
     Some(outcome)
 }
@@ -132,30 +108,24 @@ pub fn build() -> App {
     let mut app = TuiPages::builder(View::Home)
         .page_fn(page_spec)
         .handler(Handler)
-        .bind(modes::GENERAL, "tab", Action::FocusNext)
-        .bind(modes::GENERAL, "shift+tab", Action::FocusPrev)
-        .bind(modes::GENERAL, "j", Action::FocusNext)
-        .bind(modes::GENERAL, "k", Action::FocusPrev)
-        .bind(modes::GENERAL, "down", Action::FocusNext)
-        .bind(modes::GENERAL, "up", Action::FocusPrev)
-        .bind(modes::GENERAL, "enter", Action::Select)
-        .bind(modes::GENERAL, "esc", Action::Escape)
+        // Vim preset covers the standard navigation: focus movement (j/k/l/h,
+        // arrows, tab), activate (enter), leave section (esc), quit (ctrl+c),
+        // and the workspace operations (next/prev/close buffer, next/close
+        // pane, vertical/horizontal split). Anything the preset doesn't cover
+        // is bound explicitly below.
+        .vim_defaults()
+        .vim_navigation_defaults()
+        // App-specific bindings: g h / g n / g ? switch views, : opens the
+        // command palette. The preset has no notion of either, so they live
+        // here.
         .bind(modes::GENERAL, "g h", Action::GotoHome)
         .bind(modes::GENERAL, "g n", Action::GotoNotes)
         .bind(modes::GENERAL, "g ?", Action::GotoHelp)
-        .bind(modes::GENERAL, "]", Action::NextBuffer)
-        .bind(modes::GENERAL, "[", Action::PrevBuffer)
-        .bind(modes::GENERAL, "x", Action::CloseBuffer)
-        .bind(modes::GENERAL, "ctrl+s", Action::SplitVertical)
-        .bind(modes::GENERAL, "ctrl+d", Action::SplitHorizontal)
-        .bind(modes::GENERAL, "ctrl+n", Action::NextPane)
-        .bind(modes::GENERAL, "ctrl+w", Action::ClosePane)
         .bind(modes::GENERAL, ":", Action::OpenPalette)
-        .bind(modes::GLOBAL, "ctrl+c", Action::Quit)
         .command("Go to Home", ["h", "home"], Action::GotoHome)
         .command("Go to Notes", ["n", "notes"], Action::GotoNotes)
         .command("Go to Help", ["?", "help"], Action::GotoHelp)
-        .command("Quit", ["q", "quit"], Action::Quit)
+        .command("Quit", ["q", "quit"], Action::Nav(NavigationAction::Quit))
         .build();
 
     app.refresh_page(&AppState::default());
