@@ -14,8 +14,11 @@ pub mod command;
 pub mod canvas;
 #[cfg(feature = "dialog")]
 pub mod dialog;
+pub mod emacs;
 pub mod focus;
+pub mod helix;
 pub mod input;
+pub mod keybind;
 pub mod navigation;
 pub mod runtime;
 pub mod terminal;
@@ -39,13 +42,22 @@ pub use crate::canvas::{
     update_cursor_style_for_mode, BoundaryExit as CanvasBoundaryExit, CanvasAction,
     CanvasDispatchOutcome, CanvasKeyDispatchOutcome, CanvasTextWidgetOutcome,
 };
+pub use emacs::{
+    bind_emacs_general_defaults, bind_emacs_global_defaults, bind_emacs_navigation_defaults,
+};
 pub use focus::{
     FocusController, FocusIntent, FocusManager, FocusQuery, FocusTarget, FocusWrap, Focusable,
     OverlayFocus, PageFocusBuilder,
 };
+pub use helix::{
+    bind_helix_general_defaults, bind_helix_global_defaults, bind_helix_navigation_defaults,
+};
 pub use input::{
     parse_binding, parse_key, try_parse_binding, try_parse_key, ChordSequenceTracker, InputHint,
     InputPipeline, InputRegistry, KeyChord, KeyMap, ParseKeyError, PipelineResponse,
+};
+pub use keybind::{
+    navigation_action_outcome, try_standard_navigation_action, NavigationAction,
 };
 pub use navigation::{
     BufferState, NavigationCoordinator, NavigationEvent, NavigationResult, NavigationRouter,
@@ -57,6 +69,10 @@ pub use runtime::{
     TuiPagesStatus,
 };
 pub use terminal::{enter as enter_terminal, TerminalGuard};
+pub use vim::{
+    bind_vim_general_defaults, bind_vim_global_defaults, bind_vim_navigation_defaults,
+    try_standard_vim_action, vim_action_outcome, VimAction,
+};
 
 /// Everything a typical application needs in one glob import.
 ///
@@ -73,9 +89,14 @@ pub mod prelude {
     pub use crate::terminal;
     pub use crate::{
         modes, parse_binding, try_parse_binding, ActionContext, ActionOutcome, FocusController,
-        FocusIntent, FocusManager, FocusQuery, FocusTarget, FocusWrap, KeyChord, ModeId, PageFn,
-        PageFocusBuilder, PageProvider, PageSpec, ParseKeyError, TerminalGuard, TuiActionHandler,
-        TuiApp, TuiEffect, TuiPages, TuiPagesOutput, TuiPagesStatus,
+        FocusIntent, FocusManager, FocusQuery, FocusTarget, FocusWrap, KeyChord, ModeId,
+        NavigationAction, PageFn, PageFocusBuilder, PageProvider, PageSpec, ParseKeyError,
+        TerminalGuard, TuiActionHandler, TuiApp, TuiEffect, TuiPages, TuiPagesOutput,
+        TuiPagesStatus, VimAction,
+    };
+    pub use crate::{
+        navigation_action_outcome, try_standard_navigation_action, try_standard_vim_action,
+        vim_action_outcome,
     };
 
     #[cfg(feature = "dialog")]
