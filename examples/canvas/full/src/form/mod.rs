@@ -1,3 +1,7 @@
-pub mod logic;
-pub mod page;
+// Form page: page.rs wires it to tui-pages, logic.rs holds the button labels and
+// the Clear side effect, ui.rs draws the FormEditor and the buttons.
+mod logic;
+mod page;
 pub mod ui;
+
+pub use page::{handle, page_spec};

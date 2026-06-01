@@ -1,36 +1,39 @@
-use tui_pages::canvas;
 use tui_pages::prelude::*;
 
 use super::logic;
-use crate::app::{Action, AppState, View};
+use crate::app::{Action, AppState, Overlay, Purpose, View};
 
-pub fn page_spec(state: &AppState, focus: Option<&FocusTarget>) -> PageSpec {
-    let spec = PageSpec::new().focus(PageFocusBuilder::new().canvas_field(0).button(0));
-    if matches!(focus, Some(FocusTarget::Button(0))) {
-        spec
-    } else {
-        spec.canvas_editor(&state.form)
-    }
+pub fn page_spec(_state: &AppState) -> PageSpec<Overlay> {
+    // Two canvas fields for the form, then the three buttons:
+    // [CanvasField(0), CanvasField(1), Button(0), Button(1), Button(2)]. The
+    // editor still owns movement *between* its two fields; focus collapses the
+    // canvas targets into one stop and hands off at the boundary.
+    PageSpec::new().focus(
+        PageFocusBuilder::new()
+            .canvas_fields(2)
+            .button(0)
+            .button(1)
+            .button(2),
+    )
 }
 
 pub fn handle(
     action: Action,
-    ctx: &ActionContext<View>,
+    ctx: &ActionContext<View, Overlay>,
     state: &mut AppState,
-) -> ActionOutcome<View> {
+) -> ActionOutcome<View, Overlay, DialogData<Purpose>> {
     match action {
-        Action::Canvas(action) => match canvas::dispatch_action(&mut state.form, action) {
-            canvas::CanvasDispatchOutcome::Focus(intent) => {
-                ActionOutcome::effect(TuiEffect::Focus(intent))
-            }
-            canvas::CanvasDispatchOutcome::Applied(result) => {
-                logic::recompute_total(state);
-                state.message = logic::message_for_result(result);
-                ActionOutcome::none()
-            }
-        },
         Action::Select => match ctx.focus {
-            Some(FocusTarget::Button(0)) => ActionOutcome::effect(TuiEffect::Navigate(View::Notes)),
+            // Login: open a modal dialog previewing the data being posted.
+            // `show_intent` turns the dialog into a focus effect; the focus
+            // manager owns it until the event loop resolves it.
+            Some(FocusTarget::Button(0)) => {
+                ActionOutcome::effect(TuiEffect::Focus(logic::login_dialog(state).show_intent()))
+            }
+            Some(FocusTarget::Button(1)) => {
+                ActionOutcome::effect(TuiEffect::Navigate(View::Editor))
+            }
+            Some(FocusTarget::Button(2)) => ActionOutcome::effect(TuiEffect::Navigate(View::Help)),
             _ => ActionOutcome::none(),
         },
         _ => ActionOutcome::none(),
