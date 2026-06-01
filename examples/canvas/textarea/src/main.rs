@@ -7,11 +7,14 @@
 //! the runtime (move the cursor between lines, `i` to insert), INSERT hands raw
 //! keys to the textarea's full editor (newlines, joins, wrapping), and `Esc`
 //! steps back out (INSERT -> NORMAL -> top-level stop).
+//!
+//! The `canvas_textarea_widget` builder handles enter/edit/exit flow internally,
+//! so INSERT mode handling is now in the builder. This file only handles rendering.
 
 mod app;
 
 use anyhow::Result;
-use crossterm::event::{Event, KeyCode, KeyModifiers};
+use crossterm::event::Event;
 use ratatui::layout::{Alignment, Constraint, Layout};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::{Block, Borders, Paragraph};
@@ -23,7 +26,7 @@ use tui_pages::prelude::*;
 /// entered (selected for inner navigation) or just a top-level focus stop.
 pub struct State {
     pub body: canvas::TextAreaState<canvas::TextAreaProvider>,
-    pub in_textarea: bool,
+    pub entered: bool,
 }
 
 impl Default for State {
@@ -34,7 +37,7 @@ impl Default for State {
         body.use_wrap();
         Self {
             body,
-            in_textarea: false,
+            entered: false,
         }
     }
 }
@@ -45,20 +48,11 @@ pub fn clear_textarea(state: &mut State) {
     let mut body = canvas::TextAreaState::from_text("");
     body.use_wrap();
     state.body = body;
+    state.entered = false;
 }
 
 /// The two buttons below the textarea.
 const BUTTON_LABELS: [&str; 2] = ["Clear", "Quit"];
-
-/// Clear a lone `Shift` modifier on character keys so the textarea's
-/// modifier-free insert path accepts capitals and shifted symbols. Ctrl/Alt
-/// combos (real shortcuts) are left untouched.
-fn normalize_shift(mut key: crossterm::event::KeyEvent) -> crossterm::event::KeyEvent {
-    if matches!(key.code, KeyCode::Char(_)) && key.modifiers == KeyModifiers::SHIFT {
-        key.modifiers = KeyModifiers::NONE;
-    }
-    key
-}
 
 fn mode_label(mode: canvas::AppMode) -> &'static str {
     match mode {
@@ -82,7 +76,7 @@ fn render(
     state: &mut State,
 ) {
     let rows = Layout::vertical([
-        Constraint::Min(3),    // the textarea
+        Constraint::Min(3),     // the textarea
         Constraint::Length(3), // the two buttons
     ])
     .split(frame.area());
@@ -151,40 +145,19 @@ fn main() -> Result<()> {
     loop {
         let current = tui.focus.current();
         let on_textarea = matches!(&current, Some(FocusTarget::CanvasField(_)));
-        // Leaving the textarea (focus moved to a button) always un-enters it, so
-        // coming back lands on the top-level stop rather than back inside.
-        if !on_textarea {
-            state.in_textarea = false;
-        }
         let focused_button = match &current {
             Some(FocusTarget::Button(index)) => Some(*index),
             _ => None,
         };
-        let entered = on_textarea && state.in_textarea;
         let mode = state.body.mode();
-        let editing = entered && mode == canvas::AppMode::Edit;
 
-        terminal.draw(|frame| render(frame, focused_button, on_textarea, entered, mode, &mut state))?;
+        terminal.draw(|frame| render(frame, focused_button, on_textarea, state.entered, mode, &mut state))?;
 
         let Event::Key(key) = crossterm::event::read()? else {
             continue;
         };
-
-        // INSERT mode (entered): the textarea owns the keys. Esc returns to
-        // NORMAL; Ctrl+C still quits. Everything else flows through the runtime.
-        if editing {
-            match (key.code, key.modifiers) {
-                (KeyCode::Char('c'), KeyModifiers::CONTROL) => break,
-                (KeyCode::Esc, _) => {
-                    let _ = state.body.exit_edit_mode();
-                }
-                _ => {
-                    let _ = state.body.input(normalize_shift(key));
-                }
-            }
-            continue;
-        }
-
+        // All key handling (including INSERT mode) is now done by the
+        // canvas_textarea_widget builder hook in the runtime.
         if tui.handle_key(key, &mut state)?.quit_requested {
             break;
         }

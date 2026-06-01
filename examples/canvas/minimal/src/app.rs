@@ -1,7 +1,6 @@
 //! Everything that talks to `tui-pages`
 
 use crate::{clear_form, State};
-use tui_pages::canvas;
 use tui_pages::prelude::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -11,17 +10,10 @@ pub enum View {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {
-    Canvas(canvas::CanvasAction),
     FocusNext,
     FocusPrev,
     Activate,
     Quit,
-}
-
-impl From<canvas::CanvasAction> for Action {
-    fn from(action: canvas::CanvasAction) -> Self {
-        Self::Canvas(action)
-    }
 }
 
 pub struct Handler;
@@ -32,14 +24,14 @@ impl TuiActionHandler<View, Action, State> for Handler {
     fn handle_action(
         &mut self,
         action: Action,
-        ctx: ActionContext<View>,
+        _ctx: ActionContext<View>,
         state: &mut State,
     ) -> Result<ActionOutcome<View>, Self::Error> {
         Ok(match action {
             Action::Quit => ActionOutcome::effect(TuiEffect::Quit),
             Action::FocusNext => ActionOutcome::effect(TuiEffect::Focus(FocusIntent::Next)),
             Action::FocusPrev => ActionOutcome::effect(TuiEffect::Focus(FocusIntent::Prev)),
-            Action::Activate => match ctx.focus {
+            Action::Activate => match _ctx.focus {
                 Some(FocusTarget::Button(0)) => {
                     clear_form(state);
                     ActionOutcome::none()
@@ -47,20 +39,12 @@ impl TuiActionHandler<View, Action, State> for Handler {
                 Some(FocusTarget::Button(1)) => ActionOutcome::effect(TuiEffect::Quit),
                 _ => ActionOutcome::none(),
             },
-            // Hand a typed canvas action to the editor and translate its result:
-            // a boundary exit becomes a focus move, anything else is absorbed.
-            Action::Canvas(action) => match canvas::dispatch_action(&mut state.editor, action) {
-                canvas::CanvasDispatchOutcome::Focus(intent) => {
-                    ActionOutcome::effect(TuiEffect::Focus(intent))
-                }
-                canvas::CanvasDispatchOutcome::Applied(_) => ActionOutcome::none(),
-            },
         })
     }
 }
 
-fn page_spec(_view: &View, state: &State, focus: Option<&FocusTarget>) -> PageSpec {
-    let spec = PageSpec::new().focus(
+fn page_spec(_view: &View, _state: &State, _focus: Option<&FocusTarget>) -> PageSpec {
+    PageSpec::new().focus(
         PageFocusBuilder::new()
             // Register one CanvasField per editor field so the two form fields
             // are explicit in the focus list: [CanvasField(0), CanvasField(1),
@@ -71,23 +55,17 @@ fn page_spec(_view: &View, state: &State, focus: Option<&FocusTarget>) -> PageSp
             .canvas_fields(2)
             .button(0)
             .button(1),
-    );
-    // On a button the page navigates with general-mode keys; inside the canvas
-    // the editor owns the keys, so mirror its mode onto the page spec.
-    if matches!(focus, Some(FocusTarget::Button(_))) {
-        spec
-    } else {
-        spec.canvas_editor(&state.editor)
-    }
+    )
 }
 
 pub fn build() -> TuiApp<View, Action, State, Handler> {
     TuiPages::builder(View::Form)
         .page_fn(page_spec)
         .handler(Handler)
-        // Default FocusWrap::Clamp: navigation is a flat line of four stops —
-        // field 0, field 1, Clear, Quit — that stops at each end (no wrap).
-        .canvas_defaults()
+        // Attach the form editor - it handles canvas actions internally
+        // so they never reach our Action type.
+        .canvas_form_editor(|state: &mut State| &mut state.editor)
+        // Navigation is a flat line of four stops — field 0, field 1, Clear, Quit.
         // On a button (general mode) the page navigates with Tab/Enter, plus
         // vim keys so j/k/h/l flow continues straight off the canvas: `k` on the
         // first button re-enters the form (its last field), `j`/`l` step to the
