@@ -1,0 +1,19 @@
+[general]
+mode = "general"
+focus_next = ["ctrl+n", "ctrl+f", "down", "right", "tab"]
+focus_prev = ["ctrl+p", "ctrl+b", "up", "left", "shift+tab", "backtab"]
+activate = ["enter"]
+leave_section = ["esc", "ctrl+g"]
+
+[global]
+mode = "global"
+quit = ["ctrl+x ctrl+c"]
+
+[navigation]
+mode = "general"
+next_pane = ["ctrl+x o"]
+close_pane = ["ctrl+x 0"]
+split_horizontal = ["ctrl+x 2"]
+split_vertical = ["ctrl+x 3"]
+prev_buffer = ["ctrl+x left"]
+next_buffer = ["ctrl+x right"]

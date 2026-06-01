@@ -16,6 +16,7 @@ pub mod canvas;
 pub mod dialog;
 pub mod focus;
 pub mod input;
+pub mod keybindings;
 pub mod navigation;
 pub mod runtime;
 pub mod terminal;
@@ -46,6 +47,15 @@ pub use input::{
     parse_binding, parse_key, try_parse_binding, try_parse_key, ChordSequenceTracker, InputHint,
     InputPipeline, InputRegistry, KeyChord, KeyMap, ParseKeyError, PipelineResponse,
 };
+pub use keybindings::{
+    bind_emacs_general_defaults, bind_emacs_global_defaults, bind_emacs_navigation_defaults,
+    bind_helix_general_defaults, bind_helix_global_defaults, bind_helix_navigation_defaults,
+    bind_vim_general_defaults, bind_vim_global_defaults, bind_vim_navigation_defaults,
+    navigation_action_outcome, apply_navigation_preset_toml, remap_navigation_preset_toml,
+    try_standard_navigation_action, try_standard_vim_action, vim_action_outcome,
+    NavigationAction, NavigationPreset, NavigationPresetBinding, NavigationPresetError,
+    NavigationPresetSection, VimAction,
+};
 pub use navigation::{
     BufferState, NavigationCoordinator, NavigationEvent, NavigationResult, NavigationRouter,
     PaneId, PaneSession, PaneSplit, ViewBuffer, WorkspaceState,
@@ -72,9 +82,14 @@ pub mod prelude {
     pub use crate::terminal;
     pub use crate::{
         modes, parse_binding, try_parse_binding, ActionContext, ActionOutcome, FocusController,
-        FocusIntent, FocusManager, FocusQuery, FocusTarget, FocusWrap, KeyChord, ModeId, PageFn,
-        PageFocusBuilder, PageProvider, PageSpec, ParseKeyError, TerminalGuard, TuiActionHandler,
-        TuiApp, TuiEffect, TuiPages, TuiPagesOutput, TuiPagesStatus,
+        FocusIntent, FocusManager, FocusQuery, FocusTarget, FocusWrap, KeyChord, ModeId,
+        NavigationAction, NavigationPreset, NavigationPresetError, PageFn, PageFocusBuilder,
+        PageProvider, PageSpec, ParseKeyError, TerminalGuard, TuiActionHandler, TuiApp,
+        TuiEffect, TuiPages, TuiPagesOutput, TuiPagesStatus, VimAction,
+    };
+    pub use crate::{
+        apply_navigation_preset_toml, navigation_action_outcome, remap_navigation_preset_toml,
+        try_standard_navigation_action, try_standard_vim_action, vim_action_outcome,
     };
 
     #[cfg(feature = "dialog")]

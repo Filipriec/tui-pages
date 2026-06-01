@@ -7,3 +7,4 @@ finds.md
 plans/
 **/target/
 *.md
+!src/keybindings/README.md

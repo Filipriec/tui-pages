@@ -1,0 +1,21 @@
+[general]
+mode = "general"
+focus_next = ["j", "l", "down", "right", "end", "tab"]
+focus_prev = ["h", "k", "left", "up", "home", "shift+tab", "backtab"]
+activate = ["enter"]
+leave_section = ["esc"]
+
+[global]
+mode = "global"
+quit = ["ctrl+c"]
+
+[navigation]
+mode = "general"
+next_buffer = ["g n"]
+prev_buffer = ["g p"]
+split_vertical = ["ctrl+w v"]
+split_horizontal = ["ctrl+w s"]
+close_pane = ["ctrl+w q"]
+next_pane = ["ctrl+w w"]
+focus_prev = ["ctrl+w h", "ctrl+w k"]
+focus_next = ["ctrl+w j", "ctrl+w l"]
