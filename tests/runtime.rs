@@ -1,7 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use tui_pages::{
-    modes, ActionContext, ActionOutcome, FocusIntent, FocusTarget, KeyChord, PageSpec,
-    TuiActionHandler, TuiEffect, TuiPages, TuiPagesStatus,
+    modes, navigation_action_outcome, ActionContext, ActionOutcome, FocusIntent, FocusTarget,
+    KeyChord, NavigationAction, PageSpec, TuiActionHandler, TuiEffect, TuiPages, TuiPagesStatus,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -15,6 +15,13 @@ enum Action {
     Next,
     Settings,
     Quit,
+    Nav(NavigationAction),
+}
+
+impl From<NavigationAction> for Action {
+    fn from(value: NavigationAction) -> Self {
+        Action::Nav(value)
+    }
 }
 
 #[derive(Default)]
@@ -40,6 +47,7 @@ impl TuiActionHandler<View, Action, State> for Handler {
             Action::Next => ActionOutcome::effect(TuiEffect::Focus(FocusIntent::Next)),
             Action::Settings => ActionOutcome::effect(TuiEffect::Navigate(View::Settings)),
             Action::Quit => ActionOutcome::effect(TuiEffect::Quit),
+            Action::Nav(nav) => navigation_action_outcome(nav),
         })
     }
 
@@ -52,6 +60,39 @@ impl TuiActionHandler<View, Action, State> for Handler {
         state.typed.push(chord);
         Ok(ActionOutcome::none())
     }
+}
+
+#[test]
+fn runtime_remap_navigation_preset_toml_changes_live_keymap_and_resets_sequence() {
+    let pages = |_view: &View, _state: &State, _focus: Option<&FocusTarget>| {
+        PageSpec::new()
+            .focus_targets(vec![FocusTarget::Button(0)])
+            .modes(vec![modes::GENERAL, modes::GLOBAL])
+    };
+
+    let mut tui = TuiPages::<View, Action, State>::builder(View::Home)
+        .pages(pages)
+        .handler(Handler)
+        .helix_navigation_defaults()
+        .build();
+    let mut state = State::default();
+    tui.refresh_page(&state);
+
+    let output = tui.handle_key(key(KeyCode::Char('g')), &mut state).unwrap();
+    assert!(matches!(output.status, TuiPagesStatus::Waiting(_)));
+    assert!(tui.input.active());
+
+    let remap = r#"
+[general]
+mode = "general"
+next_buffer = ["n"]
+"#;
+    tui.remap_navigation_preset_toml(remap).unwrap();
+    assert!(!tui.input.active());
+
+    let output = tui.handle_key(key(KeyCode::Char('n')), &mut state).unwrap();
+    assert_eq!(output.status, TuiPagesStatus::ActionHandled);
+    assert_eq!(state.handled, vec![Action::Nav(NavigationAction::NextBuffer)]);
 }
 
 fn key(code: KeyCode) -> KeyEvent {

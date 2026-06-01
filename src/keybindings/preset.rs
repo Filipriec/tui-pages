@@ -1,6 +1,6 @@
 use crate::input::{try_parse_binding, InputRegistry, KeyMap, ParseKeyError};
 use crate::runtime::{TuiPages, TuiPagesBuilder};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use toml::Value;
 use tracing::warn;
@@ -28,6 +28,14 @@ pub struct NavigationPresetBinding {
 #[derive(Debug)]
 pub enum NavigationPresetError {
     Toml(toml::de::Error),
+    Issues(Vec<NavigationPresetIssue>),
+    UnknownSection {
+        section: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NavigationPresetIssue {
     RootNotTable,
     SectionNotTable {
         section: String,
@@ -47,44 +55,75 @@ pub enum NavigationPresetError {
         section: String,
         action: String,
     },
-    UnknownSection {
-        section: String,
-    },
     InvalidBinding {
         section: String,
         action: NavigationAction,
         binding: String,
         source: ParseKeyError,
     },
+    DuplicateBinding {
+        section: String,
+        mode: String,
+        binding: String,
+        first_action: NavigationAction,
+        second_action: NavigationAction,
+    },
+    ExistingBindingConflict {
+        section: String,
+        mode: String,
+        binding: String,
+        action: NavigationAction,
+        existing_action: Option<NavigationAction>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NavigationConflictPolicy {
+    Allow,
+    Deny,
 }
 
 impl fmt::Display for NavigationPresetError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             NavigationPresetError::Toml(err) => write!(f, "invalid TOML: {err}"),
-            NavigationPresetError::RootNotTable => write!(f, "keybinding preset must be a TOML table"),
-            NavigationPresetError::SectionNotTable { section } => {
+            NavigationPresetError::Issues(issues) => {
+                write!(f, "{} keybinding preset issue(s)", issues.len())?;
+                for issue in issues {
+                    write!(f, "; {issue}")?;
+                }
+                Ok(())
+            }
+            NavigationPresetError::UnknownSection { section } => {
+                write!(f, "unknown keybinding section {section:?}")
+            }
+        }
+    }
+}
+
+impl fmt::Display for NavigationPresetIssue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            NavigationPresetIssue::RootNotTable => write!(f, "keybinding preset must be a TOML table"),
+            NavigationPresetIssue::SectionNotTable { section } => {
                 write!(f, "keybinding section {section:?} must be a table")
             }
-            NavigationPresetError::ModeNotString { section } => {
+            NavigationPresetIssue::ModeNotString { section } => {
                 write!(f, "keybinding section {section:?} has a non-string mode")
             }
-            NavigationPresetError::UnknownAction { section, action } => {
+            NavigationPresetIssue::UnknownAction { section, action } => {
                 write!(f, "unknown navigation action {action:?} in section {section:?}")
             }
-            NavigationPresetError::BindingsNotStringList { section, action } => {
+            NavigationPresetIssue::BindingsNotStringList { section, action } => {
                 write!(
                     f,
                     "bindings for action {action:?} in section {section:?} must be a string or string list"
                 )
             }
-            NavigationPresetError::EmptyBindings { section, action } => {
+            NavigationPresetIssue::EmptyBindings { section, action } => {
                 write!(f, "action {action:?} in section {section:?} has no bindings")
             }
-            NavigationPresetError::UnknownSection { section } => {
-                write!(f, "unknown keybinding section {section:?}")
-            }
-            NavigationPresetError::InvalidBinding {
+            NavigationPresetIssue::InvalidBinding {
                 section,
                 action,
                 binding,
@@ -96,6 +135,36 @@ impl fmt::Display for NavigationPresetError {
                     action.as_name()
                 )
             }
+            NavigationPresetIssue::DuplicateBinding {
+                section,
+                mode,
+                binding,
+                first_action,
+                second_action,
+            } => {
+                write!(
+                    f,
+                    "binding {binding:?} in mode {mode:?}, section {section:?} is assigned to both {} and {}",
+                    first_action.as_name(),
+                    second_action.as_name()
+                )
+            }
+            NavigationPresetIssue::ExistingBindingConflict {
+                section,
+                mode,
+                binding,
+                action,
+                existing_action,
+            } => {
+                let existing = existing_action
+                    .map(NavigationAction::as_name)
+                    .unwrap_or("an existing application action");
+                write!(
+                    f,
+                    "binding {binding:?} for {} in mode {mode:?}, section {section:?} conflicts with {existing}",
+                    action.as_name()
+                )
+            }
         }
     }
 }
@@ -104,7 +173,6 @@ impl std::error::Error for NavigationPresetError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             NavigationPresetError::Toml(err) => Some(err),
-            NavigationPresetError::InvalidBinding { source, .. } => Some(source),
             _ => None,
         }
     }
@@ -113,24 +181,31 @@ impl std::error::Error for NavigationPresetError {
 impl NavigationPreset {
     pub fn from_toml(source: &str) -> Result<Self, NavigationPresetError> {
         let value = source.parse::<Value>().map_err(NavigationPresetError::Toml)?;
-        let table = value
-            .as_table()
-            .ok_or(NavigationPresetError::RootNotTable)?;
+        let Some(table) = value.as_table() else {
+            return Err(NavigationPresetError::Issues(vec![
+                NavigationPresetIssue::RootNotTable,
+            ]));
+        };
 
         let mut sections = Vec::with_capacity(table.len());
+        let mut issues = Vec::new();
         for (section_name, section_value) in table {
-            let section = section_value
-                .as_table()
-                .ok_or_else(|| NavigationPresetError::SectionNotTable {
+            let Some(section) = section_value.as_table() else {
+                issues.push(NavigationPresetIssue::SectionNotTable {
                     section: section_name.clone(),
-                })?;
+                });
+                continue;
+            };
             let mode = match section.get("mode") {
                 Some(value) => value
                     .as_str()
-                    .ok_or_else(|| NavigationPresetError::ModeNotString {
-                        section: section_name.clone(),
-                    })?
-                    .to_string(),
+                    .map(ToString::to_string)
+                    .unwrap_or_else(|| {
+                        issues.push(NavigationPresetIssue::ModeNotString {
+                            section: section_name.clone(),
+                        });
+                        section_name.clone()
+                    }),
                 None => section_name.clone(),
             };
 
@@ -140,18 +215,25 @@ impl NavigationPreset {
                     continue;
                 }
 
-                let action = NavigationAction::from_name(action_name).ok_or_else(|| {
-                    NavigationPresetError::UnknownAction {
-                        section: section_name.clone(),
-                        action: action_name.clone(),
-                    }
-                })?;
-                let keys = parse_string_list(section_name, action_name, bindings_value)?;
-                if keys.is_empty() {
-                    return Err(NavigationPresetError::EmptyBindings {
+                let Some(action) = NavigationAction::from_name(action_name) else {
+                    issues.push(NavigationPresetIssue::UnknownAction {
                         section: section_name.clone(),
                         action: action_name.clone(),
                     });
+                    continue;
+                };
+
+                let Some(keys) =
+                    parse_string_list(section_name, action_name, bindings_value, &mut issues)
+                else {
+                    continue;
+                };
+                if keys.is_empty() {
+                    issues.push(NavigationPresetIssue::EmptyBindings {
+                        section: section_name.clone(),
+                        action: action_name.clone(),
+                    });
+                    continue;
                 }
                 bindings.push(NavigationPresetBinding { action, keys });
             }
@@ -163,7 +245,13 @@ impl NavigationPreset {
             });
         }
 
-        Ok(Self { sections })
+        let preset = Self { sections };
+        issues.extend(preset.collect_binding_issues());
+        if issues.is_empty() {
+            Ok(preset)
+        } else {
+            Err(NavigationPresetError::Issues(issues))
+        }
     }
 
     pub fn sections(&self) -> &[NavigationPresetSection] {
@@ -175,10 +263,16 @@ impl NavigationPreset {
     }
 
     pub fn validate(&self) -> Result<(), NavigationPresetError> {
-        for section in &self.sections {
-            section.validate()?;
+        let issues = self.collect_binding_issues();
+        if issues.is_empty() {
+            Ok(())
+        } else {
+            Err(NavigationPresetError::Issues(issues))
         }
-        Ok(())
+    }
+
+    pub fn validation_issues(&self) -> Vec<NavigationPresetIssue> {
+        self.collect_binding_issues()
     }
 
     pub fn apply_to_registry<A>(
@@ -195,6 +289,20 @@ impl NavigationPreset {
         Ok(())
     }
 
+    pub fn apply_to_registry_checked<A>(
+        &self,
+        registry: &mut InputRegistry<A>,
+    ) -> Result<(), NavigationPresetError>
+    where
+        A: From<NavigationAction> + PartialEq,
+    {
+        self.validate_against_registry(registry, NavigationConflictPolicy::Deny, false)?;
+        for section in &self.sections {
+            section.bind_validated_to_map(registry.map_mut(section.mode.as_str()));
+        }
+        Ok(())
+    }
+
     pub fn remap_registry<A>(
         &self,
         registry: &mut InputRegistry<A>,
@@ -202,7 +310,7 @@ impl NavigationPreset {
     where
         A: From<NavigationAction> + PartialEq,
     {
-        self.validate()?;
+        self.validate_against_registry(registry, NavigationConflictPolicy::Deny, true)?;
         let mut cleared = HashSet::new();
         for section in &self.sections {
             for binding in &section.bindings {
@@ -235,16 +343,143 @@ impl NavigationPreset {
             })?;
         section.bind_to_map(map)
     }
+
+    pub fn validate_against_registry<A>(
+        &self,
+        registry: &InputRegistry<A>,
+        conflict_policy: NavigationConflictPolicy,
+        remap: bool,
+    ) -> Result<(), NavigationPresetError>
+    where
+        A: From<NavigationAction> + PartialEq,
+    {
+        let mut issues = self.collect_binding_issues();
+        if conflict_policy == NavigationConflictPolicy::Deny {
+            issues.extend(self.collect_registry_conflicts(registry, remap));
+        }
+        if issues.is_empty() {
+            Ok(())
+        } else {
+            Err(NavigationPresetError::Issues(issues))
+        }
+    }
+
+    fn collect_binding_issues(&self) -> Vec<NavigationPresetIssue> {
+        let mut issues = Vec::new();
+        let mut seen = HashMap::new();
+        for section in &self.sections {
+            for binding in &section.bindings {
+                for key in &binding.keys {
+                    let sequence = match try_parse_binding(key) {
+                        Ok(sequence) => sequence,
+                        Err(source) => {
+                            issues.push(NavigationPresetIssue::InvalidBinding {
+                                section: section.name.clone(),
+                                action: binding.action,
+                                binding: key.clone(),
+                                source,
+                            });
+                            continue;
+                        }
+                    };
+                    let previous = seen.insert(
+                        (section.mode.clone(), sequence),
+                        (section.name.clone(), binding.action),
+                    );
+                    if let Some((first_section, first_action)) = previous {
+                        if first_action != binding.action {
+                            issues.push(NavigationPresetIssue::DuplicateBinding {
+                                section: section.name.clone(),
+                                mode: section.mode.clone(),
+                                binding: key.clone(),
+                                first_action,
+                                second_action: binding.action,
+                            });
+                            seen.insert(
+                                (
+                                    section.mode.clone(),
+                                    try_parse_binding(key).expect("binding was already parsed"),
+                                ),
+                                (first_section, first_action),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        issues
+    }
+
+    fn collect_registry_conflicts<A>(
+        &self,
+        registry: &InputRegistry<A>,
+        remap: bool,
+    ) -> Vec<NavigationPresetIssue>
+    where
+        A: From<NavigationAction> + PartialEq,
+    {
+        let mut replaced = HashSet::new();
+        if remap {
+            for section in &self.sections {
+                for binding in &section.bindings {
+                    replaced.insert((section.mode.clone(), binding.action));
+                }
+            }
+        }
+
+        let mut issues = Vec::new();
+        for section in &self.sections {
+            let Some(map) = registry.maps.get(section.mode.as_str()) else {
+                continue;
+            };
+            for binding in &section.bindings {
+                for key in &binding.keys {
+                    let Ok(sequence) = try_parse_binding(key) else {
+                        continue;
+                    };
+                    let Some(existing) = map.bindings.get(&sequence) else {
+                        continue;
+                    };
+                    if *existing == A::from(binding.action) {
+                        continue;
+                    }
+
+                    let existing_action = navigation_action_for(existing);
+                    if let Some(existing_action) = existing_action {
+                        if replaced.contains(&(section.mode.clone(), existing_action)) {
+                            continue;
+                        }
+                    }
+
+                    issues.push(NavigationPresetIssue::ExistingBindingConflict {
+                        section: section.name.clone(),
+                        mode: section.mode.clone(),
+                        binding: key.clone(),
+                        action: binding.action,
+                        existing_action,
+                    });
+                }
+            }
+        }
+        issues
+    }
 }
 
 impl NavigationPresetSection {
     pub fn validate(&self) -> Result<(), NavigationPresetError> {
-        for binding in &self.bindings {
-            for key in &binding.keys {
-                parse_preset_binding(&self.name, binding.action, key)?;
-            }
+        let issues = self.validation_issues();
+        if issues.is_empty() {
+            Ok(())
+        } else {
+            Err(NavigationPresetError::Issues(issues))
         }
-        Ok(())
+    }
+
+    pub fn validation_issues(&self) -> Vec<NavigationPresetIssue> {
+        let preset = NavigationPreset {
+            sections: vec![self.clone()],
+        };
+        preset.collect_binding_issues()
     }
 
     pub fn bind_to_map<A>(&self, map: &mut KeyMap<A>) -> Result<(), NavigationPresetError>
@@ -274,10 +509,10 @@ pub fn apply_navigation_preset_toml<A>(
     source: &str,
 ) -> Result<(), NavigationPresetError>
 where
-    A: From<NavigationAction>,
+    A: From<NavigationAction> + PartialEq,
 {
     let preset = parse_user_preset_toml(source)?;
-    if let Err(err) = preset.apply_to_registry(registry) {
+    if let Err(err) = preset.apply_to_registry_checked(registry) {
         warn!(error = %err, "failed to apply navigation keybinding preset");
         return Err(err);
     }
@@ -301,7 +536,7 @@ where
 
 impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handler>
 where
-    A: From<NavigationAction>,
+    A: From<NavigationAction> + PartialEq,
 {
     pub fn navigation_preset_toml(
         mut self,
@@ -327,7 +562,7 @@ where
 
 impl<V, A, S, Pages, Handler, O, M> TuiPages<V, A, S, Pages, Handler, O, M>
 where
-    A: From<NavigationAction>,
+    A: From<NavigationAction> + PartialEq,
 {
     pub fn apply_navigation_preset_toml(
         &mut self,
@@ -372,44 +607,40 @@ fn parse_string_list(
     section: &str,
     action: &str,
     value: &Value,
-) -> Result<Vec<String>, NavigationPresetError> {
-    if let Some(text) = value.as_str() {
-        return Ok(vec![text.to_string()]);
-    }
-
-    let Some(items) = value.as_array() else {
-        return Err(NavigationPresetError::BindingsNotStringList {
+    issues: &mut Vec<NavigationPresetIssue>,
+) -> Option<Vec<String>> {
+    let Some(keys) = parse_string_list_value(value) else {
+        issues.push(NavigationPresetIssue::BindingsNotStringList {
             section: section.to_string(),
             action: action.to_string(),
         });
+        return None;
     };
+    Some(keys)
+}
 
-    items
+fn parse_string_list_value(value: &Value) -> Option<Vec<String>> {
+    if let Some(text) = value.as_str() {
+        return Some(vec![text.to_string()]);
+    }
+
+    value
+        .as_array()?
         .iter()
-        .map(|item| {
-            item.as_str()
-                .map(ToString::to_string)
-                .ok_or_else(|| NavigationPresetError::BindingsNotStringList {
-                    section: section.to_string(),
-                    action: action.to_string(),
-                })
-        })
+        .map(|item| item.as_str().map(ToString::to_string))
         .collect()
 }
 
-fn parse_preset_binding(
-    section: &str,
-    action: NavigationAction,
-    binding: &str,
-) -> Result<(), NavigationPresetError> {
-    try_parse_binding(binding)
-        .map(|_| ())
-        .map_err(|source| NavigationPresetError::InvalidBinding {
-            section: section.to_string(),
-            action,
-            binding: binding.to_string(),
-            source,
-        })
+fn navigation_action_for<A>(action: &A) -> Option<NavigationAction>
+where
+    A: From<NavigationAction> + PartialEq,
+{
+    for nav in NavigationAction::all() {
+        if *action == A::from(*nav) {
+            return Some(*nav);
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -465,18 +696,69 @@ quit = "ctrl+c"
 does_not_exist = ["j"]
 "#;
         let err = NavigationPreset::from_toml(preset).unwrap_err();
-        assert!(matches!(err, NavigationPresetError::UnknownAction { .. }));
+        let NavigationPresetError::Issues(issues) = err else {
+            panic!("expected validation issues");
+        };
+        assert!(issues
+            .iter()
+            .any(|issue| matches!(issue, NavigationPresetIssue::UnknownAction { .. })));
     }
 
     #[test]
-    fn toml_preset_reports_bad_bindings_when_applied() {
+    fn toml_preset_collects_multiple_issues() {
         let preset = r#"
 [general]
+does_not_exist = ["j"]
 focus_next = ["ctrl+shft+j"]
+focus_prev = []
 "#;
         let mut registry = InputRegistry::empty();
         let err = apply_navigation_preset_toml::<TestAction>(&mut registry, preset).unwrap_err();
-        assert!(matches!(err, NavigationPresetError::InvalidBinding { .. }));
+        let NavigationPresetError::Issues(issues) = err else {
+            panic!("expected validation issues");
+        };
+        assert_eq!(issues.len(), 3);
+        assert!(issues
+            .iter()
+            .any(|issue| matches!(issue, NavigationPresetIssue::UnknownAction { .. })));
+        assert!(issues
+            .iter()
+            .any(|issue| matches!(issue, NavigationPresetIssue::InvalidBinding { .. })));
+        assert!(issues
+            .iter()
+            .any(|issue| matches!(issue, NavigationPresetIssue::EmptyBindings { .. })));
+    }
+
+    #[test]
+    fn toml_preset_reports_duplicate_bindings() {
+        let preset = r#"
+[general]
+focus_next = ["j"]
+focus_prev = ["j"]
+"#;
+        let err = NavigationPreset::from_toml(preset).unwrap_err();
+        let NavigationPresetError::Issues(issues) = err else {
+            panic!("expected validation issues");
+        };
+        assert!(issues
+            .iter()
+            .any(|issue| matches!(issue, NavigationPresetIssue::DuplicateBinding { .. })));
+    }
+
+    #[test]
+    fn toml_preset_detects_duplicate_binding_aliases() {
+        let preset = r#"
+[general]
+focus_next = ["shift+tab"]
+focus_prev = ["backtab"]
+"#;
+        let err = NavigationPreset::from_toml(preset).unwrap_err();
+        let NavigationPresetError::Issues(issues) = err else {
+            panic!("expected validation issues");
+        };
+        assert!(issues
+            .iter()
+            .any(|issue| matches!(issue, NavigationPresetIssue::DuplicateBinding { .. })));
     }
 
     #[test]
@@ -504,6 +786,34 @@ focus_next = ["ctrl+n"]
         match pipeline.process(ctrl_n, &[modes::GENERAL], false) {
             crate::input::PipelineResponse::Execute(TestAction::Nav(NavigationAction::FocusNext)) => {}
             other => panic!("expected FocusNext, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn toml_remap_rejects_conflicts_with_remaining_defaults() {
+        let mut registry = InputRegistry::empty();
+        registry
+            .map_mut(modes::GENERAL.as_str())
+            .bind(try_parse_binding("ctrl+n").unwrap(), TestAction::Nav(NavigationAction::NextPane));
+
+        let preset = r#"
+[general]
+mode = "general"
+focus_next = ["ctrl+n"]
+"#;
+        let err = remap_navigation_preset_toml::<TestAction>(&mut registry, preset).unwrap_err();
+        let NavigationPresetError::Issues(issues) = err else {
+            panic!("expected validation issues");
+        };
+        assert!(issues
+            .iter()
+            .any(|issue| matches!(issue, NavigationPresetIssue::ExistingBindingConflict { .. })));
+
+        let mut pipeline = InputPipeline::new(registry, 1000);
+        let ctrl_n = KeyEvent::new(KeyCode::Char('n'), KeyModifiers::CONTROL);
+        match pipeline.process(ctrl_n, &[modes::GENERAL], false) {
+            crate::input::PipelineResponse::Execute(TestAction::Nav(NavigationAction::NextPane)) => {}
+            other => panic!("expected existing NextPane binding to remain, got {other:?}"),
         }
     }
 }

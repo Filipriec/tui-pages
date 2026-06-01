@@ -13,25 +13,24 @@
 //! ```
 
 mod action;
-mod emacs;
-mod helix;
+mod builtin;
 mod preset;
-mod vim;
 
 pub use action::{
-    navigation_action_outcome, try_standard_navigation_action, NavigationAction,
+    navigation_action_infos, navigation_action_outcome, try_standard_navigation_action,
+    NavigationAction, NavigationActionInfo,
 };
-pub use emacs::{
-    bind_emacs_general_defaults, bind_emacs_global_defaults, bind_emacs_navigation_defaults,
-};
-pub use helix::{
-    bind_helix_general_defaults, bind_helix_global_defaults, bind_helix_navigation_defaults,
+pub use builtin::{
+    bind_builtin_general_defaults, bind_builtin_global_defaults,
+    bind_builtin_navigation_defaults, bind_emacs_general_defaults, bind_emacs_global_defaults,
+    bind_emacs_navigation_defaults, bind_helix_general_defaults, bind_helix_global_defaults,
+    bind_helix_navigation_defaults, bind_vim_general_defaults, bind_vim_global_defaults,
+    bind_vim_navigation_defaults, emacs_preset_toml, helix_preset_toml,
+    try_standard_vim_action, vim_action_outcome, vim_preset_toml, BuiltinNavigationPreset,
+    VimAction,
 };
 pub use preset::{
     apply_navigation_preset_toml, remap_navigation_preset_toml, NavigationPreset,
-    NavigationPresetBinding, NavigationPresetError, NavigationPresetSection,
-};
-pub use vim::{
-    bind_vim_general_defaults, bind_vim_global_defaults, bind_vim_navigation_defaults,
-    try_standard_vim_action, vim_action_outcome, VimAction,
+    NavigationConflictPolicy, NavigationPresetBinding, NavigationPresetError,
+    NavigationPresetIssue, NavigationPresetSection,
 };

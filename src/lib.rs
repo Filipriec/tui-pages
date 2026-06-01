@@ -51,10 +51,13 @@ pub use keybindings::{
     bind_emacs_general_defaults, bind_emacs_global_defaults, bind_emacs_navigation_defaults,
     bind_helix_general_defaults, bind_helix_global_defaults, bind_helix_navigation_defaults,
     bind_vim_general_defaults, bind_vim_global_defaults, bind_vim_navigation_defaults,
-    navigation_action_outcome, apply_navigation_preset_toml, remap_navigation_preset_toml,
-    try_standard_navigation_action, try_standard_vim_action, vim_action_outcome,
-    NavigationAction, NavigationPreset, NavigationPresetBinding, NavigationPresetError,
-    NavigationPresetSection, VimAction,
+    bind_builtin_general_defaults, bind_builtin_global_defaults,
+    bind_builtin_navigation_defaults, emacs_preset_toml, helix_preset_toml,
+    navigation_action_infos, navigation_action_outcome, apply_navigation_preset_toml,
+    remap_navigation_preset_toml, try_standard_navigation_action, try_standard_vim_action,
+    vim_action_outcome, vim_preset_toml, BuiltinNavigationPreset, NavigationAction,
+    NavigationActionInfo, NavigationConflictPolicy, NavigationPreset, NavigationPresetBinding,
+    NavigationPresetError, NavigationPresetIssue, NavigationPresetSection, VimAction,
 };
 pub use navigation::{
     BufferState, NavigationCoordinator, NavigationEvent, NavigationResult, NavigationRouter,
@@ -83,13 +86,16 @@ pub mod prelude {
     pub use crate::{
         modes, parse_binding, try_parse_binding, ActionContext, ActionOutcome, FocusController,
         FocusIntent, FocusManager, FocusQuery, FocusTarget, FocusWrap, KeyChord, ModeId,
-        NavigationAction, NavigationPreset, NavigationPresetError, PageFn, PageFocusBuilder,
+        BuiltinNavigationPreset, NavigationAction, NavigationActionInfo, NavigationConflictPolicy,
+        NavigationPreset, NavigationPresetError, NavigationPresetIssue, PageFn, PageFocusBuilder,
         PageProvider, PageSpec, ParseKeyError, TerminalGuard, TuiActionHandler, TuiApp,
         TuiEffect, TuiPages, TuiPagesOutput, TuiPagesStatus, VimAction,
     };
     pub use crate::{
-        apply_navigation_preset_toml, navigation_action_outcome, remap_navigation_preset_toml,
+        apply_navigation_preset_toml, emacs_preset_toml, helix_preset_toml,
+        navigation_action_infos, navigation_action_outcome, remap_navigation_preset_toml,
         try_standard_navigation_action, try_standard_vim_action, vim_action_outcome,
+        vim_preset_toml,
     };
 
     #[cfg(feature = "dialog")]
