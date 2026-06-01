@@ -66,6 +66,27 @@ fn main() -> Result<()> {
             continue;
         }
 
+        // When the Role field's suggestion list is open, make it selectable with
+        // intuitive keys: Up/Down move the highlight, Enter/Tab accept it. (The
+        // editor's own defaults only bind Ctrl+p / Ctrl+n / Ctrl+y for this.)
+        if state.view == app::View::Form && state.form.is_suggestions_active() {
+            match key.code {
+                KeyCode::Up => {
+                    state.form.suggestions_prev();
+                    continue;
+                }
+                KeyCode::Down => {
+                    state.form.suggestions_next();
+                    continue;
+                }
+                KeyCode::Enter | KeyCode::Tab => {
+                    state.form.apply_suggestion();
+                    continue;
+                }
+                _ => {}
+            }
+        }
+
         // While a dialog is open, let the vim keys move between its buttons too —
         // `dialog::handle_key` only knows Tab/arrows, so h/k and l/j would
         // otherwise be swallowed with no effect.

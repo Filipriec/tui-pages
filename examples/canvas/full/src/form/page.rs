@@ -4,13 +4,12 @@ use super::logic;
 use crate::app::{Action, AppState, Overlay, Purpose, View};
 
 pub fn page_spec(_state: &AppState) -> PageSpec<Overlay> {
-    // Two canvas fields for the form, then the three buttons:
-    // [CanvasField(0), CanvasField(1), Button(0), Button(1), Button(2)]. The
-    // editor still owns movement *between* its two fields; focus collapses the
-    // canvas targets into one stop and hands off at the boundary.
+    // Three canvas fields for the form (Name, Email, Role), then the three
+    // buttons. The editor owns movement *between* its fields; focus collapses
+    // the canvas targets into one stop and hands off at the boundary.
     PageSpec::new().focus(
         PageFocusBuilder::new()
-            .canvas_fields(2)
+            .canvas_fields(3)
             .button(0)
             .button(1)
             .button(2),

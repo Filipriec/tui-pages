@@ -12,10 +12,12 @@ pub fn login_dialog(state: &AppState) -> DialogData<Purpose> {
     let contact = state.form.data_provider();
     let name = contact.values.first().map(String::as_str).unwrap_or("");
     let email = contact.values.get(1).map(String::as_str).unwrap_or("");
+    let role = contact.values.get(2).map(String::as_str).unwrap_or("");
+    let role = if role.is_empty() { "(none)" } else { role };
 
     DialogData::new(
         "Confirm login",
-        format!("POST /login\n\nName:  {name}\nEmail: {email}"),
+        format!("POST /login\n\nName:  {name}\nEmail: {email}\nRole:  {role}"),
         ["Post", "Cancel"],
         Purpose::PostLogin,
     )

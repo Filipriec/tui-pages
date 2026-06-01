@@ -53,10 +53,17 @@ pub struct Contact {
     pub values: Vec<String>,
 }
 
+/// The roles offered as suggestions on the Role field.
+pub const ROLES: [&str; 4] = ["admin", "editor", "viewer", "guest"];
+
 impl Default for Contact {
     fn default() -> Self {
         Self {
-            values: vec!["Ada".to_string(), "ada@example.test".to_string()],
+            values: vec![
+                "Ada".to_string(),
+                "ada@example.test".to_string(),
+                String::new(),
+            ],
         }
     }
 }
@@ -70,6 +77,7 @@ impl canvas::DataProvider for Contact {
         match index {
             0 => "Name",
             1 => "Email",
+            2 => "Role",
             _ => "",
         }
     }
@@ -80,6 +88,32 @@ impl canvas::DataProvider for Contact {
 
     fn set_field_value(&mut self, index: usize, value: String) {
         self.values[index] = value;
+    }
+
+    // Only the Role field (index 2) offers suggestions.
+    fn supports_suggestions(&self, field_index: usize) -> bool {
+        field_index == 2
+    }
+
+    fn suggestion_trigger(&self, field_index: usize) -> canvas::SuggestionTrigger {
+        if field_index == 2 {
+            // Offer the role list as soon as the field is focused/typed in.
+            canvas::SuggestionTrigger::WhenFieldStarts
+        } else {
+            canvas::SuggestionTrigger::None
+        }
+    }
+
+    fn fetch_suggestions_sync(
+        &self,
+        _field_index: usize,
+        query: &str,
+    ) -> Vec<canvas::SuggestionItem> {
+        ROLES
+            .into_iter()
+            .filter(|role| role.starts_with(query))
+            .map(|role| canvas::SuggestionItem::new(role, role))
+            .collect()
     }
 }
 
