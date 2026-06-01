@@ -1,7 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use tui_pages::{
-    modes, ActionContext, ActionOutcome, FocusIntent, FocusTarget, PageSpec, TuiActionHandler,
-    TuiEffect, TuiPages, TuiPagesStatus,
+    modes, ActionContext, ActionOutcome, FocusIntent, FocusTarget, KeyChord, PageSpec,
+    TuiActionHandler, TuiEffect, TuiPages, TuiPagesStatus,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -20,6 +20,7 @@ enum Action {
 #[derive(Default)]
 struct State {
     handled: Vec<Action>,
+    typed: Vec<KeyChord>,
 }
 
 #[derive(Clone, Copy)]
@@ -41,10 +42,24 @@ impl TuiActionHandler<View, Action, State> for Handler {
             Action::Quit => ActionOutcome::effect(TuiEffect::Quit),
         })
     }
+
+    fn handle_text(
+        &mut self,
+        chord: KeyChord,
+        _ctx: ActionContext<View>,
+        state: &mut State,
+    ) -> Result<ActionOutcome<View>, Self::Error> {
+        state.typed.push(chord);
+        Ok(ActionOutcome::none())
+    }
 }
 
 fn key(code: KeyCode) -> KeyEvent {
     KeyEvent::new(code, KeyModifiers::empty())
+}
+
+fn map_text_to_next(_chord: KeyChord) -> Option<Action> {
+    Some(Action::Next)
 }
 
 #[test]
@@ -83,5 +98,37 @@ fn runtime_maps_user_actions_to_library_effects() {
     assert_eq!(
         state.handled,
         vec![Action::Next, Action::Settings, Action::Quit]
+    );
+}
+
+#[test]
+fn text_mapper_does_not_hijack_non_canvas_text_targets() {
+    let pages = |_view: &View, _state: &State, _focus: Option<&FocusTarget>| {
+        PageSpec::new()
+            .focus_targets(vec![FocusTarget::Overlay(())])
+            .modes(vec![modes::INSERT, modes::GLOBAL])
+            .accepts_text_input(true)
+    };
+
+    let mut tui = TuiPages::<View, Action, State>::builder(View::Home)
+        .pages(pages)
+        .handler(Handler)
+        .text_input_mapper(map_text_to_next)
+        .build();
+    let mut state = State::default();
+    tui.refresh_page(&state);
+
+    let output = tui
+        .handle_key(
+            KeyEvent::new(KeyCode::Char('A'), KeyModifiers::SHIFT),
+            &mut state,
+        )
+        .unwrap();
+
+    assert_eq!(output.status, TuiPagesStatus::TextHandled);
+    assert!(state.handled.is_empty());
+    assert_eq!(
+        state.typed,
+        vec![KeyChord::new(KeyCode::Char('A'), KeyModifiers::SHIFT)]
     );
 }

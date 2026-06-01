@@ -1,5 +1,4 @@
-//! Everything that talks to `tui-pages`: the view/action types, the action
-//! handler, the page spec, and the builder wiring.
+//! Everything that talks to `tui-pages`
 //!
 //! The textarea is a single top-level focus stop. By default `j`/`k` treat it
 //! as one stop and step straight to the buttons; you press Enter to *enter* it

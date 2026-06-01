@@ -2,7 +2,7 @@
 //!
 //! Enable the `canvas` feature and make your application action type implement
 //! `From<CanvasAction>`. Then `.canvas_defaults()` on the builder installs the
-//! standard canvas keymaps and typed-character routing, while
+//! standard `FormEditor` keymaps and typed-character action routing, while
 //! [`PageSpec::canvas_editor`] keeps the active mode stack in sync with the
 //! editor.
 
@@ -525,12 +525,8 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
 where
     A: From<CanvasAction>,
 {
-    pub fn canvas_defaults(mut self) -> Self {
-        bind_normal_defaults(self.input_registry.map_mut(modes::NORMAL.as_str()));
-        bind_insert_defaults(self.input_registry.map_mut(modes::INSERT.as_str()));
-        bind_select_defaults(self.input_registry.map_mut(modes::SELECT.as_str()));
-        self.text_input_mapper = Some(text_chord_to_action::<A>);
-        self
+    pub fn canvas_defaults(self) -> Self {
+        self.canvas_keymaps().canvas_text_actions()
     }
 
     pub fn canvas_keymaps(mut self) -> Self {
@@ -540,38 +536,8 @@ where
         self
     }
 
-    pub fn canvas_text_input(mut self) -> Self {
+    pub fn canvas_text_actions(mut self) -> Self {
         self.text_input_mapper = Some(text_chord_to_action::<A>);
-        self
-    }
-
-    pub fn canvas_forms(self) -> Self {
-        self.canvas_defaults()
-    }
-
-    pub fn canvas_textarea(self) -> Self {
-        self.canvas_text_input()
-    }
-
-    pub fn canvas_textinput(self) -> Self {
-        self.canvas_text_input()
-    }
-
-    pub fn canvas_suggestions(mut self) -> Self {
-        bind_suggestion_defaults(self.input_registry.map_mut(modes::INSERT.as_str()));
-        bind_suggestion_defaults(self.input_registry.map_mut(modes::SELECT.as_str()));
-        self
-    }
-
-    pub fn canvas_validation(self) -> Self {
-        self
-    }
-
-    pub fn canvas_cursor_style(self) -> Self {
-        self
-    }
-
-    pub fn canvas_owned_keymap(self) -> Self {
         self
     }
 }
