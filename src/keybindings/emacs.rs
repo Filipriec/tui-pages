@@ -3,45 +3,32 @@
 use crate::input::KeyMap;
 use crate::runtime::{modes, TuiPagesBuilder};
 
-use super::action::{bind_str, NavigationAction};
+use super::action::NavigationAction;
+use super::preset::builtin_preset;
 
 pub fn bind_emacs_general_defaults<A>(map: &mut KeyMap<A>)
 where
     A: From<NavigationAction>,
 {
-    bind_str(map, "ctrl+n", NavigationAction::FocusNext);
-    bind_str(map, "ctrl+p", NavigationAction::FocusPrev);
-    bind_str(map, "ctrl+f", NavigationAction::FocusNext);
-    bind_str(map, "ctrl+b", NavigationAction::FocusPrev);
-    bind_str(map, "down", NavigationAction::FocusNext);
-    bind_str(map, "up", NavigationAction::FocusPrev);
-    bind_str(map, "right", NavigationAction::FocusNext);
-    bind_str(map, "left", NavigationAction::FocusPrev);
-    bind_str(map, "tab", NavigationAction::FocusNext);
-    bind_str(map, "shift+tab", NavigationAction::FocusPrev);
-    bind_str(map, "backtab", NavigationAction::FocusPrev);
-    bind_str(map, "enter", NavigationAction::Activate);
-    bind_str(map, "esc", NavigationAction::LeaveSection);
-    bind_str(map, "ctrl+g", NavigationAction::LeaveSection);
+    emacs_preset().bind_section_to_map("general", map).unwrap();
 }
 
 pub fn bind_emacs_global_defaults<A>(map: &mut KeyMap<A>)
 where
     A: From<NavigationAction>,
 {
-    bind_str(map, "ctrl+x ctrl+c", NavigationAction::Quit);
+    emacs_preset().bind_section_to_map("global", map).unwrap();
 }
 
 pub fn bind_emacs_navigation_defaults<A>(map: &mut KeyMap<A>)
 where
     A: From<NavigationAction>,
 {
-    bind_str(map, "ctrl+x o", NavigationAction::NextPane);
-    bind_str(map, "ctrl+x 0", NavigationAction::ClosePane);
-    bind_str(map, "ctrl+x 2", NavigationAction::SplitHorizontal);
-    bind_str(map, "ctrl+x 3", NavigationAction::SplitVertical);
-    bind_str(map, "ctrl+x left", NavigationAction::PrevBuffer);
-    bind_str(map, "ctrl+x right", NavigationAction::NextBuffer);
+    emacs_preset().bind_section_to_map("navigation", map).unwrap();
+}
+
+fn emacs_preset() -> super::preset::NavigationPreset {
+    builtin_preset("emacs", include_str!("presets/emacs.toml"))
 }
 
 impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handler>

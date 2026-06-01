@@ -51,8 +51,10 @@ pub use keybindings::{
     bind_emacs_general_defaults, bind_emacs_global_defaults, bind_emacs_navigation_defaults,
     bind_helix_general_defaults, bind_helix_global_defaults, bind_helix_navigation_defaults,
     bind_vim_general_defaults, bind_vim_global_defaults, bind_vim_navigation_defaults,
-    navigation_action_outcome, try_standard_navigation_action, try_standard_vim_action,
-    vim_action_outcome, NavigationAction, VimAction,
+    navigation_action_outcome, apply_navigation_preset_toml, remap_navigation_preset_toml,
+    try_standard_navigation_action, try_standard_vim_action, vim_action_outcome,
+    NavigationAction, NavigationPreset, NavigationPresetBinding, NavigationPresetError,
+    NavigationPresetSection, VimAction,
 };
 pub use navigation::{
     BufferState, NavigationCoordinator, NavigationEvent, NavigationResult, NavigationRouter,
@@ -81,13 +83,13 @@ pub mod prelude {
     pub use crate::{
         modes, parse_binding, try_parse_binding, ActionContext, ActionOutcome, FocusController,
         FocusIntent, FocusManager, FocusQuery, FocusTarget, FocusWrap, KeyChord, ModeId,
-        NavigationAction, PageFn, PageFocusBuilder, PageProvider, PageSpec, ParseKeyError,
-        TerminalGuard, TuiActionHandler, TuiApp, TuiEffect, TuiPages, TuiPagesOutput,
-        TuiPagesStatus, VimAction,
+        NavigationAction, NavigationPreset, NavigationPresetError, PageFn, PageFocusBuilder,
+        PageProvider, PageSpec, ParseKeyError, TerminalGuard, TuiActionHandler, TuiApp,
+        TuiEffect, TuiPages, TuiPagesOutput, TuiPagesStatus, VimAction,
     };
     pub use crate::{
-        navigation_action_outcome, try_standard_navigation_action, try_standard_vim_action,
-        vim_action_outcome,
+        apply_navigation_preset_toml, navigation_action_outcome, remap_navigation_preset_toml,
+        try_standard_navigation_action, try_standard_vim_action, vim_action_outcome,
     };
 
     #[cfg(feature = "dialog")]

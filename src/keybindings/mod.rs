@@ -15,6 +15,7 @@
 mod action;
 mod emacs;
 mod helix;
+mod preset;
 mod vim;
 
 pub use action::{
@@ -25,6 +26,10 @@ pub use emacs::{
 };
 pub use helix::{
     bind_helix_general_defaults, bind_helix_global_defaults, bind_helix_navigation_defaults,
+};
+pub use preset::{
+    apply_navigation_preset_toml, remap_navigation_preset_toml, NavigationPreset,
+    NavigationPresetBinding, NavigationPresetError, NavigationPresetSection,
 };
 pub use vim::{
     bind_vim_general_defaults, bind_vim_global_defaults, bind_vim_navigation_defaults,

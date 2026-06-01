@@ -1,7 +1,6 @@
 //! Shared navigation actions for all editor presets in this module.
 
 use crate::focus::FocusIntent;
-use crate::input::{parse_binding, KeyMap};
 use crate::runtime::{ActionOutcome, TuiEffect};
 
 /// Page-level actions that any editor preset can map to keys.
@@ -46,6 +45,44 @@ impl NavigationAction {
         Self::FOCUS.iter().chain(Self::WORKSPACE.iter())
     }
 
+    pub fn as_name(self) -> &'static str {
+        match self {
+            NavigationAction::FocusNext => "focus_next",
+            NavigationAction::FocusPrev => "focus_prev",
+            NavigationAction::Activate => "activate",
+            NavigationAction::LeaveSection => "leave_section",
+            NavigationAction::Quit => "quit",
+            NavigationAction::NextBuffer => "next_buffer",
+            NavigationAction::PrevBuffer => "prev_buffer",
+            NavigationAction::CloseBuffer => "close_buffer",
+            NavigationAction::NextPane => "next_pane",
+            NavigationAction::PrevPane => "prev_pane",
+            NavigationAction::ClosePane => "close_pane",
+            NavigationAction::SplitVertical => "split_vertical",
+            NavigationAction::SplitHorizontal => "split_horizontal",
+        }
+    }
+
+    pub fn from_name(name: &str) -> Option<Self> {
+        let normalized = name.replace('-', "_").to_ascii_lowercase();
+        match normalized.as_str() {
+            "focus_next" => Some(NavigationAction::FocusNext),
+            "focus_prev" => Some(NavigationAction::FocusPrev),
+            "activate" => Some(NavigationAction::Activate),
+            "leave_section" => Some(NavigationAction::LeaveSection),
+            "quit" => Some(NavigationAction::Quit),
+            "next_buffer" => Some(NavigationAction::NextBuffer),
+            "prev_buffer" | "previous_buffer" => Some(NavigationAction::PrevBuffer),
+            "close_buffer" => Some(NavigationAction::CloseBuffer),
+            "next_pane" => Some(NavigationAction::NextPane),
+            "prev_pane" | "previous_pane" => Some(NavigationAction::PrevPane),
+            "close_pane" => Some(NavigationAction::ClosePane),
+            "split_vertical" | "split_pane_vertical" => Some(NavigationAction::SplitVertical),
+            "split_horizontal" | "split_pane_horizontal" => Some(NavigationAction::SplitHorizontal),
+            _ => None,
+        }
+    }
+
     pub fn to_effect<V, O, M>(self) -> TuiEffect<V, O, M> {
         match self {
             NavigationAction::FocusNext => TuiEffect::Focus(FocusIntent::Next),
@@ -88,13 +125,6 @@ where
     None
 }
 
-pub(crate) fn bind_str<A>(map: &mut KeyMap<A>, binding: &str, action: NavigationAction)
-where
-    A: From<NavigationAction>,
-{
-    map.bind(parse_binding(binding), A::from(action));
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -108,6 +138,13 @@ mod tests {
     impl From<NavigationAction> for TestAction {
         fn from(v: NavigationAction) -> Self {
             TestAction::Nav(v)
+        }
+    }
+
+    #[test]
+    fn navigation_actions_round_trip_names() {
+        for action in NavigationAction::all() {
+            assert_eq!(NavigationAction::from_name(action.as_name()), Some(*action));
         }
     }
 

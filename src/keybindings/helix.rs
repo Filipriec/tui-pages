@@ -3,50 +3,32 @@
 use crate::input::KeyMap;
 use crate::runtime::{modes, TuiPagesBuilder};
 
-use super::action::{bind_str, NavigationAction};
+use super::action::NavigationAction;
+use super::preset::builtin_preset;
 
 pub fn bind_helix_general_defaults<A>(map: &mut KeyMap<A>)
 where
     A: From<NavigationAction>,
 {
-    bind_str(map, "h", NavigationAction::FocusPrev);
-    bind_str(map, "j", NavigationAction::FocusNext);
-    bind_str(map, "k", NavigationAction::FocusPrev);
-    bind_str(map, "l", NavigationAction::FocusNext);
-    bind_str(map, "left", NavigationAction::FocusPrev);
-    bind_str(map, "down", NavigationAction::FocusNext);
-    bind_str(map, "up", NavigationAction::FocusPrev);
-    bind_str(map, "right", NavigationAction::FocusNext);
-    bind_str(map, "home", NavigationAction::FocusPrev);
-    bind_str(map, "end", NavigationAction::FocusNext);
-    bind_str(map, "tab", NavigationAction::FocusNext);
-    bind_str(map, "shift+tab", NavigationAction::FocusPrev);
-    bind_str(map, "backtab", NavigationAction::FocusPrev);
-    bind_str(map, "enter", NavigationAction::Activate);
-    bind_str(map, "esc", NavigationAction::LeaveSection);
+    helix_preset().bind_section_to_map("general", map).unwrap();
 }
 
 pub fn bind_helix_global_defaults<A>(map: &mut KeyMap<A>)
 where
     A: From<NavigationAction>,
 {
-    bind_str(map, "ctrl+c", NavigationAction::Quit);
+    helix_preset().bind_section_to_map("global", map).unwrap();
 }
 
 pub fn bind_helix_navigation_defaults<A>(map: &mut KeyMap<A>)
 where
     A: From<NavigationAction>,
 {
-    bind_str(map, "g n", NavigationAction::NextBuffer);
-    bind_str(map, "g p", NavigationAction::PrevBuffer);
-    bind_str(map, "ctrl+w v", NavigationAction::SplitVertical);
-    bind_str(map, "ctrl+w s", NavigationAction::SplitHorizontal);
-    bind_str(map, "ctrl+w q", NavigationAction::ClosePane);
-    bind_str(map, "ctrl+w w", NavigationAction::NextPane);
-    bind_str(map, "ctrl+w h", NavigationAction::FocusPrev);
-    bind_str(map, "ctrl+w j", NavigationAction::FocusNext);
-    bind_str(map, "ctrl+w k", NavigationAction::FocusPrev);
-    bind_str(map, "ctrl+w l", NavigationAction::FocusNext);
+    helix_preset().bind_section_to_map("navigation", map).unwrap();
+}
+
+fn helix_preset() -> super::preset::NavigationPreset {
+    builtin_preset("helix", include_str!("presets/helix.toml"))
 }
 
 impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handler>

@@ -3,7 +3,8 @@
 use crate::input::KeyMap;
 use crate::runtime::{modes, TuiPagesBuilder};
 
-use super::action::{bind_str, NavigationAction};
+use super::action::NavigationAction;
+use super::preset::builtin_preset;
 pub use super::action::{navigation_action_outcome, try_standard_navigation_action};
 
 /// Alias for [`NavigationAction`] when using the Vim preset.
@@ -24,38 +25,25 @@ pub fn bind_vim_general_defaults<A>(map: &mut KeyMap<A>)
 where
     A: From<NavigationAction>,
 {
-    bind_str(map, "j", NavigationAction::FocusNext);
-    bind_str(map, "k", NavigationAction::FocusPrev);
-    bind_str(map, "h", NavigationAction::FocusPrev);
-    bind_str(map, "l", NavigationAction::FocusNext);
-    bind_str(map, "down", NavigationAction::FocusNext);
-    bind_str(map, "up", NavigationAction::FocusPrev);
-    bind_str(map, "tab", NavigationAction::FocusNext);
-    bind_str(map, "shift+tab", NavigationAction::FocusPrev);
-    bind_str(map, "backtab", NavigationAction::FocusPrev);
-    bind_str(map, "enter", NavigationAction::Activate);
-    bind_str(map, "esc", NavigationAction::LeaveSection);
+    vim_preset().bind_section_to_map("general", map).unwrap();
 }
 
 pub fn bind_vim_global_defaults<A>(map: &mut KeyMap<A>)
 where
     A: From<NavigationAction>,
 {
-    bind_str(map, "ctrl+c", NavigationAction::Quit);
+    vim_preset().bind_section_to_map("global", map).unwrap();
 }
 
 pub fn bind_vim_navigation_defaults<A>(map: &mut KeyMap<A>)
 where
     A: From<NavigationAction>,
 {
-    bind_str(map, "]", NavigationAction::NextBuffer);
-    bind_str(map, "[", NavigationAction::PrevBuffer);
-    bind_str(map, "x", NavigationAction::CloseBuffer);
-    bind_str(map, "ctrl+n", NavigationAction::NextPane);
-    bind_str(map, "ctrl+p", NavigationAction::PrevPane);
-    bind_str(map, "ctrl+w", NavigationAction::ClosePane);
-    bind_str(map, "ctrl+s", NavigationAction::SplitVertical);
-    bind_str(map, "ctrl+d", NavigationAction::SplitHorizontal);
+    vim_preset().bind_section_to_map("navigation", map).unwrap();
+}
+
+fn vim_preset() -> super::preset::NavigationPreset {
+    builtin_preset("vim", include_str!("presets/vim.toml"))
 }
 
 impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handler>

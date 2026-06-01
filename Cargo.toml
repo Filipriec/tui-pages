@@ -18,6 +18,7 @@ all-features = true
 ratatui = { workspace = true, optional = true }
 crossterm = { workspace = true }
 serde  = { workspace = true, optional = true }
+toml = { workspace = true }
 tracing = { workspace = true }
 canvas = { path = "../canvas", optional = true }
 
