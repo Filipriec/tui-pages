@@ -37,6 +37,10 @@ mode = "global"
 quit = ["ctrl+c"]
 ```
 
+For runtime end-user settings, call `tui.remap_navigation_preset_toml(...)`
+after reading the user's config. The method validates before mutating the live
+keymap and resets any in-progress multi-key sequence after a successful remap.
+
 Pick **one** preset per app (do not combine `.vim_defaults()` and `.emacs_defaults()` on the same mode).
 
 Canvas field editing lives in `src/canvas.rs`, not here.

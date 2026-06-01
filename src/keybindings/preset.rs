@@ -1,8 +1,9 @@
 use crate::input::{try_parse_binding, InputRegistry, KeyMap, ParseKeyError};
-use crate::runtime::TuiPagesBuilder;
+use crate::runtime::{TuiPages, TuiPagesBuilder};
 use std::collections::HashSet;
 use std::fmt;
 use toml::Value;
+use tracing::warn;
 
 use super::action::NavigationAction;
 
@@ -275,7 +276,12 @@ pub fn apply_navigation_preset_toml<A>(
 where
     A: From<NavigationAction>,
 {
-    NavigationPreset::from_toml(source)?.apply_to_registry(registry)
+    let preset = parse_user_preset_toml(source)?;
+    if let Err(err) = preset.apply_to_registry(registry) {
+        warn!(error = %err, "failed to apply navigation keybinding preset");
+        return Err(err);
+    }
+    Ok(())
 }
 
 pub fn remap_navigation_preset_toml<A>(
@@ -285,7 +291,12 @@ pub fn remap_navigation_preset_toml<A>(
 where
     A: From<NavigationAction> + PartialEq,
 {
-    NavigationPreset::from_toml(source)?.remap_registry(registry)
+    let preset = parse_user_preset_toml(source)?;
+    if let Err(err) = preset.remap_registry(registry) {
+        warn!(error = %err, "failed to remap navigation keybinding preset");
+        return Err(err);
+    }
+    Ok(())
 }
 
 impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handler>
@@ -314,9 +325,47 @@ where
     }
 }
 
+impl<V, A, S, Pages, Handler, O, M> TuiPages<V, A, S, Pages, Handler, O, M>
+where
+    A: From<NavigationAction>,
+{
+    pub fn apply_navigation_preset_toml(
+        &mut self,
+        source: &str,
+    ) -> Result<(), NavigationPresetError> {
+        apply_navigation_preset_toml(&mut self.input.registry, source)?;
+        self.input.tracker.reset();
+        Ok(())
+    }
+}
+
+impl<V, A, S, Pages, Handler, O, M> TuiPages<V, A, S, Pages, Handler, O, M>
+where
+    A: From<NavigationAction> + PartialEq,
+{
+    pub fn remap_navigation_preset_toml(
+        &mut self,
+        source: &str,
+    ) -> Result<(), NavigationPresetError> {
+        remap_navigation_preset_toml(&mut self.input.registry, source)?;
+        self.input.tracker.reset();
+        Ok(())
+    }
+}
+
 pub(crate) fn builtin_preset(name: &str, source: &'static str) -> NavigationPreset {
     NavigationPreset::from_toml(source)
         .unwrap_or_else(|err| panic!("invalid built-in {name} keybinding preset: {err}"))
+}
+
+fn parse_user_preset_toml(source: &str) -> Result<NavigationPreset, NavigationPresetError> {
+    match NavigationPreset::from_toml(source) {
+        Ok(preset) => Ok(preset),
+        Err(err) => {
+            warn!(error = %err, "failed to parse navigation keybinding preset");
+            Err(err)
+        }
+    }
 }
 
 fn parse_string_list(
