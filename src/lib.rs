@@ -19,6 +19,7 @@ pub mod input;
 pub mod navigation;
 pub mod runtime;
 pub mod terminal;
+pub mod vim;
 
 #[cfg(feature = "dialog")]
 pub use dialog::{render_dialog, DialogData, DialogKey, DialogResult, DialogTheme};
