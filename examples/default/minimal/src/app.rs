@@ -43,6 +43,9 @@ impl TuiActionHandler<View, Action, ()> for Handler {
                 (View::About, Some(FocusTarget::Button(0))) => {
                     Ok(ActionOutcome::effect(TuiEffect::Navigate(View::Home)))
                 }
+                (_, Some(FocusTarget::Button(1))) => {
+                    Ok(ActionOutcome::effect(TuiEffect::Quit))
+                }
                 _ => Ok(ActionOutcome::none()),
             },
             Action::Nav(nav) => Ok(ActionOutcome::effect(nav.to_effect())),

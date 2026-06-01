@@ -157,7 +157,7 @@ impl fmt::Display for NavigationPresetIssue {
                 existing_action,
             } => {
                 let existing = existing_action
-                    .map(NavigationAction::as_name)
+                    .map(|action| action.info().name)
                     .unwrap_or("an existing application action");
                 write!(
                     f,
@@ -588,7 +588,7 @@ where
     }
 }
 
-pub(crate) fn builtin_preset(name: &str, source: &'static str) -> NavigationPreset {
+pub(crate) fn builtin_preset(name: &str, source: &str) -> NavigationPreset {
     NavigationPreset::from_toml(source)
         .unwrap_or_else(|err| panic!("invalid built-in {name} keybinding preset: {err}"))
 }
@@ -636,8 +636,8 @@ where
     A: From<NavigationAction> + PartialEq,
 {
     for nav in NavigationAction::all() {
-        if *action == A::from(*nav) {
-            return Some(*nav);
+        if *action == A::from(nav) {
+            return Some(nav);
         }
     }
     None

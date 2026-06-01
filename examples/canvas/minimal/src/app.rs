@@ -71,8 +71,9 @@ pub fn build() -> TuiApp<View, Action, State, Handler> {
         .canvas_form_editor(0)
         // Vim preset covers the flat focus line (field 0, field 1, Clear, Quit):
         // j/k/h/l plus Tab/Backtab on the page, Enter to activate, Ctrl-C to quit.
-        // Inside the canvas, `canvas_defaults` already bound j/k to field
-        // movement, and the editor hands off at the field boundary.
+        // Inside the form editor, j/k move between fields and the editor hands
+        // off at the field boundary — the form editor's own pipeline swallows
+        // those keys before they reach our Action type.
         .vim_defaults()
         .build()
 }

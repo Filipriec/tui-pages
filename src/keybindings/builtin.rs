@@ -19,7 +19,7 @@ pub enum BuiltinNavigationPreset {
 }
 
 impl BuiltinNavigationPreset {
-    pub fn name(self) -> &'static str {
+    pub fn name(&self) -> &str {
         match self {
             BuiltinNavigationPreset::Vim => "vim",
             BuiltinNavigationPreset::Emacs => "emacs",
@@ -27,7 +27,7 @@ impl BuiltinNavigationPreset {
         }
     }
 
-    pub fn toml(self) -> &'static str {
+    pub fn toml(&self) -> &str {
         match self {
             BuiltinNavigationPreset::Vim => include_str!("presets/vim.toml"),
             BuiltinNavigationPreset::Emacs => include_str!("presets/emacs.toml"),
@@ -52,15 +52,15 @@ pub fn vim_action_outcome<V, O, M>(action: VimAction) -> crate::runtime::ActionO
 }
 
 pub fn vim_preset_toml() -> &'static str {
-    BuiltinNavigationPreset::Vim.toml()
+    include_str!("presets/vim.toml")
 }
 
 pub fn emacs_preset_toml() -> &'static str {
-    BuiltinNavigationPreset::Emacs.toml()
+    include_str!("presets/emacs.toml")
 }
 
 pub fn helix_preset_toml() -> &'static str {
-    BuiltinNavigationPreset::Helix.toml()
+    include_str!("presets/helix.toml")
 }
 
 pub fn bind_builtin_general_defaults<A>(preset: BuiltinNavigationPreset, map: &mut KeyMap<A>)

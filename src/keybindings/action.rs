@@ -31,7 +31,7 @@ pub struct NavigationActionInfo {
 }
 
 impl NavigationAction {
-    pub const FOCUS: &'static [NavigationAction] = &[
+    pub const FOCUS: [NavigationAction; 5] = [
         NavigationAction::FocusNext,
         NavigationAction::FocusPrev,
         NavigationAction::Activate,
@@ -39,7 +39,7 @@ impl NavigationAction {
         NavigationAction::Quit,
     ];
 
-    pub const WORKSPACE: &'static [NavigationAction] = &[
+    pub const WORKSPACE: [NavigationAction; 8] = [
         NavigationAction::NextBuffer,
         NavigationAction::PrevBuffer,
         NavigationAction::CloseBuffer,
@@ -50,8 +50,8 @@ impl NavigationAction {
         NavigationAction::SplitHorizontal,
     ];
 
-    pub fn all() -> impl Iterator<Item = &'static NavigationAction> {
-        Self::FOCUS.iter().chain(Self::WORKSPACE.iter())
+    pub fn all() -> impl Iterator<Item = NavigationAction> {
+        Self::FOCUS.into_iter().chain(Self::WORKSPACE)
     }
 
     pub fn infos() -> &'static [NavigationActionInfo] {
@@ -66,19 +66,19 @@ impl NavigationAction {
             .expect("every NavigationAction has metadata")
     }
 
-    pub fn as_name(self) -> &'static str {
+    pub fn as_name(&self) -> &str {
         self.info().name
     }
 
-    pub fn label(self) -> &'static str {
+    pub fn label(&self) -> &str {
         self.info().label
     }
 
-    pub fn description(self) -> &'static str {
+    pub fn description(&self) -> &str {
         self.info().description
     }
 
-    pub fn category(self) -> &'static str {
+    pub fn category(&self) -> &str {
         self.info().category
     }
 
@@ -235,8 +235,8 @@ where
     A: PartialEq + From<NavigationAction>,
 {
     for nav in NavigationAction::all() {
-        if *action == A::from(*nav) {
-            return Some(navigation_action_outcome(*nav));
+        if *action == A::from(nav) {
+            return Some(navigation_action_outcome(nav));
         }
     }
     None
@@ -261,7 +261,7 @@ mod tests {
     #[test]
     fn navigation_actions_round_trip_names() {
         for action in NavigationAction::all() {
-            assert_eq!(NavigationAction::from_name(action.as_name()), Some(*action));
+            assert_eq!(NavigationAction::from_name(action.as_name()), Some(action));
         }
     }
 
