@@ -211,12 +211,21 @@ fn normal_mode_keymaps_drive_canvas_movement_actions() {
     app.handle_key(key(KeyCode::Char('j')), &mut state).unwrap();
     // `i` enters edit mode.
     app.handle_key(key(KeyCode::Char('i')), &mut state).unwrap();
+    // `u` and Ctrl+U drive undo/redo by default.
+    app.handle_key(key(KeyCode::Char('u')), &mut state).unwrap();
+    app.handle_key(
+        KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL),
+        &mut state,
+    )
+    .unwrap();
 
     assert_eq!(
         state.actions,
         vec![
             Action::Canvas(CanvasAction::MoveDown),
             Action::Canvas(CanvasAction::EnterEditMode),
+            Action::Canvas(CanvasAction::Undo),
+            Action::Canvas(CanvasAction::Redo),
         ]
     );
 }

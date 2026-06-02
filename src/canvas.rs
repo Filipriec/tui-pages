@@ -574,6 +574,8 @@ where
     bind_key(map, KeyCode::BackTab, CanvasAction::PrevField);
     bind_key(map, KeyCode::Enter, CanvasAction::NextField);
     bind_char(map, 'i', CanvasAction::EnterEditMode);
+    bind_char(map, 'u', CanvasAction::Undo);
+    bind_key_with_modifiers(map, KeyCode::Char('u'), KeyModifiers::CONTROL, CanvasAction::Redo);
     bind_char(map, 'a', CanvasAction::EnterEditModeAfter);
     bind_char(map, 'v', CanvasAction::EnterHighlightMode);
     bind_key_with_modifiers(
