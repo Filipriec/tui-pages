@@ -211,10 +211,10 @@ fn normal_mode_keymaps_drive_canvas_movement_actions() {
     app.handle_key(key(KeyCode::Char('j')), &mut state).unwrap();
     // `i` enters edit mode.
     app.handle_key(key(KeyCode::Char('i')), &mut state).unwrap();
-    // `u` and Ctrl+U drive undo/redo by default.
+    // Undo/redo come from the canvas crate's default vim bindings.
     app.handle_key(key(KeyCode::Char('u')), &mut state).unwrap();
     app.handle_key(
-        KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL),
+        KeyEvent::new(KeyCode::Char('r'), KeyModifiers::CONTROL),
         &mut state,
     )
     .unwrap();
@@ -336,6 +336,36 @@ fn dispatch_key_event_maps_canvas_keymap_boundaries_to_focus() {
         canvas::key_dispatch_status::<Action, _, _>(&outcome),
         Some(TuiPagesStatus::ActionHandled)
     );
+}
+
+#[test]
+fn dispatch_key_event_maps_named_canvas_undo_redo_actions() {
+    let mut read_only = std::collections::HashMap::new();
+    read_only.insert("undo".to_string(), vec!["u".to_string()]);
+    read_only.insert("redo".to_string(), vec!["ctrl+r".to_string()]);
+
+    let mut editor = FormEditor::new(Provider::new(&[""]));
+    editor.set_keymap(canvas::CanvasKeyMap::from_mode_maps(
+        &read_only,
+        &std::collections::HashMap::new(),
+        &std::collections::HashMap::new(),
+    ));
+
+    editor.execute(CanvasAction::EnterEditMode);
+    editor.execute(CanvasAction::InsertChar('a'));
+    editor.execute(CanvasAction::ExitEditMode);
+
+    let undo: canvas::CanvasKeyDispatchOutcome<(), ()> =
+        canvas::dispatch_key_event(&mut editor, key(KeyCode::Char('u')));
+    assert!(matches!(undo, canvas::CanvasKeyDispatchOutcome::Consumed(_)));
+    assert_eq!(editor.data_provider().field_value(0), "");
+
+    let redo: canvas::CanvasKeyDispatchOutcome<(), ()> = canvas::dispatch_key_event(
+        &mut editor,
+        KeyEvent::new(KeyCode::Char('r'), KeyModifiers::CONTROL),
+    );
+    assert!(matches!(redo, canvas::CanvasKeyDispatchOutcome::Consumed(_)));
+    assert_eq!(editor.data_provider().field_value(0), "a");
 }
 
 #[test]

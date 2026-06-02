@@ -29,7 +29,9 @@ pub use ::canvas::integration::focus_handoff::{
     boundary_from_key_outcome, handle_key_event_for_host, key_outcome_for_vertical_navigation,
     map_key_event_outcome_for_host, HostKeyEventOutcome,
 };
-pub use ::canvas::{CanvasKeyMap, KeyEventOutcome};
+pub use ::canvas::{
+    default_vim_action_bindings, CanvasActionBinding, CanvasKeyMap, KeyEventOutcome,
+};
 pub use ::canvas::keymap::{CanvasKeyAction, KeyStroke};
 
 // --- Cursor style ---
@@ -554,58 +556,14 @@ pub fn bind_normal_defaults<A>(map: &mut KeyMap<A>)
 where
     A: From<CanvasAction>,
 {
-    bind_key(map, KeyCode::Up, CanvasAction::MoveUp);
-    bind_key(map, KeyCode::Down, CanvasAction::MoveDown);
-    bind_key(map, KeyCode::Left, CanvasAction::MoveLeft);
-    bind_key(map, KeyCode::Right, CanvasAction::MoveRight);
-    bind_char(map, 'k', CanvasAction::MoveUp);
-    bind_char(map, 'j', CanvasAction::MoveDown);
-    bind_char(map, 'h', CanvasAction::MoveLeft);
-    bind_char(map, 'l', CanvasAction::MoveRight);
-    bind_char(map, 'w', CanvasAction::MoveWordNext);
-    bind_char(map, 'b', CanvasAction::MoveWordPrev);
-    bind_char(map, 'e', CanvasAction::MoveWordEnd);
-    bind_sequence(map, chars(&['g', 'e']), CanvasAction::MoveWordEndPrev);
-    bind_char(map, '0', CanvasAction::MoveLineStart);
-    bind_char(map, '$', CanvasAction::MoveLineEnd);
-    bind_sequence(map, chars(&['g', 'g']), CanvasAction::MoveFirstLine);
-    bind_key_with_modifiers(map, KeyCode::Char('g'), KeyModifiers::SHIFT, CanvasAction::MoveLastLine);
-    bind_key(map, KeyCode::Tab, CanvasAction::NextField);
-    bind_key(map, KeyCode::BackTab, CanvasAction::PrevField);
-    bind_key(map, KeyCode::Enter, CanvasAction::NextField);
-    bind_char(map, 'i', CanvasAction::EnterEditMode);
-    bind_char(map, 'u', CanvasAction::Undo);
-    bind_key_with_modifiers(map, KeyCode::Char('u'), KeyModifiers::CONTROL, CanvasAction::Redo);
-    bind_char(map, 'a', CanvasAction::EnterEditModeAfter);
-    bind_char(map, 'v', CanvasAction::EnterHighlightMode);
-    bind_key_with_modifiers(
-        map,
-        KeyCode::Char('v'),
-        KeyModifiers::SHIFT,
-        CanvasAction::EnterHighlightModeLinewise,
-    );
-    bind_char(map, 'o', CanvasAction::OpenLineBelow);
-    bind_key_with_modifiers(
-        map,
-        KeyCode::Char('o'),
-        KeyModifiers::SHIFT,
-        CanvasAction::OpenLineAbove,
-    );
+    bind_canvas_crate_defaults_for_mode(map, AppMode::ReadOnly);
 }
 
 pub fn bind_insert_defaults<A>(map: &mut KeyMap<A>)
 where
     A: From<CanvasAction>,
 {
-    bind_key(map, KeyCode::Esc, CanvasAction::ExitEditMode);
-    bind_key(map, KeyCode::Backspace, CanvasAction::DeleteBackward);
-    bind_key(map, KeyCode::Delete, CanvasAction::DeleteForward);
-    bind_key(map, KeyCode::Left, CanvasAction::MoveLeft);
-    bind_key(map, KeyCode::Right, CanvasAction::MoveRight);
-    bind_key(map, KeyCode::Up, CanvasAction::MoveUp);
-    bind_key(map, KeyCode::Down, CanvasAction::MoveDown);
-    bind_key(map, KeyCode::Tab, CanvasAction::NextField);
-    bind_key(map, KeyCode::BackTab, CanvasAction::PrevField);
+    bind_canvas_crate_defaults_for_mode(map, AppMode::Edit);
     bind_suggestion_defaults(map);
 }
 
@@ -613,21 +571,25 @@ pub fn bind_select_defaults<A>(map: &mut KeyMap<A>)
 where
     A: From<CanvasAction>,
 {
-    bind_key(map, KeyCode::Esc, CanvasAction::ExitHighlightMode);
-    bind_key(map, KeyCode::Up, CanvasAction::MoveUp);
-    bind_key(map, KeyCode::Down, CanvasAction::MoveDown);
-    bind_key(map, KeyCode::Left, CanvasAction::MoveLeft);
-    bind_key(map, KeyCode::Right, CanvasAction::MoveRight);
-    bind_char(map, 'k', CanvasAction::MoveUp);
-    bind_char(map, 'j', CanvasAction::MoveDown);
-    bind_char(map, 'h', CanvasAction::MoveLeft);
-    bind_char(map, 'l', CanvasAction::MoveRight);
-    bind_char(map, 'w', CanvasAction::MoveWordNext);
-    bind_char(map, 'b', CanvasAction::MoveWordPrev);
-    bind_char(map, 'e', CanvasAction::MoveWordEnd);
-    bind_key(map, KeyCode::Tab, CanvasAction::NextField);
-    bind_key(map, KeyCode::BackTab, CanvasAction::PrevField);
+    bind_canvas_crate_defaults_for_mode(map, AppMode::Highlight);
     bind_suggestion_defaults(map);
+}
+
+fn bind_canvas_crate_defaults_for_mode<A>(map: &mut KeyMap<A>, mode: AppMode)
+where
+    A: From<CanvasAction>,
+{
+    for binding in default_vim_action_bindings()
+        .into_iter()
+        .filter(|binding| binding.mode == mode)
+    {
+        let sequence = binding
+            .sequence
+            .into_iter()
+            .map(|stroke| KeyChord::new(stroke.code, stroke.modifiers))
+            .collect::<Vec<_>>();
+        map.bind(sequence, A::from(binding.action));
+    }
 }
 
 fn canvas_action_pipeline(timeout_ms: u64) -> InputPipeline<CanvasAction> {
@@ -1037,20 +999,6 @@ where
     );
 }
 
-fn bind_key<A>(map: &mut KeyMap<A>, code: KeyCode, action: CanvasAction)
-where
-    A: From<CanvasAction>,
-{
-    bind_key_with_modifiers(map, code, KeyModifiers::empty(), action);
-}
-
-fn bind_char<A>(map: &mut KeyMap<A>, ch: char, action: CanvasAction)
-where
-    A: From<CanvasAction>,
-{
-    bind_key(map, KeyCode::Char(ch), action);
-}
-
 fn bind_key_with_modifiers<A>(
     map: &mut KeyMap<A>,
     code: KeyCode,
@@ -1061,18 +1009,4 @@ where
     A: From<CanvasAction>,
 {
     map.bind(vec![KeyChord::new(code, modifiers)], A::from(action));
-}
-
-fn bind_sequence<A>(map: &mut KeyMap<A>, sequence: Vec<KeyChord>, action: CanvasAction)
-where
-    A: From<CanvasAction>,
-{
-    map.bind(sequence, A::from(action));
-}
-
-fn chars(chars: &[char]) -> Vec<KeyChord> {
-    chars
-        .iter()
-        .map(|ch| KeyChord::new(KeyCode::Char(*ch), KeyModifiers::empty()))
-        .collect()
 }
