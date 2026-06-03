@@ -2,7 +2,7 @@
 //!
 //! Enable the `canvas` feature and make your application action type implement
 //! `From<CanvasAction>`. Then `.canvas_defaults()` on the builder installs the
-//! standard `FormEditor` keymaps and typed-character action routing, while
+//! standard `FormEditor` keybindings and typed-character action routing, while
 //! [`PageSpec::canvas_editor`] keeps the active mode stack in sync with the
 //! editor.
 
@@ -30,9 +30,9 @@ pub use ::canvas::integration::focus_handoff::{
     map_key_event_outcome_for_host, HostKeyEventOutcome,
 };
 pub use ::canvas::{
-    default_vim_action_bindings, CanvasActionBinding, CanvasKeyMap, KeyEventOutcome,
+    default_vim_action_bindings, CanvasActionBinding, CanvasKeyBindings, KeyEventOutcome,
 };
-pub use ::canvas::keymap::{CanvasKeyAction, KeyStroke};
+pub use ::canvas::keybindings::{CanvasKeyAction, KeyStroke};
 
 // --- Cursor style ---
 pub use ::canvas::CursorManager;
@@ -909,10 +909,10 @@ where
     A: From<CanvasAction>,
 {
     pub fn canvas_defaults(self) -> Self {
-        self.canvas_keymaps().canvas_text_actions()
+        self.canvas_keybindings().canvas_text_actions()
     }
 
-    pub fn canvas_keymaps(mut self) -> Self {
+    pub fn canvas_keybindings(mut self) -> Self {
         bind_normal_defaults(self.input_registry.map_mut(modes::NORMAL.as_str()));
         bind_insert_defaults(self.input_registry.map_mut(modes::INSERT.as_str()));
         bind_select_defaults(self.input_registry.map_mut(modes::SELECT.as_str()));

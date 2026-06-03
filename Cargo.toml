@@ -28,7 +28,7 @@ default = []
 # Full canvas integration in one switch. We do not split canvas support into
 # sub-features: enabling `canvas` turns on every canvas surface — GUI renderers,
 # suggestions, cursor style, validation, computed fields, textarea, textinput,
-# and the canvas-owned keymap — plus the typed-action routing, default keymaps,
+# and the canvas-owned keybindings — plus the typed-action routing, default keymaps,
 # and focus handoff. Pulls in ratatui (the GUI surfaces need it). Canvas's
 # default `textmode-vim` rides along, satisfying its "exactly one text mode"
 # contract.
@@ -42,7 +42,7 @@ canvas = [
     "canvas/computed",
     "canvas/textarea",
     "canvas/textinput",
-    "canvas/keymap",
+    "canvas/keybindings",
 ]
 
 # Derives serde on the input/mode types. KeyChord embeds crossterm's KeyCode /
@@ -51,3 +51,5 @@ serde = ["dep:serde", "crossterm/serde"]
 # Built-in modal dialog: content/result types plus a ratatui renderer.
 # Pulls in ratatui; the rest of the crate stays rendering-agnostic.
 dialog = ["dep:ratatui"]
+
+full = ["canvas", "serde", "dialog"]

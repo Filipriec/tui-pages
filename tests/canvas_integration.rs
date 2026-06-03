@@ -4,9 +4,9 @@
 //!
 //! The `canvas` feature enables *full* canvas support in one switch (we do not
 //! split it into sub-features), so these tests exercise both the `tui-pages`
-//! glue (keymaps, typed-text routing, focus handoff, mode sync) and the
+//! glue (keybindings, typed-text routing, focus handoff, mode sync) and the
 //! re-export surface for every canvas capability — GUI, suggestions,
-//! validation, computed, textarea, textinput, keymap, and cursor style.
+//! validation, computed, textarea, textinput, keybindings, and cursor style.
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use tui_pages::{
@@ -195,10 +195,10 @@ fn typed_text_chord_helper_maps_plain_chars_only() {
     assert_eq!(with_ctrl, None);
 }
 
-// --- Glue: keymaps ------------------------------------------------------------
+// --- Glue: keybindings --------------------------------------------------------
 
 #[test]
-fn normal_mode_keymaps_drive_canvas_movement_actions() {
+fn normal_mode_keybindings_drive_canvas_movement_actions() {
     let mut app = TuiPages::<View, Action, State>::builder(View::Form)
         .page_fn(read_only_page)
         .handler(Handler)
@@ -207,7 +207,7 @@ fn normal_mode_keymaps_drive_canvas_movement_actions() {
     let mut state = State::default();
     app.refresh_page(&state);
 
-    // `j` in read-only navigation maps to MoveDown via the default keymaps.
+    // `j` in read-only navigation maps to MoveDown via the default keybindings.
     app.handle_key(key(KeyCode::Char('j')), &mut state).unwrap();
     // `i` enters edit mode.
     app.handle_key(key(KeyCode::Char('i')), &mut state).unwrap();
@@ -314,12 +314,12 @@ fn dispatch_action_applies_interior_movement_without_handoff() {
 }
 
 #[test]
-fn dispatch_key_event_maps_canvas_keymap_boundaries_to_focus() {
+fn dispatch_key_event_maps_canvas_keybinding_boundaries_to_focus() {
     let mut read_only = std::collections::HashMap::new();
     read_only.insert("move_down".to_string(), vec!["down".to_string()]);
 
     let mut editor = FormEditor::new(Provider::new(&["one"]));
-    editor.set_keymap(canvas::CanvasKeyMap::from_mode_maps(
+    editor.set_keybindings(canvas::CanvasKeyBindings::from_mode_maps(
         &read_only,
         &std::collections::HashMap::new(),
         &std::collections::HashMap::new(),
@@ -345,7 +345,7 @@ fn dispatch_key_event_maps_named_canvas_undo_redo_actions() {
     read_only.insert("redo".to_string(), vec!["ctrl+r".to_string()]);
 
     let mut editor = FormEditor::new(Provider::new(&[""]));
-    editor.set_keymap(canvas::CanvasKeyMap::from_mode_maps(
+    editor.set_keybindings(canvas::CanvasKeyBindings::from_mode_maps(
         &read_only,
         &std::collections::HashMap::new(),
         &std::collections::HashMap::new(),
@@ -1009,9 +1009,9 @@ fn every_canvas_surface_is_reachable_through_tui_pages() {
     let _: Option<canvas::TextAreaState> = None;
     let _: Option<canvas::TextInputProvider> = None;
 
-    // Keymap + host handoff. `CanvasKeyMap` is built from mode->binding maps.
+    // Keybindings + host handoff. `CanvasKeyBindings` is built from mode->binding maps.
     let empty = std::collections::HashMap::new();
-    let _km = canvas::CanvasKeyMap::from_mode_maps(&empty, &empty, &empty);
+    let _keybindings = canvas::CanvasKeyBindings::from_mode_maps(&empty, &empty, &empty);
     let _: Option<canvas::KeyEventOutcome> = None;
     let _: Option<canvas::CanvasKeyAction> = None;
     let _: Option<canvas::HostKeyEventOutcome> = None;
@@ -1029,7 +1029,7 @@ fn every_canvas_surface_is_reachable_through_tui_pages() {
         _opts,
         _trigger,
         _query,
-        _km,
+        _keybindings,
         _render,
         _render_with_suggestions,
         _cursor_mode,

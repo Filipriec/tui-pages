@@ -1,5 +1,7 @@
 # Editor keybinding presets
 
+WARNING - canvas crate keybindings are being used, not passed into this crate
+
 Page-level default keymaps for **tui-pages** (focus, quit, buffers, panes).
 
 ## Layout
