@@ -980,12 +980,23 @@ fn every_canvas_surface_is_reachable_through_tui_pages() {
 
     // GUI: themes, display options, renderers.
     let _theme = canvas::DefaultCanvasTheme::default();
-    let _opts = canvas::CanvasDisplayOptions::default();
+    let _opts = canvas::CanvasDisplayOptions {
+        max_label_width: 18,
+        max_input_width: Some(40),
+        row_input_width: Some(|row, available| match row {
+            0 => 12.min(available),
+            1 => 40.min(available),
+            _ => available,
+        }),
+        ..Default::default()
+    };
     let _overflow: Option<canvas::OverflowMode> = None;
     // `render_canvas_default` draws into a ratatui `Frame`; we only prove the
     // path resolves (rendering needs a live terminal/frame to call).
     let _render = canvas::render_canvas_default::<Provider>;
     let _render_with_suggestions = canvas::render_canvas_with_suggestions_default::<Provider>;
+    let _render_with_suggestions_options =
+        canvas::render_canvas_with_suggestions_default_options::<Provider>;
 
     // Cursor style.
     let _cursor: Option<canvas::CursorManager> = None;
@@ -1032,6 +1043,46 @@ fn every_canvas_surface_is_reachable_through_tui_pages() {
         _keybindings,
         _render,
         _render_with_suggestions,
+        _render_with_suggestions_options,
         _cursor_mode,
     );
+}
+
+#[test]
+fn canvas_suggestions_renderer_honors_per_row_input_width_options() {
+    use ratatui::{backend::TestBackend, layout::Rect, Terminal};
+
+    fn row_width(row: usize, available: u16) -> u16 {
+        match row {
+            0 => 8.min(available),
+            1 => 31.min(available),
+            _ => available,
+        }
+    }
+
+    let mut editor = FormEditor::new(Provider::new(&["short", "wide"]));
+    let _ = editor.execute(CanvasAction::MoveDown);
+
+    let backend = TestBackend::new(80, 10);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let mut active_rect = None;
+
+    terminal
+        .draw(|frame| {
+            active_rect = canvas::render_canvas_with_suggestions_default_options(
+                frame,
+                frame.area(),
+                Rect::new(0, 0, 80, 10),
+                &editor,
+                canvas::CanvasDisplayOptions {
+                    max_label_width: 10,
+                    max_input_width: None,
+                    row_input_width: Some(row_width),
+                    ..Default::default()
+                },
+            );
+        })
+        .unwrap();
+
+    assert_eq!(active_rect.map(|rect| rect.width), Some(31));
 }

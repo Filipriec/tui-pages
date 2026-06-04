@@ -34,10 +34,12 @@ pub use crate::canvas::{
     focus_intent_for_boundary as canvas_focus_intent_for_boundary,
     mode_for_app_mode as canvas_mode_for_app_mode, modes_for_app_mode as canvas_modes_for_app_mode,
     render_canvas_with_suggestions, render_canvas_with_suggestions_default,
-    text_chord_to_action as canvas_text_chord_to_action,
-    text_chord_to_canvas_action, update_cursor_style_for_editor,
-    update_cursor_style_for_mode, BoundaryExit as CanvasBoundaryExit, CanvasAction,
-    CanvasDispatchOutcome, CanvasKeyDispatchOutcome, CanvasTextWidgetOutcome,
+    render_canvas_with_suggestions_default_options,
+    render_canvas_with_suggestions_with_options,
+    text_chord_to_action as canvas_text_chord_to_action, text_chord_to_canvas_action,
+    update_cursor_style_for_editor, update_cursor_style_for_mode,
+    BoundaryExit as CanvasBoundaryExit, CanvasAction, CanvasDispatchOutcome,
+    CanvasKeyDispatchOutcome, CanvasTextWidgetOutcome,
 };
 pub use focus::{
     FocusController, FocusIntent, FocusManager, FocusQuery, FocusTarget, FocusWrap, Focusable,

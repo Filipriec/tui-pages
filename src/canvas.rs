@@ -326,7 +326,23 @@ where
     T: CanvasTheme,
     D: DataProvider,
 {
-    let input_rect = render_canvas(frame, canvas_area, editor, theme);
+    let opts = CanvasDisplayOptions::default();
+    render_canvas_with_suggestions_with_options(frame, frame_area, canvas_area, editor, theme, opts)
+}
+
+pub fn render_canvas_with_suggestions_with_options<T, D>(
+    frame: &mut Frame,
+    frame_area: Rect,
+    canvas_area: Rect,
+    editor: &FormEditor<D>,
+    theme: &T,
+    opts: CanvasDisplayOptions,
+) -> Option<Rect>
+where
+    T: CanvasTheme,
+    D: DataProvider,
+{
+    let input_rect = render_canvas_with_options(frame, canvas_area, editor, theme, opts);
     if let Some(input_rect) = input_rect {
         render_suggestions_dropdown(frame, frame_area, input_rect, theme, editor);
     }
@@ -344,6 +360,27 @@ where
 {
     let theme = DefaultCanvasTheme;
     render_canvas_with_suggestions(frame, frame_area, canvas_area, editor, &theme)
+}
+
+pub fn render_canvas_with_suggestions_default_options<D>(
+    frame: &mut Frame,
+    frame_area: Rect,
+    canvas_area: Rect,
+    editor: &FormEditor<D>,
+    opts: CanvasDisplayOptions,
+) -> Option<Rect>
+where
+    D: DataProvider,
+{
+    let theme = DefaultCanvasTheme;
+    render_canvas_with_suggestions_with_options(
+        frame,
+        frame_area,
+        canvas_area,
+        editor,
+        &theme,
+        opts,
+    )
 }
 
 pub fn update_cursor_style_for_mode(mode: AppMode) -> std::io::Result<()> {
