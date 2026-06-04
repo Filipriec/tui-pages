@@ -25,6 +25,9 @@ canvas = { path = "../canvas", optional = true }
 [features]
 default = []
 
+# Built-in command-line 
+command-line = ["dep:ratatui"]
+
 # Full canvas integration in one switch. We do not split canvas support into
 # sub-features: enabling `canvas` turns on every canvas surface — GUI renderers,
 # suggestions, cursor style, validation, computed fields, textarea, textinput,
@@ -52,4 +55,4 @@ serde = ["dep:serde", "crossterm/serde"]
 # Pulls in ratatui; the rest of the crate stays rendering-agnostic.
 dialog = ["dep:ratatui"]
 
-full = ["canvas", "serde", "dialog"]
+full = ["canvas", "serde", "dialog", "command-line"]

@@ -93,9 +93,9 @@ const BUTTON_LABELS: [&str; 2] = ["Clear", "Quit"];
 
 fn mode_label(mode: canvas::AppMode) -> &'static str {
     match mode {
-        canvas::AppMode::Edit => "INSERT",
-        canvas::AppMode::ReadOnly => "NORMAL",
-        canvas::AppMode::Highlight => "VISUAL",
+        canvas::AppMode::Ins => "INSERT",
+        canvas::AppMode::Nor => "NORMAL",
+        canvas::AppMode::Sel => "VISUAL",
         canvas::AppMode::Command => "COMMAND",
         canvas::AppMode::General => "GENERAL",
     }
@@ -189,7 +189,7 @@ fn main() -> Result<()> {
         // means no suggestion is computed and Tab just exits to the buttons.
         if on_input {
             state.entered = true;
-            if state.input.mode() != canvas::AppMode::Edit {
+            if state.input.mode() != canvas::AppMode::Ins {
                 state.input.enter_edit_mode();
             }
         }

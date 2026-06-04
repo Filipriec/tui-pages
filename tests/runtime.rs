@@ -173,3 +173,60 @@ fn text_mapper_does_not_hijack_non_canvas_text_targets() {
         vec![KeyChord::new(KeyCode::Char('A'), KeyModifiers::SHIFT)]
     );
 }
+
+#[cfg(feature = "command-line")]
+#[test]
+fn command_line_reservation_splits_bottom_row_from_page_area() {
+    use ratatui::layout::Rect;
+
+    let pages = |_view: &View, _state: &State, _focus: Option<&FocusTarget>| PageSpec::new();
+
+    let tui = TuiPages::<View, Action, State>::builder(View::Home)
+        .pages(pages)
+        .handler(Handler)
+        .reserve_command_line(true)
+        .build();
+
+    let areas = tui.render_areas(Rect::new(0, 0, 80, 24));
+
+    assert_eq!(areas.page, Rect::new(0, 0, 80, 23));
+    assert_eq!(areas.command_line, Some(Rect::new(0, 23, 80, 1)));
+}
+
+#[cfg(feature = "command-line")]
+#[test]
+fn command_line_reservation_gives_command_line_priority_on_tiny_area() {
+    use ratatui::layout::Rect;
+
+    let pages = |_view: &View, _state: &State, _focus: Option<&FocusTarget>| PageSpec::new();
+
+    let tui = TuiPages::<View, Action, State>::builder(View::Home)
+        .pages(pages)
+        .handler(Handler)
+        .reserve_command_line(true)
+        .build();
+
+    let areas = tui.render_areas(Rect::new(0, 0, 80, 1));
+
+    assert_eq!(areas.page, Rect::new(0, 0, 80, 0));
+    assert_eq!(areas.command_line, Some(Rect::new(0, 0, 80, 1)));
+}
+
+#[cfg(feature = "command-line")]
+#[test]
+fn command_line_area_is_absent_when_not_reserved() {
+    use ratatui::layout::Rect;
+
+    let pages = |_view: &View, _state: &State, _focus: Option<&FocusTarget>| PageSpec::new();
+
+    let tui = TuiPages::<View, Action, State>::builder(View::Home)
+        .pages(pages)
+        .handler(Handler)
+        .reserve_command_line(false)
+        .build();
+
+    let areas = tui.render_areas(Rect::new(0, 0, 80, 24));
+
+    assert_eq!(areas.page, Rect::new(0, 0, 80, 24));
+    assert_eq!(areas.command_line, None);
+}

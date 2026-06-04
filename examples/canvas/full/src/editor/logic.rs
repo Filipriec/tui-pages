@@ -7,9 +7,9 @@ pub const BUTTONS: [&str; 2] = ["Clear", "Go to Form"];
 
 pub fn mode_label(mode: canvas::AppMode) -> &'static str {
     match mode {
-        canvas::AppMode::Edit => "INSERT",
-        canvas::AppMode::ReadOnly => "NORMAL",
-        canvas::AppMode::Highlight => "VISUAL",
+        canvas::AppMode::Ins => "INSERT",
+        canvas::AppMode::Nor => "NORMAL",
+        canvas::AppMode::Sel => "VISUAL",
         canvas::AppMode::Command => "COMMAND",
         canvas::AppMode::General => "GENERAL",
     }

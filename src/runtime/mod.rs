@@ -3,6 +3,8 @@ use crate::focus::{FocusController, FocusIntent, FocusManager, FocusTarget, Focu
 use crate::input::{parse_binding, InputHint, InputPipeline, InputRegistry, KeyChord, KeyMap};
 use crate::navigation::{BufferState, PaneSplit};
 use crossterm::event::KeyEvent;
+#[cfg(feature = "command-line")]
+use ratatui::layout::{Constraint, Layout, Rect};
 use std::borrow::Cow;
 use std::error::Error;
 use std::fmt;
@@ -333,6 +335,33 @@ pub(crate) struct KeyHookOutcome<V, A, O, M> {
     pub outcome: ActionOutcome<V, O, M>,
 }
 
+#[cfg(feature = "command-line")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CommandLineAreas {
+    pub page: Rect,
+    pub command_line: Option<Rect>,
+}
+
+#[cfg(feature = "command-line")]
+impl CommandLineAreas {
+    pub fn split(area: Rect, reserve_command_line: bool) -> Self {
+        if !reserve_command_line {
+            return Self {
+                page: area,
+                command_line: None,
+            };
+        }
+
+        let [page, command_line] =
+            Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).areas(area);
+
+        Self {
+            page,
+            command_line: Some(command_line),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) enum KeyHookKind {
     #[cfg(feature = "canvas")]
@@ -372,6 +401,7 @@ pub struct TuiPages<V, A, S, Pages = (), Handler = (), O = (), M = ()> {
     pages: Pages,
     handler: Handler,
     fallback_view: V,
+    reserve_command_line: bool,
     pub(crate) text_input_mapper: Option<fn(KeyChord) -> Option<A>>,
     pub(crate) key_hooks: Vec<KeyHook<V, A, S, O, M>>,
     _state: PhantomData<S>,
@@ -414,6 +444,15 @@ where
 
     pub fn handler_mut(&mut self) -> &mut Handler {
         &mut self.handler
+    }
+
+    pub fn reserve_command_line(&self) -> bool {
+        self.reserve_command_line
+    }
+
+    #[cfg(feature = "command-line")]
+    pub fn render_areas(&self, area: Rect) -> CommandLineAreas {
+        CommandLineAreas::split(area, self.reserve_command_line)
     }
 
     pub fn refresh_page(&mut self, state: &S) {
@@ -652,6 +691,7 @@ pub struct TuiPagesBuilder<V, A, S, O = (), M = (), Pages = (), Handler = ()> {
     pub(crate) input_timeout_ms: u64,
     command_timeout_ms: u64,
     focus_wrap: FocusWrap,
+    reserve_command_line: bool,
     pub(crate) text_input_mapper: Option<fn(KeyChord) -> Option<A>>,
     pub(crate) key_hooks: Vec<KeyHook<V, A, S, O, M>>,
     pages: Pages,
@@ -671,6 +711,7 @@ impl<V, A, S, O, M> TuiPagesBuilder<V, A, S, O, M, (), ()> {
             input_timeout_ms: 1000,
             command_timeout_ms: 1000,
             focus_wrap: FocusWrap::default(),
+            reserve_command_line: cfg!(feature = "command-line"),
             text_input_mapper: None,
             key_hooks: Vec::new(),
             pages: (),
@@ -710,6 +751,7 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
             input_timeout_ms: self.input_timeout_ms,
             command_timeout_ms: self.command_timeout_ms,
             focus_wrap: self.focus_wrap,
+            reserve_command_line: self.reserve_command_line,
             text_input_mapper: self.text_input_mapper,
             key_hooks: self.key_hooks,
             pages,
@@ -749,6 +791,7 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
             input_timeout_ms: self.input_timeout_ms,
             command_timeout_ms: self.command_timeout_ms,
             focus_wrap: self.focus_wrap,
+            reserve_command_line: self.reserve_command_line,
             text_input_mapper: self.text_input_mapper,
             key_hooks: self.key_hooks,
             pages: self.pages,
@@ -763,6 +806,11 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
     /// or wrap-around. Applies to page focus and modal items.
     pub fn focus_wrap(mut self, wrap: FocusWrap) -> Self {
         self.focus_wrap = wrap;
+        self
+    }
+
+    pub fn reserve_command_line(mut self, reserve: bool) -> Self {
+        self.reserve_command_line = reserve;
         self
     }
 
@@ -832,6 +880,7 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
             pages: self.pages,
             handler: self.handler,
             fallback_view,
+            reserve_command_line: self.reserve_command_line,
             text_input_mapper: self.text_input_mapper,
             key_hooks: self.key_hooks,
             _state: PhantomData,

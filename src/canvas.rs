@@ -248,11 +248,11 @@ pub trait CanvasWidgetState {
 
 pub fn mode_for_app_mode(mode: AppMode) -> ModeId {
     match mode {
-        AppMode::Edit => modes::INSERT,
-        AppMode::Highlight => modes::SELECT,
+        AppMode::Ins => modes::INSERT,
+        AppMode::Sel => modes::SELECT,
         AppMode::Command => modes::COMMAND,
         AppMode::General => modes::GENERAL,
-        AppMode::ReadOnly => modes::NORMAL,
+        AppMode::Nor => modes::NORMAL,
     }
 }
 
@@ -265,7 +265,7 @@ pub fn modes_for_app_mode(mode: AppMode) -> Vec<ModeId> {
 }
 
 pub fn accepts_text_input(mode: AppMode) -> bool {
-    matches!(mode, AppMode::Edit | AppMode::Command)
+    matches!(mode, AppMode::Ins | AppMode::Command)
 }
 
 pub fn text_chord_to_canvas_action(chord: KeyChord) -> Option<CanvasAction> {
@@ -556,14 +556,14 @@ pub fn bind_normal_defaults<A>(map: &mut KeyMap<A>)
 where
     A: From<CanvasAction>,
 {
-    bind_canvas_crate_defaults_for_mode(map, AppMode::ReadOnly);
+    bind_canvas_crate_defaults_for_mode(map, AppMode::Nor);
 }
 
 pub fn bind_insert_defaults<A>(map: &mut KeyMap<A>)
 where
     A: From<CanvasAction>,
 {
-    bind_canvas_crate_defaults_for_mode(map, AppMode::Edit);
+    bind_canvas_crate_defaults_for_mode(map, AppMode::Ins);
     bind_suggestion_defaults(map);
 }
 
@@ -571,7 +571,7 @@ pub fn bind_select_defaults<A>(map: &mut KeyMap<A>)
 where
     A: From<CanvasAction>,
 {
-    bind_canvas_crate_defaults_for_mode(map, AppMode::Highlight);
+    bind_canvas_crate_defaults_for_mode(map, AppMode::Sel);
     bind_suggestion_defaults(map);
 }
 
@@ -769,7 +769,7 @@ where
             }
 
             let mode = state.canvas_textarea(*focus_index)?.mode();
-            if mode == AppMode::Edit {
+            if mode == AppMode::Ins {
                 return match (key.code, key.modifiers) {
                     (KeyCode::Char('c'), KeyModifiers::CONTROL) => None,
                     (KeyCode::Esc, _) => {
@@ -831,7 +831,7 @@ where
             }
 
             let mode = state.canvas_textinput(*focus_index)?.mode();
-            if mode == AppMode::Edit {
+            if mode == AppMode::Ins {
                 return match (key.code, key.modifiers) {
                     (KeyCode::Char('c'), KeyModifiers::CONTROL) => None,
                     (KeyCode::Esc, _) => {

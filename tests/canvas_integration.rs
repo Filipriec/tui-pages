@@ -108,13 +108,13 @@ fn key(code: KeyCode) -> KeyEvent {
 fn edit_page(_v: &View, _s: &State, _f: Option<&FocusTarget>) -> PageSpec {
     PageSpec::new()
         .focus(PageFocusBuilder::new().canvas_field(0))
-        .canvas_mode(AppMode::Edit)
+        .canvas_mode(AppMode::Ins)
 }
 
 fn read_only_page(_v: &View, _s: &State, _f: Option<&FocusTarget>) -> PageSpec {
     PageSpec::new()
         .focus(PageFocusBuilder::new().canvas_field(0))
-        .canvas_mode(AppMode::ReadOnly)
+        .canvas_mode(AppMode::Nor)
 }
 
 fn mixed_focus_page(_v: &View, _s: &State, _f: Option<&FocusTarget>) -> PageSpec {
@@ -127,7 +127,7 @@ fn mixed_focus_page(_v: &View, _s: &State, _f: Option<&FocusTarget>) -> PageSpec
                 .canvas_field(1)
                 .internal_canvas_field(99),
         )
-        .canvas_mode(AppMode::ReadOnly)
+        .canvas_mode(AppMode::Nor)
 }
 
 // --- Glue: typed-text routing -------------------------------------------------
@@ -460,11 +460,11 @@ fn page_spec_canvas_editor_tracks_editor_mode() {
 fn app_mode_to_modes_mapping_is_stable() {
     use tui_pages::modes;
 
-    assert_eq!(canvas::mode_for_app_mode(AppMode::Edit), modes::INSERT);
-    assert_eq!(canvas::mode_for_app_mode(AppMode::Highlight), modes::SELECT);
-    assert_eq!(canvas::mode_for_app_mode(AppMode::ReadOnly), modes::NORMAL);
-    assert!(canvas::accepts_text_input(AppMode::Edit));
-    assert!(!canvas::accepts_text_input(AppMode::ReadOnly));
+    assert_eq!(canvas::mode_for_app_mode(AppMode::Ins), modes::INSERT);
+    assert_eq!(canvas::mode_for_app_mode(AppMode::Sel), modes::SELECT);
+    assert_eq!(canvas::mode_for_app_mode(AppMode::Nor), modes::NORMAL);
+    assert!(canvas::accepts_text_input(AppMode::Ins));
+    assert!(!canvas::accepts_text_input(AppMode::Nor));
 }
 
 // --- Editor: typed editing through CanvasAction::execute ----------------------

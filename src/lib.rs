@@ -64,10 +64,12 @@ pub use navigation::{
     PaneId, PaneSession, PaneSplit, ViewBuffer, WorkspaceState,
 };
 pub use runtime::{
-    modes, ActionContext, ActionOutcome, ModeId, PageFn, PageProvider, PageSpec, TuiActionHandler,
-    TuiApp, TuiEffect, TuiPages, TuiPagesBuilder, TuiPagesError, TuiPagesOutput, TuiPagesResult,
-    TuiPagesStatus,
+    modes, ActionContext, ActionOutcome, ModeId, PageFn, PageProvider, PageSpec,
+    TuiActionHandler, TuiApp, TuiEffect, TuiPages, TuiPagesBuilder, TuiPagesError,
+    TuiPagesOutput, TuiPagesResult, TuiPagesStatus,
 };
+#[cfg(feature = "command-line")]
+pub use runtime::CommandLineAreas;
 pub use terminal::{enter as enter_terminal, TerminalGuard};
 
 /// Everything a typical application needs in one glob import.
