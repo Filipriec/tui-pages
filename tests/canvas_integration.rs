@@ -737,6 +737,28 @@ fn textarea_dispatch_handles_multiline_editing_paste_and_movement() {
     assert_eq!(textarea.current_field(), 1);
 }
 
+#[test]
+fn textarea_dispatch_uses_default_commandline_when_enabled() {
+    let mut textarea = canvas::TextAreaState::<canvas::TextAreaProvider>::from_text("needle\nhay");
+    textarea.use_default_commandline();
+
+    let _ = canvas::dispatch_text_area_key::<_, (), ()>(&mut textarea, key(KeyCode::Char('/')));
+    let _ = canvas::dispatch_text_area_key::<_, (), ()>(&mut textarea, key(KeyCode::Char('h')));
+    let _ = canvas::dispatch_text_area_key::<_, (), ()>(&mut textarea, key(KeyCode::Char('a')));
+    let _ = canvas::dispatch_text_area_key::<_, (), ()>(&mut textarea, key(KeyCode::Char('y')));
+    let _ = canvas::dispatch_text_area_key::<_, (), ()>(&mut textarea, key(KeyCode::Enter));
+
+    assert_eq!(textarea.search_query(), Some("hay"));
+    assert_eq!(
+        textarea.active_search_match(),
+        Some(canvas::TextAreaSearchMatch {
+            line: 1,
+            start: 0,
+            end: 3,
+        })
+    );
+}
+
 // --- Builder widgets ----------------------------------------------------------
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -890,7 +912,6 @@ fn canvas_textarea_widget_builder_owns_enter_edit_and_exit_flow() {
     app.refresh_page(&state);
 
     app.handle_key(key(KeyCode::Enter), &mut state).unwrap();
-    app.handle_key(key(KeyCode::Char('i')), &mut state).unwrap();
     app.handle_key(
         KeyEvent::new(KeyCode::Char('A'), KeyModifiers::SHIFT),
         &mut state,
@@ -901,6 +922,31 @@ fn canvas_textarea_widget_builder_owns_enter_edit_and_exit_flow() {
 
     assert_eq!(state.textarea.text(), "A");
     assert!(!state.textarea_entered);
+}
+
+#[test]
+fn canvas_textarea_widget_builder_uses_default_commandline() {
+    let mut app = TuiPages::<View, WidgetAction, WidgetState>::builder(View::Form)
+        .page_fn(widget_page)
+        .handler(WidgetHandler)
+        .canvas_textarea_widget(0)
+        .build();
+    let mut state = WidgetState::default();
+    state.textarea = canvas::TextAreaState::from_text("first\nsecond");
+    state.textarea.use_default_commandline();
+    app.refresh_page(&state);
+
+    app.handle_key(key(KeyCode::Enter), &mut state).unwrap();
+    app.handle_key(key(KeyCode::Char(':')), &mut state).unwrap();
+    for ch in "set number".chars() {
+        app.handle_key(key(KeyCode::Char(ch)), &mut state).unwrap();
+    }
+    app.handle_key(key(KeyCode::Enter), &mut state).unwrap();
+
+    assert_eq!(
+        state.textarea.line_number_mode(),
+        canvas::TextAreaLineNumberMode::Absolute
+    );
 }
 
 #[test]
@@ -1018,11 +1064,40 @@ fn every_canvas_surface_is_reachable_through_tui_pages() {
 
     // Textarea / textinput widgets.
     let _: Option<canvas::TextAreaState> = None;
+    let _: Option<canvas::TextAreaCommandLineState> = None;
+    let _line_numbers = canvas::TextAreaLineNumberMode::Absolute;
+    let _search_match = canvas::TextAreaSearchMatch {
+        line: 0,
+        start: 0,
+        end: 1,
+    };
     let _: Option<canvas::TextInputProvider> = None;
+
+    // Command line.
+    let _commandline = canvas::CommandLineState::new();
+    let _commandline_widget = canvas::CommandLine::default();
+    let _commandline_mode = canvas::CommandLineMode::Command;
+    let _commandline_submit = canvas::CommandLineSubmit::Command("write".to_string());
+    let _parsed = canvas::parse_command_line("set number");
+    let _args = canvas::parse_command_args("set number");
+    let _registry = canvas::CommandLineRegistry::new();
+    let _command = canvas::CommandLineCommand::new("write");
+    let _: Option<canvas::CommandLineEventOutcome> = None;
+    let _: Option<canvas::CommandLinePlacement> = None;
+    let _: Option<canvas::CommandLineDispatchError> = None;
+    let _: Option<canvas::CommandLineParseError> = None;
+    let _: Option<canvas::CommandLineParsedCommand> = None;
+    let _: Option<canvas::CommandLineCommandInvocation> = None;
+    let _: Option<canvas::CommandLineRegistrationError> = None;
 
     // Keybindings + host handoff. `CanvasKeyBindings` is built from mode->binding maps.
     let empty = std::collections::HashMap::new();
     let _keybindings = canvas::CanvasKeyBindings::from_mode_maps(&empty, &empty, &empty);
+    let _builtin_bindings =
+        canvas::default_builtin_action_bindings(canvas::BuiltinCanvasKeybindingPreset::Vim);
+    let _helix_bindings = canvas::default_helix_action_bindings();
+    let _emacs_bindings = canvas::default_emacs_action_bindings();
+    let _: Option<canvas::CanvasActionKeyBinding> = None;
     let _: Option<canvas::KeyEventOutcome> = None;
     let _: Option<canvas::CanvasKeyAction> = None;
     let _: Option<canvas::HostKeyEventOutcome> = None;
@@ -1041,10 +1116,23 @@ fn every_canvas_surface_is_reachable_through_tui_pages() {
         _trigger,
         _query,
         _keybindings,
+        _builtin_bindings,
+        _helix_bindings,
+        _emacs_bindings,
         _render,
         _render_with_suggestions,
         _render_with_suggestions_options,
         _cursor_mode,
+        _commandline,
+        _commandline_widget,
+        _commandline_mode,
+        _commandline_submit,
+        _parsed,
+        _args,
+        _registry,
+        _command,
+        _line_numbers,
+        _search_match,
     );
 }
 

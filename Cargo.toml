@@ -45,6 +45,7 @@ canvas = [
     "canvas/computed",
     "canvas/textarea",
     "canvas/textinput",
+    "canvas/commandline",
     "canvas/keybindings",
 ]
 

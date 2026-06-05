@@ -30,7 +30,10 @@ pub use ::canvas::integration::focus_handoff::{
     map_key_event_outcome_for_host, HostKeyEventOutcome,
 };
 pub use ::canvas::{
-    default_vim_action_bindings, CanvasActionBinding, CanvasKeyBindings, KeyEventOutcome,
+    default_builtin_action_bindings, default_emacs_action_bindings,
+    default_helix_action_bindings, default_vim_action_bindings, preset,
+    BuiltinCanvasKeybindingPreset, CanvasActionBinding, CanvasActionKeyBinding,
+    CanvasKeyBindings, KeyEventOutcome,
 };
 pub use ::canvas::keybindings::{CanvasKeyAction, KeyStroke};
 
@@ -70,7 +73,18 @@ pub use ::canvas::integration::crossterm_input::{
 pub use ::canvas::{
     TextArea, TextAreaDataProvider, TextAreaEditor, TextAreaProvider, TextAreaState,
 };
-pub use ::canvas::textarea::{TextAreaEventOutcome, TextOverflowMode};
+pub use ::canvas::textarea::{
+    TextAreaCommandLineState, TextAreaEventOutcome, TextAreaLineNumberMode, TextAreaSearchMatch,
+    TextOverflowMode,
+};
+
+// --- Command line ---
+pub use ::canvas::{
+    parse_command_args, parse_command_line, CommandLine, CommandLineCommand,
+    CommandLineCommandInvocation, CommandLineDispatchError, CommandLineEventOutcome,
+    CommandLineMode, CommandLineParseError, CommandLineParsedCommand, CommandLinePlacement,
+    CommandLineRegistry, CommandLineRegistrationError, CommandLineState, CommandLineSubmit,
+};
 
 // --- Text input ---
 pub use ::canvas::{
@@ -147,6 +161,10 @@ where
 
 pub trait CanvasTextAreaHost {
     fn mode(&self) -> AppMode;
+    fn commandline_enabled(&self) -> bool {
+        false
+    }
+    fn boundary_for_key(&self, key: &KeyEvent) -> Option<BoundaryExit>;
     fn input_key(&mut self, key: KeyEvent) -> TextAreaEventOutcome;
     fn exit_edit_mode(&mut self);
     fn dispatch_canvas_action(&mut self, action: CanvasAction) -> HostActionOutcome;
@@ -160,8 +178,26 @@ where
         self.editor().mode()
     }
 
+    fn commandline_enabled(&self) -> bool {
+        self.commandline().is_some()
+    }
+
+    fn boundary_for_key(&self, key: &KeyEvent) -> Option<BoundaryExit> {
+        text_area_boundary_for_key(self, key)
+    }
+
     fn input_key(&mut self, key: KeyEvent) -> TextAreaEventOutcome {
-        self.input(key)
+        if self.commandline_enabled() {
+            match self.handle_key_event(key) {
+                KeyEventOutcome::Consumed(_)
+                | KeyEventOutcome::Pending
+                | KeyEventOutcome::ExitTop
+                | KeyEventOutcome::ExitBottom => TextAreaEventOutcome::Handled,
+                KeyEventOutcome::NotMatched => TextAreaEventOutcome::Ignored,
+            }
+        } else {
+            self.input(key)
+        }
     }
 
     fn exit_edit_mode(&mut self) {
@@ -536,9 +572,24 @@ where
         return CanvasTextWidgetOutcome::Focus(focus_intent_for_boundary(boundary));
     }
 
-    match textarea.input(event) {
-        TextAreaEventOutcome::Handled => CanvasTextWidgetOutcome::Handled,
-        TextAreaEventOutcome::Ignored => CanvasTextWidgetOutcome::NotHandled,
+    if textarea.commandline().is_some() {
+        match textarea.handle_key_event(event) {
+            KeyEventOutcome::Consumed(_) | KeyEventOutcome::Pending => {
+                CanvasTextWidgetOutcome::Handled
+            }
+            KeyEventOutcome::ExitTop => {
+                CanvasTextWidgetOutcome::Focus(focus_intent_for_boundary(BoundaryExit::Top))
+            }
+            KeyEventOutcome::ExitBottom => {
+                CanvasTextWidgetOutcome::Focus(focus_intent_for_boundary(BoundaryExit::Bottom))
+            }
+            KeyEventOutcome::NotMatched => CanvasTextWidgetOutcome::NotHandled,
+        }
+    } else {
+        match textarea.input(event) {
+            TextAreaEventOutcome::Handled => CanvasTextWidgetOutcome::Handled,
+            TextAreaEventOutcome::Ignored => CanvasTextWidgetOutcome::NotHandled,
+        }
     }
 }
 
@@ -800,6 +851,9 @@ where
                     if let Some(entered) = state.canvas_textarea_entered(*focus_index) {
                         *entered = true;
                     }
+                    if let Some(textarea) = state.canvas_textarea(*focus_index) {
+                        textarea.exit_edit_mode();
+                    }
                     return hook_status_outcome(TuiPagesStatus::ActionHandled);
                 }
                 return focus_intent_for_top_level_key(key).and_then(hook_focus_outcome);
@@ -830,6 +884,20 @@ where
                     *entered = false;
                 }
                 return hook_status_outcome(TuiPagesStatus::ActionHandled);
+            }
+
+            if let Some(boundary) = state.canvas_textarea(*focus_index)?.boundary_for_key(&key) {
+                return hook_focus_outcome(focus_intent_for_boundary(boundary));
+            }
+
+            match state
+                .canvas_textarea(*focus_index)?
+                .input_key(normalize_shift(key))
+            {
+                TextAreaEventOutcome::Handled => {
+                    return hook_status_outcome(TuiPagesStatus::TextHandled);
+                }
+                TextAreaEventOutcome::Ignored => {}
             }
 
             let modes = modes_for_app_mode(mode);
