@@ -47,28 +47,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e748733b7cbc798e1434b6ac524f0c1ff2ab456fe201501e6497c8417a4fc33"
 
 [[package]]
-name = "canvas"
-version = "0.6.15"
-dependencies = [
- "anyhow",
- "async-trait",
- "crossterm",
- "derivative",
- "once_cell",
- "ratatui",
- "regex",
- "ropey",
- "serde",
- "thiserror",
- "tokio",
- "toml",
- "tracing",
- "tracing-subscriber",
- "unicode-width 0.2.0",
- "validation-core",
-]
-
-[[package]]
 name = "canvas_minimal"
 version = "0.1.0"
 dependencies = [
@@ -828,14 +806,46 @@ dependencies = [
 ]
 
 [[package]]
-name = "tui-pages"
-version = "0.7.2"
+name = "tui-canvas"
+version = "0.7.5"
 dependencies = [
- "canvas",
+ "anyhow",
+ "async-trait",
+ "crossterm",
+ "derivative",
+ "once_cell",
+ "ratatui",
+ "regex",
+ "ropey",
+ "serde",
+ "thiserror",
+ "tokio",
+ "toml",
+ "tracing",
+ "tracing-subscriber",
+ "tui-canvas-validation-core",
+ "unicode-width 0.2.0",
+]
+
+[[package]]
+name = "tui-canvas-validation-core"
+version = "0.7.5"
+dependencies = [
+ "regex",
+ "serde",
+ "thiserror",
+ "unicode-width 0.2.0",
+]
+
+[[package]]
+name = "tui-pages"
+version = "0.7.5"
+dependencies = [
  "crossterm",
  "ratatui",
  "toml",
  "tracing",
+ "tui-canvas",
 ]
 
 [[package]]
@@ -872,16 +882,6 @@ name = "unicode-width"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1fc81956842c57dac11422a97c3b8195a1ff727f06e85c84ed2e8aa277c9a0fd"
-
-[[package]]
-name = "validation-core"
-version = "0.6.15"
-dependencies = [
- "regex",
- "serde",
- "thiserror",
- "unicode-width 0.2.0",
-]
 
 [[package]]
 name = "valuable"
