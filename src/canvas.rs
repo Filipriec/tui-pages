@@ -52,6 +52,7 @@ pub use ::canvas::{
     ValidationConfig, ValidationConfigBuilder, ValidationError, ValidationResult, ValidationRule,
     ValidationSet, ValidationSettings, ValidationState, ValidationSummary,
 };
+pub use ::canvas::validation::limits::{CountMode, LimitCheckResult};
 
 // --- Computed fields ---
 pub use ::canvas::{ComputedContext, ComputedProvider, ComputedState};
