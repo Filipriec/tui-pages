@@ -152,6 +152,9 @@ impl<O, M> CanvasTextWidgetOutcome<O, M> {
 
 pub trait CanvasFormEditorHost {
     fn mode(&self) -> AppMode;
+    fn has_keybindings(&self) -> bool;
+    fn use_keybinding_preset(&mut self, preset: BuiltinCanvasKeybindingPreset);
+    fn input_key(&mut self, key: KeyEvent) -> CanvasKeyDispatchOutcome;
     fn dispatch_canvas_action(&mut self, action: CanvasAction) -> CanvasDispatchOutcome;
 }
 
@@ -161,6 +164,18 @@ where
 {
     fn mode(&self) -> AppMode {
         self.core().mode()
+    }
+
+    fn has_keybindings(&self) -> bool {
+        self.core().has_keybindings()
+    }
+
+    fn use_keybinding_preset(&mut self, preset: BuiltinCanvasKeybindingPreset) {
+        FormEditor::use_keybinding_preset(self, preset);
+    }
+
+    fn input_key(&mut self, key: KeyEvent) -> CanvasKeyDispatchOutcome {
+        dispatch_key_event(self, key)
     }
 
     fn dispatch_canvas_action(&mut self, action: CanvasAction) -> CanvasDispatchOutcome {
@@ -780,23 +795,6 @@ fn hook_status_outcome<V, A, O, M>(
     hook_outcome(status, ActionOutcome::none())
 }
 
-fn form_host_dispatch_hook_outcome<V, A, O, M>(
-    outcome: CanvasDispatchOutcome,
-) -> Option<KeyHookOutcome<V, A, O, M>> {
-    match outcome {
-        CanvasDispatchOutcome::Applied(_) => {
-            hook_status_outcome(TuiPagesStatus::ActionHandled)
-        }
-        CanvasDispatchOutcome::Focus(FocusIntent::ExitCanvasForward) => {
-            hook_focus_outcome(FocusIntent::ExitCanvasForward)
-        }
-        CanvasDispatchOutcome::Focus(FocusIntent::ExitCanvasBackward) => {
-            hook_focus_outcome(FocusIntent::ExitCanvasBackward)
-        }
-        CanvasDispatchOutcome::Focus(_) => hook_status_outcome(TuiPagesStatus::ActionHandled),
-    }
-}
-
 fn widget_action_hook_outcome<V, A, O, M>(
     outcome: HostActionOutcome,
 ) -> Option<KeyHookOutcome<V, A, O, M>> {
@@ -846,24 +844,36 @@ where
     S: CanvasWidgetState,
 {
     match kind {
-        KeyHookKind::CanvasFormEditor { id, pipeline } => {
+        KeyHookKind::CanvasFormEditor {
+            id,
+            preset,
+        } => {
             if !ctx.focus.as_ref().is_some_and(FocusTarget::is_canvas) {
                 return None;
             }
 
             let editor = state.canvas_form_editor(*id)?;
-            let mode = editor.mode();
-            let modes = modes_for_app_mode(mode);
-            match pipeline.process(key, &modes, accepts_text_input(mode)) {
-                PipelineResponse::Execute(action) => {
-                    form_host_dispatch_hook_outcome(editor.dispatch_canvas_action(action))
+            if !editor.has_keybindings() {
+                editor.use_keybinding_preset(*preset);
+            }
+
+            match editor.input_key(normalize_shift(key)) {
+                CanvasKeyDispatchOutcome::Consumed(_) => {
+                    hook_status_outcome(TuiPagesStatus::ActionHandled)
                 }
-                PipelineResponse::Type(chord) if accepts_text_input(mode) => {
-                    text_chord_to_canvas_action(chord).and_then(|action| {
-                        form_host_dispatch_hook_outcome(editor.dispatch_canvas_action(action))
-                    })
+                CanvasKeyDispatchOutcome::PendingSequence => {
+                    hook_status_outcome(TuiPagesStatus::Waiting(Vec::new()))
                 }
-                response => pipeline_hook_outcome(response),
+                CanvasKeyDispatchOutcome::NotHandled => None,
+                CanvasKeyDispatchOutcome::Focus(FocusIntent::ExitCanvasForward) => {
+                    hook_focus_outcome(FocusIntent::ExitCanvasForward)
+                }
+                CanvasKeyDispatchOutcome::Focus(FocusIntent::ExitCanvasBackward) => {
+                    hook_focus_outcome(FocusIntent::ExitCanvasBackward)
+                }
+                CanvasKeyDispatchOutcome::Focus(_) => {
+                    hook_status_outcome(TuiPagesStatus::ActionHandled)
+                }
             }
         }
         KeyHookKind::CanvasTextArea {
@@ -1083,7 +1093,7 @@ where
         self.key_hooks.push(KeyHook {
             kind: KeyHookKind::CanvasFormEditor {
                 id,
-                pipeline: canvas_action_pipeline_with_preset(preset, self.input_timeout_ms),
+                preset,
             },
             dispatch: dispatch_canvas_key_hook::<V, A, S, O, M>,
         });

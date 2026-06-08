@@ -367,7 +367,7 @@ pub(crate) enum KeyHookKind {
     #[cfg(feature = "canvas")]
     CanvasFormEditor {
         id: usize,
-        pipeline: InputPipeline<crate::canvas::CanvasAction>,
+        preset: crate::canvas::BuiltinCanvasKeybindingPreset,
     },
     #[cfg(feature = "canvas")]
     CanvasTextArea {
