@@ -919,10 +919,12 @@ fn canvas_textarea_widget_builder_owns_enter_edit_and_exit_flow() {
     )
     .unwrap();
     app.handle_key(key(KeyCode::Esc), &mut state).unwrap();
-    app.handle_key(key(KeyCode::Esc), &mut state).unwrap();
+    app.handle_key(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::CONTROL), &mut state)
+        .unwrap();
 
     assert_eq!(state.textarea.text(), "A");
     assert!(!state.textarea_entered);
+    assert_eq!(app.focus.current(), Some(FocusTarget::Button(0)));
 }
 
 #[test]
@@ -968,6 +970,13 @@ fn helix_textarea_widget_uses_keybinding_engine_without_commandline() {
 
     assert_ne!(state.textarea.text(), "abcx");
     assert_eq!(state.textarea.mode(), AppMode::Nor);
+
+    app.handle_key(key(KeyCode::Char('v')), &mut state).unwrap();
+    assert_eq!(state.textarea.mode(), AppMode::Sel);
+
+    app.handle_key(key(KeyCode::Esc), &mut state).unwrap();
+
+    assert!(state.textarea_entered);
 }
 
 #[test]

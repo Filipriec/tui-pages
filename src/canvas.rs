@@ -946,11 +946,13 @@ where
                 };
             }
 
-            if matches!(key.code, KeyCode::Esc) && key.kind == KeyEventKind::Press {
+            if matches!((key.code, key.modifiers), (KeyCode::Char('g'), KeyModifiers::CONTROL))
+                && key.kind == KeyEventKind::Press
+            {
                 if let Some(entered) = state.canvas_textarea_entered(*focus_index) {
                     *entered = false;
                 }
-                return hook_status_outcome(TuiPagesStatus::ActionHandled);
+                return hook_focus_outcome(FocusIntent::ExitCanvasForward);
             }
 
             if let Some(boundary) = state.canvas_textarea(*focus_index)?.boundary_for_key(&key) {
