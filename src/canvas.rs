@@ -19,7 +19,10 @@ use ratatui::{layout::Rect, Frame};
 // available unconditionally. We do not split canvas into sub-features.
 
 // --- Base surface ---
-pub use ::canvas::{ActionResult, AppMode, CanvasAction, DataProvider, EditorState, FormEditor};
+pub use ::canvas::{
+    ActionResult, AppMode, CanvasAction, DataProvider, EditorState, TextFormEventOutcome,
+    TextFormState,
+};
 pub use ::canvas::integration::focus_handoff::{
     execute_action_for_host, execute_action_for_host_with_options, BoundaryExit, HostActionOutcome,
 };
@@ -60,7 +63,7 @@ pub use ::canvas::{ComputedContext, ComputedProvider, ComputedState};
 // --- GUI: renderers, themes, display options ---
 pub use ::canvas::{
     render_canvas, render_canvas_default, render_canvas_with_options, CanvasDisplayOptions,
-    CanvasTheme, DefaultCanvasTheme, FormInputEventOutcome, OverflowMode,
+    CanvasTheme, DefaultCanvasTheme, OverflowMode,
 };
 
 // Crossterm terminal-input session helpers (raw mode, bracketed paste, mouse
@@ -72,7 +75,7 @@ pub use ::canvas::integration::crossterm_input::{
 
 // --- Text area ---
 pub use ::canvas::{
-    TextArea, TextAreaDataProvider, TextAreaEditor, TextAreaProvider, TextAreaState,
+    TextArea, TextAreaDataProvider, TextAreaProvider, TextAreaState,
 };
 pub use ::canvas::textarea::{
     TextAreaCommandLineState, TextAreaEventOutcome, TextAreaLineNumberMode, TextAreaSearchMatch,
@@ -89,9 +92,14 @@ pub use ::canvas::{
 
 // --- Text input ---
 pub use ::canvas::{
-    TextInput, TextInputDataProvider, TextInputEditor, TextInputEventOutcome, TextInputProvider,
+    TextInput, TextInputDataProvider, TextInputEventOutcome, TextInputProvider,
     TextInputState,
 };
+
+pub type FormEditor<D> = TextFormState<D>;
+pub type FormInputEventOutcome = TextFormEventOutcome;
+pub type TextAreaEditor<P> = TextAreaState<P>;
+pub type TextInputEditor<P> = TextInputState<P>;
 
 #[derive(Debug, Clone)]
 pub enum CanvasDispatchOutcome<O = (), M = ()> {
@@ -152,7 +160,7 @@ where
     D: DataProvider,
 {
     fn mode(&self) -> AppMode {
-        FormEditor::mode(self)
+        self.core().mode()
     }
 
     fn dispatch_canvas_action(&mut self, action: CanvasAction) -> CanvasDispatchOutcome {
@@ -176,7 +184,7 @@ where
     P: TextAreaDataProvider,
 {
     fn mode(&self) -> AppMode {
-        self.editor().mode()
+        self.mode()
     }
 
     fn commandline_enabled(&self) -> bool {
@@ -202,11 +210,11 @@ where
     }
 
     fn exit_edit_mode(&mut self) {
-        let _ = self.editor_mut().exit_edit_mode();
+        let _ = self.core_mut().exit_edit_mode();
     }
 
     fn dispatch_canvas_action(&mut self, action: CanvasAction) -> HostActionOutcome {
-        execute_action_for_host_with_options(self.editor_mut(), action, false)
+        HostActionOutcome::Applied(self.core_mut().execute(action))
     }
 }
 
@@ -225,7 +233,7 @@ where
     P: TextInputDataProvider,
 {
     fn mode(&self) -> AppMode {
-        self.editor().mode()
+        self.mode()
     }
 
     fn text(&self) -> String {
@@ -245,11 +253,11 @@ where
     }
 
     fn exit_edit_mode(&mut self) {
-        let _ = self.editor_mut().exit_edit_mode();
+        let _ = self.form_mut().exit_edit_mode();
     }
 
     fn dispatch_canvas_action(&mut self, action: CanvasAction) -> HostActionOutcome {
-        execute_action_for_host_with_options(self.editor_mut(), action, false)
+        execute_action_for_host_with_options(self.form_mut(), action, false)
     }
 }
 
@@ -636,23 +644,42 @@ pub fn bind_default_keymaps<A>(
 where
     A: From<CanvasAction>,
 {
-    bind_normal_defaults(normal);
-    bind_insert_defaults(insert);
-    bind_select_defaults(select);
+    bind_builtin_keymaps(
+        BuiltinCanvasKeybindingPreset::Vim,
+        normal,
+        insert,
+        select,
+    );
+}
+
+pub fn bind_builtin_keymaps<A>(
+    preset: BuiltinCanvasKeybindingPreset,
+    normal: &mut KeyMap<A>,
+    insert: &mut KeyMap<A>,
+    select: &mut KeyMap<A>,
+)
+where
+    A: From<CanvasAction>,
+{
+    bind_builtin_defaults_for_mode(preset, normal, AppMode::Nor);
+    bind_builtin_defaults_for_mode(preset, insert, AppMode::Ins);
+    bind_suggestion_defaults(insert);
+    bind_builtin_defaults_for_mode(preset, select, AppMode::Sel);
+    bind_suggestion_defaults(select);
 }
 
 pub fn bind_normal_defaults<A>(map: &mut KeyMap<A>)
 where
     A: From<CanvasAction>,
 {
-    bind_canvas_crate_defaults_for_mode(map, AppMode::Nor);
+    bind_builtin_defaults_for_mode(BuiltinCanvasKeybindingPreset::Vim, map, AppMode::Nor);
 }
 
 pub fn bind_insert_defaults<A>(map: &mut KeyMap<A>)
 where
     A: From<CanvasAction>,
 {
-    bind_canvas_crate_defaults_for_mode(map, AppMode::Ins);
+    bind_builtin_defaults_for_mode(BuiltinCanvasKeybindingPreset::Vim, map, AppMode::Ins);
     bind_suggestion_defaults(map);
 }
 
@@ -660,15 +687,19 @@ pub fn bind_select_defaults<A>(map: &mut KeyMap<A>)
 where
     A: From<CanvasAction>,
 {
-    bind_canvas_crate_defaults_for_mode(map, AppMode::Sel);
+    bind_builtin_defaults_for_mode(BuiltinCanvasKeybindingPreset::Vim, map, AppMode::Sel);
     bind_suggestion_defaults(map);
 }
 
-fn bind_canvas_crate_defaults_for_mode<A>(map: &mut KeyMap<A>, mode: AppMode)
+fn bind_builtin_defaults_for_mode<A>(
+    preset: BuiltinCanvasKeybindingPreset,
+    map: &mut KeyMap<A>,
+    mode: AppMode,
+)
 where
     A: From<CanvasAction>,
 {
-    for binding in default_vim_action_bindings()
+    for binding in default_builtin_action_bindings(preset)
         .into_iter()
         .filter(|binding| binding.mode == mode)
     {
@@ -681,11 +712,16 @@ where
     }
 }
 
-fn canvas_action_pipeline(timeout_ms: u64) -> InputPipeline<CanvasAction> {
+fn canvas_action_pipeline_with_preset(
+    preset: BuiltinCanvasKeybindingPreset,
+    timeout_ms: u64,
+) -> InputPipeline<CanvasAction> {
     let mut registry = InputRegistry::empty();
-    bind_normal_defaults(registry.map_mut(modes::NORMAL.as_str()));
-    bind_insert_defaults(registry.map_mut(modes::INSERT.as_str()));
-    bind_select_defaults(registry.map_mut(modes::SELECT.as_str()));
+    bind_builtin_defaults_for_mode(preset, registry.map_mut(modes::NORMAL.as_str()), AppMode::Nor);
+    bind_builtin_defaults_for_mode(preset, registry.map_mut(modes::INSERT.as_str()), AppMode::Ins);
+    bind_suggestion_defaults(registry.map_mut(modes::INSERT.as_str()));
+    bind_builtin_defaults_for_mode(preset, registry.map_mut(modes::SELECT.as_str()), AppMode::Sel);
+    bind_suggestion_defaults(registry.map_mut(modes::SELECT.as_str()));
     InputPipeline::new(registry, timeout_ms)
 }
 
@@ -1035,33 +1071,57 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
 where
     S: CanvasWidgetState,
 {
-    pub fn canvas_form_editor(mut self, id: usize) -> Self {
+    pub fn canvas_form_editor(self, id: usize) -> Self {
+        self.canvas_form_editor_with_preset(id, BuiltinCanvasKeybindingPreset::Vim)
+    }
+
+    pub fn canvas_form_editor_with_preset(
+        mut self,
+        id: usize,
+        preset: BuiltinCanvasKeybindingPreset,
+    ) -> Self {
         self.key_hooks.push(KeyHook {
             kind: KeyHookKind::CanvasFormEditor {
                 id,
-                pipeline: canvas_action_pipeline(self.input_timeout_ms),
+                pipeline: canvas_action_pipeline_with_preset(preset, self.input_timeout_ms),
             },
             dispatch: dispatch_canvas_key_hook::<V, A, S, O, M>,
         });
         self
     }
 
-    pub fn canvas_textarea_widget(mut self, focus_index: usize) -> Self {
+    pub fn canvas_textarea_widget(self, focus_index: usize) -> Self {
+        self.canvas_textarea_widget_with_preset(focus_index, BuiltinCanvasKeybindingPreset::Vim)
+    }
+
+    pub fn canvas_textarea_widget_with_preset(
+        mut self,
+        focus_index: usize,
+        preset: BuiltinCanvasKeybindingPreset,
+    ) -> Self {
         self.key_hooks.push(KeyHook {
             kind: KeyHookKind::CanvasTextArea {
                 focus_index,
-                pipeline: canvas_action_pipeline(self.input_timeout_ms),
+                pipeline: canvas_action_pipeline_with_preset(preset, self.input_timeout_ms),
             },
             dispatch: dispatch_canvas_key_hook::<V, A, S, O, M>,
         });
         self
     }
 
-    pub fn canvas_textinput_widget(mut self, focus_index: usize) -> Self {
+    pub fn canvas_textinput_widget(self, focus_index: usize) -> Self {
+        self.canvas_textinput_widget_with_preset(focus_index, BuiltinCanvasKeybindingPreset::Vim)
+    }
+
+    pub fn canvas_textinput_widget_with_preset(
+        mut self,
+        focus_index: usize,
+        preset: BuiltinCanvasKeybindingPreset,
+    ) -> Self {
         self.key_hooks.push(KeyHook {
             kind: KeyHookKind::CanvasTextInput {
                 focus_index,
-                pipeline: canvas_action_pipeline(self.input_timeout_ms),
+                pipeline: canvas_action_pipeline_with_preset(preset, self.input_timeout_ms),
             },
             dispatch: dispatch_canvas_key_hook::<V, A, S, O, M>,
         });
