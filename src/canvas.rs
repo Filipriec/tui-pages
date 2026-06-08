@@ -185,6 +185,8 @@ where
 
 pub trait CanvasTextAreaHost {
     fn mode(&self) -> AppMode;
+    fn has_keybindings(&self) -> bool;
+    fn use_keybinding_preset(&mut self, preset: BuiltinCanvasKeybindingPreset);
     fn commandline_enabled(&self) -> bool {
         false
     }
@@ -202,6 +204,14 @@ where
         self.mode()
     }
 
+    fn has_keybindings(&self) -> bool {
+        self.core().has_keybindings()
+    }
+
+    fn use_keybinding_preset(&mut self, preset: BuiltinCanvasKeybindingPreset) {
+        TextAreaState::use_keybinding_preset(self, preset);
+    }
+
     fn commandline_enabled(&self) -> bool {
         self.commandline().is_some()
     }
@@ -211,7 +221,7 @@ where
     }
 
     fn input_key(&mut self, key: KeyEvent) -> TextAreaEventOutcome {
-        if self.commandline_enabled() {
+        if self.core().has_keybindings() || self.commandline_enabled() {
             match self.handle_key_event(key) {
                 KeyEventOutcome::Consumed(_)
                 | KeyEventOutcome::Pending
@@ -878,6 +888,7 @@ where
         }
         KeyHookKind::CanvasTextArea {
             focus_index,
+            preset,
             pipeline,
         } => {
             if !focused_canvas_field(&ctx, *focus_index) {
@@ -899,11 +910,20 @@ where
                         *entered = true;
                     }
                     if let Some(textarea) = state.canvas_textarea(*focus_index) {
+                        if !textarea.has_keybindings() {
+                            textarea.use_keybinding_preset(*preset);
+                        }
                         textarea.exit_edit_mode();
                     }
                     return hook_status_outcome(TuiPagesStatus::ActionHandled);
                 }
                 return focus_intent_for_top_level_key(key).and_then(hook_focus_outcome);
+            }
+
+            if let Some(textarea) = state.canvas_textarea(*focus_index) {
+                if !textarea.has_keybindings() {
+                    textarea.use_keybinding_preset(*preset);
+                }
             }
 
             let mode = state.canvas_textarea(*focus_index)?.mode();
@@ -1112,6 +1132,7 @@ where
         self.key_hooks.push(KeyHook {
             kind: KeyHookKind::CanvasTextArea {
                 focus_index,
+                preset,
                 pipeline: canvas_action_pipeline_with_preset(preset, self.input_timeout_ms),
             },
             dispatch: dispatch_canvas_key_hook::<V, A, S, O, M>,

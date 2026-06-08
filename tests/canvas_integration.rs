@@ -912,6 +912,7 @@ fn canvas_textarea_widget_builder_owns_enter_edit_and_exit_flow() {
     app.refresh_page(&state);
 
     app.handle_key(key(KeyCode::Enter), &mut state).unwrap();
+    app.handle_key(key(KeyCode::Char('i')), &mut state).unwrap();
     app.handle_key(
         KeyEvent::new(KeyCode::Char('A'), KeyModifiers::SHIFT),
         &mut state,
@@ -947,6 +948,26 @@ fn canvas_textarea_widget_builder_uses_default_commandline() {
         state.textarea.line_number_mode(),
         canvas::TextAreaLineNumberMode::Absolute
     );
+}
+
+#[test]
+fn helix_textarea_widget_uses_keybinding_engine_without_commandline() {
+    let mut app = TuiPages::<View, WidgetAction, WidgetState>::builder(View::Form)
+        .page_fn(widget_page)
+        .handler(WidgetHandler)
+        .canvas_textarea_widget_with_preset(0, canvas::BuiltinCanvasKeybindingPreset::Helix)
+        .build();
+    let mut state = WidgetState::default();
+    state.textarea = canvas::TextAreaState::from_text("abc");
+    app.refresh_page(&state);
+
+    app.handle_key(key(KeyCode::Enter), &mut state).unwrap();
+    assert_eq!(state.textarea.mode(), AppMode::Nor);
+
+    app.handle_key(key(KeyCode::Char('x')), &mut state).unwrap();
+
+    assert_ne!(state.textarea.text(), "abcx");
+    assert_eq!(state.textarea.mode(), AppMode::Nor);
 }
 
 #[test]
