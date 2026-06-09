@@ -21,16 +21,23 @@
 use std::io;
 
 use crossterm::{
+    event::{DisableBracketedPaste, EnableBracketedPaste},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 
-/// Enable raw mode and switch `stderr` to the alternate screen, returning a
-/// guard that reverses both when dropped. Hold the guard for the lifetime of
-/// the UI; let it drop (or be dropped by unwinding) to restore the terminal.
+/// Enable raw mode, switch `stderr` to the alternate screen, and turn on
+/// bracketed paste, returning a guard that reverses all three when dropped.
+/// Hold the guard for the lifetime of the UI; let it drop (or be dropped by
+/// unwinding) to restore the terminal.
+///
+/// Bracketed paste makes the terminal deliver a paste as a single
+/// `Event::Paste(text)` rather than a flood of synthetic key presses, so a text
+/// widget can insert it in one shot. Forward that event to
+/// [`crate::runtime::TuiPages::handle_paste`].
 pub fn enter() -> io::Result<TerminalGuard> {
     enable_raw_mode()?;
-    execute!(io::stderr(), EnterAlternateScreen)?;
+    execute!(io::stderr(), EnterAlternateScreen, EnableBracketedPaste)?;
     Ok(TerminalGuard { _private: () })
 }
 
@@ -62,6 +69,6 @@ impl Drop for TerminalGuard {
 }
 
 fn restore_terminal() -> io::Result<()> {
-    execute!(io::stderr(), LeaveAlternateScreen)?;
+    execute!(io::stderr(), DisableBracketedPaste, LeaveAlternateScreen)?;
     disable_raw_mode()
 }

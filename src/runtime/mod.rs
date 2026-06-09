@@ -367,11 +367,12 @@ pub(crate) enum KeyHookKind {
     #[cfg(feature = "canvas")]
     CanvasFormEditor {
         id: usize,
-        pipeline: InputPipeline<crate::canvas::CanvasAction>,
+        preset: crate::canvas::BuiltinCanvasKeybindingPreset,
     },
     #[cfg(feature = "canvas")]
     CanvasTextArea {
         focus_index: usize,
+        preset: crate::canvas::BuiltinCanvasKeybindingPreset,
         pipeline: InputPipeline<crate::canvas::CanvasAction>,
     },
     #[cfg(feature = "canvas")]
@@ -387,6 +388,14 @@ pub(crate) struct KeyHook<V, A, S, O, M> {
     pub dispatch: fn(
         &mut KeyHookKind,
         KeyEvent,
+        ActionContext<V, O>,
+        &mut S,
+    ) -> Option<KeyHookOutcome<V, A, O, M>>,
+    /// Forwards a bracketed-paste payload to the hook's widget. Parallels
+    /// `dispatch` but receives the pasted string instead of a key event.
+    pub paste: fn(
+        &mut KeyHookKind,
+        &str,
         ActionContext<V, O>,
         &mut S,
     ) -> Option<KeyHookOutcome<V, A, O, M>>,
@@ -541,6 +550,43 @@ where
                 Ok(TuiPagesOutput::new(TuiPagesStatus::Cancelled, false))
             }
         }
+    }
+
+    /// Route a bracketed-paste payload to the focused canvas widget, if any.
+    ///
+    /// Mirrors [`handle_key`](Self::handle_key): it walks the registered hooks
+    /// and lets the first one whose widget currently holds focus consume the
+    /// pasted text. Returns [`TuiPagesStatus::TextHandled`] when a widget took
+    /// the paste, and [`TuiPagesStatus::Cancelled`] when nothing was focused to
+    /// receive it.
+    pub fn handle_paste(
+        &mut self,
+        text: &str,
+        state: &mut S,
+    ) -> TuiPagesResult<TuiPagesOutput<A>, Handler::Error> {
+        let spec = self.current_page_spec(state);
+        self.sync_focus_to_spec(spec);
+
+        let ctx = ActionContext {
+            current_view: self.current_view().clone(),
+            focus: self.focus.current(),
+            has_overlay: self.focus.has_overlay(),
+        };
+
+        let mut paste_response = None;
+        for hook in &mut self.key_hooks {
+            if let Some(response) = (hook.paste)(&mut hook.kind, text, ctx.clone(), state) {
+                paste_response = Some(response);
+                break;
+            }
+        }
+
+        if let Some(response) = paste_response {
+            let quit_requested = self.apply_outcome(response.outcome, state);
+            return Ok(TuiPagesOutput::new(response.status, quit_requested));
+        }
+
+        Ok(TuiPagesOutput::new(TuiPagesStatus::Cancelled, false))
     }
 
     pub fn submit_command(
