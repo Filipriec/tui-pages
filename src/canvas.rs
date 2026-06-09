@@ -34,9 +34,10 @@ pub use ::canvas::integration::focus_handoff::{
 };
 pub use ::canvas::{
     default_builtin_action_bindings, default_emacs_action_bindings,
-    default_helix_action_bindings, default_vim_action_bindings, preset,
+    default_helix_action_bindings, default_vim_action_bindings, display_binding, preset,
     BuiltinCanvasKeybindingPreset, CanvasActionBinding, CanvasActionKeyBinding,
-    CanvasKeyBindings, KeyEventOutcome,
+    CanvasKeyBindingEntry, CanvasKeyBindings, CanvasKeybindingConflictKind,
+    CanvasKeybindingProfile, KeyEventOutcome,
 };
 pub use ::canvas::keybindings::{CanvasKeyAction, KeyStroke};
 
