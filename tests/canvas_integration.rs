@@ -886,6 +886,40 @@ fn canvas_form_editor_builder_dispatches_without_canvas_actions_in_app_action() 
 }
 
 #[test]
+fn canvas_form_editor_receives_bracketed_paste() {
+    let mut app = TuiPages::<View, WidgetAction, WidgetState>::builder(View::Form)
+        .page_fn(widget_page)
+        .handler(WidgetHandler)
+        .canvas_form_editor(0)
+        .build();
+    let mut state = WidgetState::default();
+    app.refresh_page(&state);
+
+    // The canvas field is focused by default, so a paste lands in the editor
+    // in a single insert (no per-character key events needed).
+    let out = app.handle_paste("pasted text", &mut state).unwrap();
+
+    assert_eq!(out.status, TuiPagesStatus::TextHandled);
+    assert_eq!(state.editor.data_provider().field_value(0), "pasted text");
+}
+
+#[test]
+fn handle_paste_is_a_noop_without_a_focused_canvas_widget() {
+    // No canvas hook registered, so there is nothing to receive the paste.
+    let mut app = TuiPages::<View, WidgetAction, WidgetState>::builder(View::Form)
+        .page_fn(widget_page)
+        .handler(WidgetHandler)
+        .build();
+    let mut state = WidgetState::default();
+    app.refresh_page(&state);
+
+    let out = app.handle_paste("ignored", &mut state).unwrap();
+
+    assert_eq!(out.status, TuiPagesStatus::Cancelled);
+    assert_eq!(state.editor.data_provider().field_value(0), "");
+}
+
+#[test]
 fn canvas_form_editor_builder_hands_off_focus_at_boundaries() {
     let mut app = TuiPages::<View, WidgetAction, WidgetState>::builder(View::Form)
         .page_fn(widget_page)

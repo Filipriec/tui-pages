@@ -134,11 +134,18 @@ fn main() -> Result<()> {
     loop {
         terminal.draw(|frame| render(frame, &state))?;
 
-        let Event::Key(key) = crossterm::event::read()? else {
-            continue;
-        };
-        if tui.handle_key(key, &mut state)?.quit_requested {
-            break;
+        match crossterm::event::read()? {
+            Event::Key(key) => {
+                if tui.handle_key(key, &mut state)?.quit_requested {
+                    break;
+                }
+            }
+            // Bracketed paste (enabled by `terminal::enter`) arrives as one
+            // event; hand it to the focused canvas widget in a single insert.
+            Event::Paste(text) => {
+                tui.handle_paste(&text, &mut state)?;
+            }
+            _ => {}
         }
     }
 

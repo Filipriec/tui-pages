@@ -155,6 +155,9 @@ pub trait CanvasFormEditorHost {
     fn has_keybindings(&self) -> bool;
     fn use_keybinding_preset(&mut self, preset: BuiltinCanvasKeybindingPreset);
     fn input_key(&mut self, key: KeyEvent) -> CanvasKeyDispatchOutcome;
+    /// Insert pasted (bracketed-paste) text. Returns whether anything was
+    /// inserted.
+    fn paste(&mut self, text: &str) -> bool;
     fn dispatch_canvas_action(&mut self, action: CanvasAction) -> CanvasDispatchOutcome;
 }
 
@@ -178,6 +181,10 @@ where
         dispatch_key_event(self, key)
     }
 
+    fn paste(&mut self, text: &str) -> bool {
+        matches!(FormEditor::paste(self, text), TextFormEventOutcome::Handled)
+    }
+
     fn dispatch_canvas_action(&mut self, action: CanvasAction) -> CanvasDispatchOutcome {
         dispatch_action(self, action)
     }
@@ -192,6 +199,9 @@ pub trait CanvasTextAreaHost {
     }
     fn boundary_for_key(&self, key: &KeyEvent) -> Option<BoundaryExit>;
     fn input_key(&mut self, key: KeyEvent) -> TextAreaEventOutcome;
+    /// Insert pasted (bracketed-paste) text. Returns whether anything was
+    /// inserted.
+    fn paste(&mut self, text: &str) -> bool;
     fn exit_edit_mode(&mut self);
     fn dispatch_canvas_action(&mut self, action: CanvasAction) -> HostActionOutcome;
 }
@@ -234,6 +244,10 @@ where
         }
     }
 
+    fn paste(&mut self, text: &str) -> bool {
+        matches!(TextAreaState::paste(self, text), TextAreaEventOutcome::Handled)
+    }
+
     fn exit_edit_mode(&mut self) {
         let _ = self.core_mut().exit_edit_mode();
     }
@@ -247,6 +261,9 @@ pub trait CanvasTextInputHost {
     fn mode(&self) -> AppMode;
     fn text(&self) -> String;
     fn input_key(&mut self, key: KeyEvent) -> CanvasTextWidgetOutcome;
+    /// Insert pasted (bracketed-paste) text. Returns whether anything was
+    /// inserted.
+    fn paste(&mut self, text: &str) -> bool;
     fn set_suggestion_suffix(&mut self, suffix: String);
     fn clear_suggestion_suffix(&mut self);
     fn exit_edit_mode(&mut self);
@@ -267,6 +284,13 @@ where
 
     fn input_key(&mut self, key: KeyEvent) -> CanvasTextWidgetOutcome {
         dispatch_text_input_key(self, key)
+    }
+
+    fn paste(&mut self, text: &str) -> bool {
+        matches!(
+            TextInputState::paste(self, text),
+            TextInputEventOutcome::Handled
+        )
     }
 
     fn set_suggestion_suffix(&mut self, suffix: String) {
@@ -1063,6 +1087,55 @@ where
     }
 }
 
+/// Forward a bracketed-paste payload to whichever canvas widget this hook owns,
+/// but only when that widget currently holds focus (and, for the text widgets,
+/// has been entered for editing). Mirrors the focus gating in
+/// [`dispatch_canvas_key_hook`] so paste routes exactly like typed input.
+pub(crate) fn dispatch_canvas_paste_hook<V, A, S, O, M>(
+    kind: &mut KeyHookKind,
+    text: &str,
+    ctx: ActionContext<V, O>,
+    state: &mut S,
+) -> Option<KeyHookOutcome<V, A, O, M>>
+where
+    S: CanvasWidgetState,
+{
+    let handled = match kind {
+        KeyHookKind::CanvasFormEditor { id, .. } => {
+            if !ctx.focus.as_ref().is_some_and(FocusTarget::is_canvas) {
+                return None;
+            }
+            state.canvas_form_editor(*id)?.paste(text)
+        }
+        KeyHookKind::CanvasTextArea { focus_index, .. } => {
+            if !focused_canvas_field(&ctx, *focus_index)
+                || !state
+                    .canvas_textarea_entered(*focus_index)
+                    .is_some_and(|entered| *entered)
+            {
+                return None;
+            }
+            state.canvas_textarea(*focus_index)?.paste(text)
+        }
+        KeyHookKind::CanvasTextInput { focus_index, .. } => {
+            if !focused_canvas_field(&ctx, *focus_index)
+                || !state
+                    .canvas_textinput_entered(*focus_index)
+                    .is_some_and(|entered| *entered)
+            {
+                return None;
+            }
+            state.canvas_textinput(*focus_index)?.paste(text)
+        }
+    };
+
+    if handled {
+        hook_status_outcome(TuiPagesStatus::TextHandled)
+    } else {
+        None
+    }
+}
+
 impl<O> PageSpec<O> {
     pub fn canvas_mode(mut self, mode: AppMode) -> Self {
         self.modes = modes_for_app_mode(mode);
@@ -1118,6 +1191,7 @@ where
                 preset,
             },
             dispatch: dispatch_canvas_key_hook::<V, A, S, O, M>,
+            paste: dispatch_canvas_paste_hook::<V, A, S, O, M>,
         });
         self
     }
@@ -1138,6 +1212,7 @@ where
                 pipeline: canvas_action_pipeline_with_preset(preset, self.input_timeout_ms),
             },
             dispatch: dispatch_canvas_key_hook::<V, A, S, O, M>,
+            paste: dispatch_canvas_paste_hook::<V, A, S, O, M>,
         });
         self
     }
@@ -1157,6 +1232,7 @@ where
                 pipeline: canvas_action_pipeline_with_preset(preset, self.input_timeout_ms),
             },
             dispatch: dispatch_canvas_key_hook::<V, A, S, O, M>,
+            paste: dispatch_canvas_paste_hook::<V, A, S, O, M>,
         });
         self
     }
