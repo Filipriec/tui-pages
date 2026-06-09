@@ -1,11 +1,17 @@
 #![cfg(feature = "dialog")]
 
-use crossterm::event::{KeyCode, KeyEvent};
-use tui_pages::dialog::{self, DialogData, DialogKey, DialogResult};
-use tui_pages::{FocusController, FocusIntent, FocusManager, FocusTarget, FocusWrap};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use tui_pages::dialog::{self, DialogData, DialogKey, DialogKeyBindings, DialogResult};
+use tui_pages::{
+    BuiltinNavigationPreset, FocusController, FocusIntent, FocusManager, FocusTarget, FocusWrap,
+};
 
 fn key(code: KeyCode) -> KeyEvent {
     KeyEvent::from(code)
+}
+
+fn chord(code: KeyCode, modifiers: KeyModifiers) -> KeyEvent {
+    KeyEvent::new(code, modifiers)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -112,6 +118,79 @@ fn handle_key_drives_the_conventional_bindings() {
     );
     assert_eq!(
         dialog::handle_key(&mut focus, key(KeyCode::Esc)),
+        DialogKey::Resolved(DialogResult::Dismissed)
+    );
+    assert!(dialog::current_dialog(&focus).is_none());
+}
+
+#[test]
+fn dialog_bindings_can_be_loaded_from_preset_toml() {
+    let mut focus: Focus = FocusManager::new();
+    focus.register_page(vec![FocusTarget::Button(0)]);
+    focus.apply_focus_intent(
+        DialogData::new(
+            "Delete?",
+            "msg",
+            ["Delete", "Cancel"],
+            Purpose::ConfirmDelete,
+        )
+        .show_intent(),
+    );
+
+    let mut bindings = DialogKeyBindings::from_preset_toml(
+        r#"
+[dialog]
+mode = "dialog"
+focus_next = ["n"]
+focus_prev = ["p"]
+activate = ["y"]
+leave_section = ["q"]
+"#,
+    )
+    .unwrap();
+
+    assert_eq!(
+        dialog::handle_key_with_bindings(&mut focus, key(KeyCode::Tab), &mut bindings),
+        DialogKey::Consumed
+    );
+    assert_eq!(dialog::active_button(&focus), Some(0));
+
+    assert_eq!(
+        dialog::handle_key_with_bindings(&mut focus, key(KeyCode::Char('n')), &mut bindings),
+        DialogKey::Consumed
+    );
+    assert_eq!(dialog::active_button(&focus), Some(1));
+
+    assert_eq!(
+        dialog::handle_key_with_bindings(&mut focus, key(KeyCode::Char('p')), &mut bindings),
+        DialogKey::Consumed
+    );
+    assert_eq!(dialog::active_button(&focus), Some(0));
+
+    assert_eq!(
+        dialog::handle_key_with_bindings(&mut focus, key(KeyCode::Char('y')), &mut bindings),
+        DialogKey::Resolved(DialogResult::Selected {
+            purpose: Some(Purpose::ConfirmDelete),
+            index: 0,
+        })
+    );
+}
+
+#[test]
+fn emacs_dialog_preset_dismisses_with_ctrl_g() {
+    let mut focus: Focus = FocusManager::new();
+    focus.register_page(vec![FocusTarget::Button(0)]);
+    focus.apply_focus_intent(
+        DialogData::new("Delete?", "msg", ["Delete"], Purpose::ConfirmDelete).show_intent(),
+    );
+    let mut bindings = DialogKeyBindings::builtin(BuiltinNavigationPreset::Emacs);
+
+    assert_eq!(
+        dialog::handle_key_with_bindings(
+            &mut focus,
+            chord(KeyCode::Char('g'), KeyModifiers::CONTROL),
+            &mut bindings,
+        ),
         DialogKey::Resolved(DialogResult::Dismissed)
     );
     assert!(dialog::current_dialog(&focus).is_none());

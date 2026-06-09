@@ -25,7 +25,14 @@ pub use state::{DialogData, DialogResult};
 pub use ui::{render_dialog, DialogTheme};
 
 use crate::focus::{FocusController, FocusIntent, FocusManager, OverlayFocus};
-use crossterm::event::{KeyCode, KeyEvent};
+use crate::input::{InputPipeline, InputRegistry, KeyMap, PipelineResponse};
+use crate::keybindings::{
+    BuiltinNavigationPreset, NavigationAction, NavigationPreset, NavigationPresetError,
+};
+use crossterm::event::KeyEvent;
+
+pub const DIALOG_KEYBINDING_SECTION: &str = "dialog";
+pub const DIALOG_MODE: &str = "dialog";
 
 impl<D> DialogData<D> {
     /// The focus intent that opens this dialog as a modal overlay. Wrap it in
@@ -82,8 +89,52 @@ pub enum DialogKey<D> {
     Resolved(DialogResult<D>),
 }
 
-/// Drive an open modal dialog from a raw key event, using the conventional
-/// bindings so you don't have to hand-roll them:
+#[derive(Debug, Clone)]
+pub struct DialogKeyBindings {
+    input: InputPipeline<NavigationAction>,
+}
+
+impl Default for DialogKeyBindings {
+    fn default() -> Self {
+        Self::builtin(BuiltinNavigationPreset::Vim)
+    }
+}
+
+impl DialogKeyBindings {
+    pub fn builtin(preset: BuiltinNavigationPreset) -> Self {
+        let mut map = KeyMap::new(DIALOG_MODE);
+        preset
+            .preset()
+            .bind_section_to_map(DIALOG_KEYBINDING_SECTION, &mut map)
+            .expect("built-in dialog keybinding preset is valid");
+
+        let mut registry = InputRegistry::empty();
+        registry.add_map(map);
+        Self {
+            input: InputPipeline::new(registry, 1000),
+        }
+    }
+
+    pub fn from_preset_toml(source: &str) -> Result<Self, NavigationPresetError> {
+        let preset = NavigationPreset::from_toml(source)?;
+        let mut map = KeyMap::new(DIALOG_MODE);
+        preset.bind_section_to_map(DIALOG_KEYBINDING_SECTION, &mut map)?;
+
+        let mut registry = InputRegistry::empty();
+        registry.add_map(map);
+        Ok(Self {
+            input: InputPipeline::new(registry, 1000),
+        })
+    }
+
+    pub fn remap_preset_toml(&mut self, source: &str) -> Result<(), NavigationPresetError> {
+        *self = Self::from_preset_toml(source)?;
+        Ok(())
+    }
+}
+
+/// Drive an open modal dialog from a raw key event, using the Vim preset's
+/// `[dialog]` bindings so you don't have to hand-roll them:
 ///
 /// - `Tab` / `Right` move to the next button, `Shift+Tab` / `Left` to the
 ///   previous (clamped, no wrap — matching the focus manager).
@@ -102,35 +153,44 @@ pub enum DialogKey<D> {
 /// }
 /// ```
 ///
-/// For non-conventional bindings, drive the dialog yourself with
-/// [`current_dialog`], [`active_button`], [`selection`], and
-/// [`FocusIntent`](crate::FocusIntent) — this helper is just the common path.
+/// For non-conventional bindings, keep a [`DialogKeyBindings`] in your app state
+/// and call [`handle_key_with_bindings`] after loading your user TOML.
 pub fn handle_key<O: Clone + PartialEq, D: Clone>(
     focus: &mut FocusManager<O, DialogData<D>>,
     key: KeyEvent,
+) -> DialogKey<D> {
+    let mut bindings = DialogKeyBindings::default();
+    handle_key_with_bindings(focus, key, &mut bindings)
+}
+
+pub fn handle_key_with_bindings<O: Clone + PartialEq, D: Clone>(
+    focus: &mut FocusManager<O, DialogData<D>>,
+    key: KeyEvent,
+    bindings: &mut DialogKeyBindings,
 ) -> DialogKey<D> {
     if current_dialog(focus).is_none() {
         return DialogKey::Ignored;
     }
 
-    match key.code {
-        KeyCode::Tab | KeyCode::Right => {
+    match bindings.input.process(key, &[DIALOG_MODE], false) {
+        PipelineResponse::Execute(NavigationAction::FocusNext) => {
             focus.apply_focus_intent(FocusIntent::Next);
             DialogKey::Consumed
         }
-        KeyCode::BackTab | KeyCode::Left => {
+        PipelineResponse::Execute(NavigationAction::FocusPrev) => {
             focus.apply_focus_intent(FocusIntent::Prev);
             DialogKey::Consumed
         }
-        KeyCode::Enter => {
+        PipelineResponse::Execute(NavigationAction::Activate) => {
             let result = selection(focus).unwrap_or(DialogResult::Dismissed);
             focus.apply_focus_intent(FocusIntent::ClearOverlay);
             DialogKey::Resolved(result)
         }
-        KeyCode::Esc => {
+        PipelineResponse::Execute(NavigationAction::LeaveSection) => {
             focus.apply_focus_intent(FocusIntent::ClearOverlay);
             DialogKey::Resolved(DialogResult::Dismissed)
         }
+        PipelineResponse::Wait(_) | PipelineResponse::Cancel => DialogKey::Consumed,
         // A modal swallows everything else while it is open.
         _ => DialogKey::Consumed,
     }

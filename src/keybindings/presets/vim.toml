@@ -9,6 +9,13 @@ leave_section = ["esc"]
 mode = "global"
 quit = ["ctrl+c"]
 
+[dialog]
+mode = "dialog"
+focus_next = ["tab", "right"]
+focus_prev = ["shift+tab", "backtab", "left"]
+activate = ["enter"]
+leave_section = ["esc"]
+
 [navigation]
 mode = "general"
 next_buffer = ["]"]
