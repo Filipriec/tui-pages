@@ -35,25 +35,20 @@ an app can write into a user config directory. Preset sections are mode-aware:
 mode = "general"
 focus_next = ["j", "down", "tab"]
 focus_prev = ["k", "up", "shift+tab"]
+activate = ["enter"]
+leave_section = ["esc"]
 
 [global]
 mode = "global"
 quit = ["ctrl+c"]
-
-[dialog]
-mode = "dialog"
-focus_next = ["tab", "right"]
-focus_prev = ["shift+tab", "backtab", "left"]
-activate = ["enter"]
-leave_section = ["esc"]
 ```
 
 For runtime end-user settings, call `tui.remap_navigation_preset_toml(...)`
 after reading the user's config. The method validates before mutating the live
 keymap and resets any in-progress multi-key sequence after a successful remap.
 If you use the built-in dialog helper, keep a `dialog::DialogKeyBindings` in
-your app state and rebuild/remap it from the same TOML so the `[dialog]` section
-drives modal navigation and dismissal too.
+your app state and rebuild/remap it from the same TOML; dialogs reuse the
+`[general]` focus, activate, and leave-section bindings.
 
 Validation returns `NavigationPresetError::Issues(Vec<NavigationPresetIssue>)`
 when the file has one or more problems. The user-facing TOML helpers also emit a

@@ -84,14 +84,14 @@ fn handle_key_drives_the_conventional_bindings() {
     );
     focus.apply_focus_intent(data.show_intent());
 
-    // Tab/Right advance, BackTab/Left retreat — all consumed while modal.
+    // The default Vim general bindings drive dialog focus too.
     assert_eq!(
         dialog::handle_key(&mut focus, key(KeyCode::Tab)),
         DialogKey::Consumed
     );
     assert_eq!(dialog::active_button(&focus), Some(1));
     assert_eq!(
-        dialog::handle_key(&mut focus, key(KeyCode::Left)),
+        dialog::handle_key(&mut focus, key(KeyCode::Char('h'))),
         DialogKey::Consumed
     );
     assert_eq!(dialog::active_button(&focus), Some(0));
@@ -139,8 +139,8 @@ fn dialog_bindings_can_be_loaded_from_preset_toml() {
 
     let mut bindings = DialogKeyBindings::from_preset_toml(
         r#"
-[dialog]
-mode = "dialog"
+[general]
+mode = "general"
 focus_next = ["n"]
 focus_prev = ["p"]
 activate = ["y"]

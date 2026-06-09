@@ -31,7 +31,7 @@ use crate::keybindings::{
 };
 use crossterm::event::KeyEvent;
 
-pub const DIALOG_KEYBINDING_SECTION: &str = "dialog";
+pub const GENERAL_KEYBINDING_SECTION: &str = "general";
 pub const DIALOG_MODE: &str = "dialog";
 
 impl<D> DialogData<D> {
@@ -105,7 +105,7 @@ impl DialogKeyBindings {
         let mut map = KeyMap::new(DIALOG_MODE);
         preset
             .preset()
-            .bind_section_to_map(DIALOG_KEYBINDING_SECTION, &mut map)
+            .bind_section_to_map(GENERAL_KEYBINDING_SECTION, &mut map)
             .expect("built-in dialog keybinding preset is valid");
 
         let mut registry = InputRegistry::empty();
@@ -118,7 +118,7 @@ impl DialogKeyBindings {
     pub fn from_preset_toml(source: &str) -> Result<Self, NavigationPresetError> {
         let preset = NavigationPreset::from_toml(source)?;
         let mut map = KeyMap::new(DIALOG_MODE);
-        preset.bind_section_to_map(DIALOG_KEYBINDING_SECTION, &mut map)?;
+        preset.bind_section_to_map(GENERAL_KEYBINDING_SECTION, &mut map)?;
 
         let mut registry = InputRegistry::empty();
         registry.add_map(map);
@@ -134,10 +134,10 @@ impl DialogKeyBindings {
 }
 
 /// Drive an open modal dialog from a raw key event, using the Vim preset's
-/// `[dialog]` bindings so you don't have to hand-roll them:
+/// `[general]` bindings so you don't have to hand-roll them:
 ///
-/// - `Tab` / `Right` move to the next button, `Shift+Tab` / `Left` to the
-///   previous (clamped, no wrap — matching the focus manager).
+/// - `focus_next` moves to the next button and `focus_prev` to the previous
+///   button (clamped, no wrap — matching the focus manager).
 /// - `Enter` selects the active button and closes the dialog, returning
 ///   [`DialogKey::Resolved`] with [`DialogResult::Selected`].
 /// - `Esc` dismisses the dialog and returns [`DialogResult::Dismissed`].

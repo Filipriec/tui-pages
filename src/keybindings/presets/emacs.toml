@@ -9,13 +9,6 @@ leave_section = ["esc", "ctrl+g"]
 mode = "global"
 quit = ["ctrl+x ctrl+c"]
 
-[dialog]
-mode = "dialog"
-focus_next = ["ctrl+n", "ctrl+f", "down", "right", "tab"]
-focus_prev = ["ctrl+p", "ctrl+b", "up", "left", "shift+tab", "backtab"]
-activate = ["enter"]
-leave_section = ["esc", "ctrl+g"]
-
 [navigation]
 mode = "general"
 next_pane = ["ctrl+x o"]
