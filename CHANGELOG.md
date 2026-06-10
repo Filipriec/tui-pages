@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.2]
+
+### Changed
+- Rust edition bumped to 2024
+
+## [0.8.1]
+
 ### Added
 - Canvas high-level API for forms, textareas, and bottom panels
 - mdbook canvas documentation support
@@ -105,7 +112,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial port from the client library
 - Core TUI multi-page navigation system
 
-[Unreleased]: https://gitlab.com/filipriec/tui-pages/-/compare/v0.7.5...HEAD
+[Unreleased]: https://gitlab.com/filipriec/tui-pages/-/compare/v0.8.2...HEAD
+[0.8.2]: https://gitlab.com/filipriec/tui-pages/-/compare/v0.8.1...v0.8.2
+[0.8.1]: https://gitlab.com/filipriec/tui-pages/-/compare/v0.7.5...v0.8.1
 [0.7.5]: https://gitlab.com/filipriec/tui-pages/-/compare/v0.7.4...v0.7.5
 [0.7.4]: https://gitlab.com/filipriec/tui-pages/-/compare/v0.7.3...v0.7.4
 [0.7.3]: https://gitlab.com/filipriec/tui-pages/-/compare/v0.7.2...v0.7.3
