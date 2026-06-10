@@ -19,7 +19,7 @@ crossterm = { workspace = true }
 serde  = { workspace = true, optional = true }
 toml = { workspace = true }
 tracing = { workspace = true }
-canvas = { path = "../tui-canvas", package = "tui-canvas", version = "0.7.5", optional = true }
+canvas = { path = "../tui-canvas", package = "tui-canvas", version = "0.8.1", optional = true }
 
 [features]
 default = []
