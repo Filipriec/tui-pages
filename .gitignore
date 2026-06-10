@@ -8,3 +8,4 @@ plans/
 **/target/
 *.md
 !src/keybindings/README.md
+!CHANGELOG.md
