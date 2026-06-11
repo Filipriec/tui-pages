@@ -342,8 +342,12 @@ pub(crate) enum KeyHookRouting {
     Pending,
 }
 
+/// Which input context a focused widget is in. `Command`-context keys are
+/// routed to the global keymap first; `Text`-context keys flow to the canvas
+/// editing layer first. Exposed so [`crate::canvas::analyze_canvas_overlaps`]
+/// can explain which layer wins for an overlapping sequence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum InputLayerContext {
+pub enum InputLayerContext {
     Command,
     Text,
 }

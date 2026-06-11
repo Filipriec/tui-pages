@@ -7,7 +7,10 @@
 //! editor.
 
 use crate::focus::{FocusIntent, FocusTarget};
-use crate::input::{InputPipeline, InputRegistry, KeyChord, KeyMap, PipelineResponse};
+use crate::input::{
+    BindableActionInfo, BindingCatalog, BindingConflict, BindingInfo, BindingLayer, BindingSource,
+    CanvasRoutingPrecedence, InputPipeline, InputRegistry, KeyChord, KeyMap, PipelineResponse,
+};
 use crate::runtime::{
     modes, ActionContext, ActionOutcome, InputLayerContext, KeyHook, KeyHookKind, KeyHookOutcome,
     KeyHookRouting, ModeId, PageSpec, TuiEffect, TuiPagesBuilder, TuiPagesStatus,
@@ -1411,4 +1414,298 @@ where
     A: From<CanvasAction>,
 {
     map.bind(vec![KeyChord::new(code, modifiers)], A::from(action));
+}
+
+// --- Binding introspection (catalogs, bindable-action metadata, overlap) ---
+//
+// These helpers expose the canvas keybinding *defaults* as a source-tagged
+// [`BindingCatalog`], independent of whether they were mirrored into the global
+// keymap. They feed help screens, `:bindings` panels, and conflict diagnostics;
+// none of them are on the input hot path.
+
+/// Modes a non-suggestion canvas action can be bound in.
+const CANVAS_EDIT_MODES: &[&str] = &["nor", "ins", "sel"];
+/// Modes the suggestion-dropdown actions are bound in.
+const CANVAS_SUGGESTION_MODES: &[&str] = &["ins", "sel"];
+
+/// The config-facing name for a [`CanvasAction`], or `None` for the
+/// parameterized variants ([`CanvasAction::InsertChar`],
+/// [`CanvasAction::Custom`]) that can't be named statically.
+pub fn canvas_action_name(action: &CanvasAction) -> Option<&'static str> {
+    Some(match action {
+        CanvasAction::MoveLeft => "move_left",
+        CanvasAction::MoveRight => "move_right",
+        CanvasAction::MoveUp => "move_up",
+        CanvasAction::MoveDown => "move_down",
+        CanvasAction::MoveWordNext => "move_word_next",
+        CanvasAction::MoveWordPrev => "move_word_prev",
+        CanvasAction::MoveWordEnd => "move_word_end",
+        CanvasAction::MoveWordEndPrev => "move_word_end_prev",
+        CanvasAction::MoveBigWordNext => "move_big_word_next",
+        CanvasAction::MoveBigWordPrev => "move_big_word_prev",
+        CanvasAction::MoveBigWordEnd => "move_big_word_end",
+        CanvasAction::MoveBigWordEndPrev => "move_big_word_end_prev",
+        CanvasAction::MoveLineStart => "move_line_start",
+        CanvasAction::MoveLineEnd => "move_line_end",
+        CanvasAction::NextField => "next_field",
+        CanvasAction::PrevField => "prev_field",
+        CanvasAction::MoveFirstLine => "move_first_line",
+        CanvasAction::MoveLastLine => "move_last_line",
+        CanvasAction::DeleteBackward => "delete_char_backward",
+        CanvasAction::DeleteForward => "delete_char_forward",
+        CanvasAction::Undo => "undo",
+        CanvasAction::Redo => "redo",
+        CanvasAction::TriggerSuggestions => "trigger_suggestions",
+        CanvasAction::SuggestionUp => "suggestion_up",
+        CanvasAction::SuggestionDown => "suggestion_down",
+        CanvasAction::SelectSuggestion => "select_suggestion",
+        CanvasAction::ExitSuggestions => "exit_suggestions",
+        CanvasAction::EnterEditMode => "enter_edit_mode_before",
+        CanvasAction::EnterEditModeAfter => "enter_edit_mode_after",
+        CanvasAction::ExitEditMode => "exit_edit_mode",
+        CanvasAction::EnterHighlightMode => "enter_highlight_mode",
+        CanvasAction::EnterHighlightModeLinewise => "enter_highlight_mode_linewise",
+        CanvasAction::ExitHighlightMode => "exit_highlight_mode",
+        CanvasAction::OpenLineBelow => "open_line_below",
+        CanvasAction::OpenLineAbove => "open_line_above",
+        CanvasAction::InsertChar(_) | CanvasAction::Custom(_) => return None,
+        // `CanvasAction` is `#[non_exhaustive]`; unknown future variants have no
+        // stable name yet.
+        _ => return None,
+    })
+}
+
+fn is_suggestion_action(action: &CanvasAction) -> bool {
+    matches!(
+        action,
+        CanvasAction::TriggerSuggestions
+            | CanvasAction::SuggestionUp
+            | CanvasAction::SuggestionDown
+            | CanvasAction::SelectSuggestion
+            | CanvasAction::ExitSuggestions
+    )
+}
+
+/// The canvas actions that can be rebound, as [`BindableActionInfo`] lifted into
+/// the application action type `A`. Suggestion actions are reported as bindable
+/// in the text modes (`ins`/`sel`); the rest in all canvas modes.
+pub fn canvas_bindable_actions<A>() -> Vec<BindableActionInfo<A>>
+where
+    A: From<CanvasAction>,
+{
+    let mut actions = CanvasAction::movement_actions();
+    actions.extend([CanvasAction::DeleteBackward, CanvasAction::DeleteForward]);
+    actions.extend([CanvasAction::Undo, CanvasAction::Redo]);
+    actions.extend(CanvasAction::suggestions_actions());
+    actions.extend([
+        CanvasAction::EnterEditMode,
+        CanvasAction::EnterEditModeAfter,
+        CanvasAction::ExitEditMode,
+        CanvasAction::EnterHighlightMode,
+        CanvasAction::EnterHighlightModeLinewise,
+        CanvasAction::ExitHighlightMode,
+        CanvasAction::OpenLineBelow,
+        CanvasAction::OpenLineAbove,
+    ]);
+
+    actions
+        .into_iter()
+        .filter_map(|action| {
+            let name = canvas_action_name(&action)?;
+            let modes = if is_suggestion_action(&action) {
+                CANVAS_SUGGESTION_MODES
+            } else {
+                CANVAS_EDIT_MODES
+            };
+            Some(BindableActionInfo {
+                description: action.description(),
+                action: A::from(action),
+                name,
+                modes,
+            })
+        })
+        .collect()
+}
+
+fn key_strokes_to_chords(sequence: &[KeyStroke]) -> Vec<KeyChord> {
+    sequence
+        .iter()
+        .map(|stroke| KeyChord::new(stroke.code, stroke.modifiers))
+        .collect()
+}
+
+/// The canvas editing defaults for `preset` as a source-tagged catalog, *without*
+/// requiring them to be mirrored into the global keymap. This lets a UI show
+/// "canvas binds `u` to undo in normal mode" even though the runtime keeps those
+/// bindings inside the canvas layer.
+///
+/// The suggestion-dropdown defaults installed by [`canvas_keybindings`] are
+/// reported separately — see [`canvas_suggestion_default_bindings`].
+pub fn canvas_default_binding_catalog<A>(
+    preset: BuiltinCanvasKeybindingPreset,
+) -> BindingCatalog<A>
+where
+    A: From<CanvasAction>,
+{
+    let bindings = default_builtin_action_bindings(preset)
+        .into_iter()
+        .map(|binding| BindingInfo {
+            layer: BindingLayer::Canvas,
+            mode: mode_for_app_mode(binding.mode).as_str().to_string(),
+            sequence: key_strokes_to_chords(&binding.sequence),
+            action: A::from(binding.action),
+            source: BindingSource::CanvasBuiltin,
+        })
+        .collect();
+    BindingCatalog { bindings }
+}
+
+/// The hard-coded suggestion-dropdown bindings ([`bind_suggestion_defaults`]):
+/// `Ctrl+Space` trigger, `Ctrl+N`/`Ctrl+P` down/up, `Ctrl+Y` accept, `Ctrl+G`
+/// exit — reported for the `ins` and `sel` modes they are installed into.
+pub fn canvas_suggestion_default_bindings<A>() -> Vec<BindingInfo<A>>
+where
+    A: From<CanvasAction>,
+{
+    let defaults = [
+        (KeyCode::Char(' '), CanvasAction::TriggerSuggestions),
+        (KeyCode::Char('n'), CanvasAction::SuggestionDown),
+        (KeyCode::Char('p'), CanvasAction::SuggestionUp),
+        (KeyCode::Char('y'), CanvasAction::SelectSuggestion),
+        (KeyCode::Char('g'), CanvasAction::ExitSuggestions),
+    ];
+    let mut bindings = Vec::new();
+    for mode in CANVAS_SUGGESTION_MODES {
+        for (code, action) in &defaults {
+            bindings.push(BindingInfo {
+                layer: BindingLayer::Canvas,
+                mode: (*mode).to_string(),
+                sequence: vec![KeyChord::new(*code, KeyModifiers::CONTROL)],
+                action: A::from(action.clone()),
+                source: BindingSource::CanvasBuiltin,
+            });
+        }
+    }
+    bindings
+}
+
+/// Report keymap/canvas sequence overlaps as [`BindingConflict::CanvasOverlap`].
+///
+/// When a keymap binding and a canvas binding share a sequence in the same mode,
+/// the routing for `context` decides which layer the runtime consults first:
+/// `Command`-context keys go to the keymap first ([`CanvasRoutingPrecedence::KeymapFirst`]),
+/// `Text`-context keys go to the canvas layer first
+/// ([`CanvasRoutingPrecedence::CanvasFirst`]). These are informational — the
+/// routing is deterministic — but surface surprises like a config binding that
+/// will never fire while editing text.
+pub fn analyze_canvas_overlaps<A>(
+    keymap_catalog: &BindingCatalog<A>,
+    canvas_catalog: &BindingCatalog<CanvasAction>,
+    context: InputLayerContext,
+) -> Vec<BindingConflict<A>>
+where
+    A: Clone,
+{
+    let routing = match context {
+        InputLayerContext::Command => CanvasRoutingPrecedence::KeymapFirst,
+        InputLayerContext::Text => CanvasRoutingPrecedence::CanvasFirst,
+    };
+
+    let mut conflicts = Vec::new();
+    for keymap_binding in &keymap_catalog.bindings {
+        if keymap_binding.layer != BindingLayer::Keymap {
+            continue;
+        }
+        for canvas_binding in &canvas_catalog.bindings {
+            if canvas_binding.mode == keymap_binding.mode
+                && canvas_binding.sequence == keymap_binding.sequence
+            {
+                conflicts.push(BindingConflict::CanvasOverlap {
+                    mode: keymap_binding.mode.clone(),
+                    sequence: keymap_binding.sequence.clone(),
+                    keymap_action: keymap_binding.action.clone(),
+                    canvas_action: canvas_binding.action.clone(),
+                    routing,
+                });
+            }
+        }
+    }
+    conflicts
+}
+
+#[cfg(test)]
+mod report_tests {
+    use super::*;
+    use crate::input::InputRegistry;
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    enum AppAction {
+        Canvas(CanvasAction),
+    }
+
+    impl From<CanvasAction> for AppAction {
+        fn from(action: CanvasAction) -> Self {
+            AppAction::Canvas(action)
+        }
+    }
+
+    #[test]
+    fn default_catalog_carries_canvas_layer_and_source() {
+        let catalog: BindingCatalog<AppAction> =
+            canvas_default_binding_catalog(BuiltinCanvasKeybindingPreset::Vim);
+        assert!(!catalog.bindings.is_empty());
+        assert!(catalog.bindings.iter().all(|b| {
+            b.layer == BindingLayer::Canvas && b.source == BindingSource::CanvasBuiltin
+        }));
+    }
+
+    #[test]
+    fn suggestion_defaults_cover_ins_and_sel() {
+        let bindings: Vec<BindingInfo<AppAction>> = canvas_suggestion_default_bindings();
+        assert_eq!(bindings.len(), 10);
+        assert!(bindings.iter().any(|b| b.mode == "ins"));
+        assert!(bindings.iter().any(|b| b.mode == "sel"));
+    }
+
+    #[test]
+    fn bindable_actions_have_names() {
+        let actions: Vec<BindableActionInfo<AppAction>> = canvas_bindable_actions();
+        assert!(actions
+            .iter()
+            .any(|a| a.name == "suggestion_down" && a.modes == CANVAS_SUGGESTION_MODES));
+        assert!(actions.iter().all(|a| !a.name.is_empty()));
+    }
+
+    #[test]
+    fn overlap_routing_depends_on_context() {
+        let mut registry = InputRegistry::<AppAction>::empty();
+        // Bind `u` in `nor` in the keymap; canvas vim also binds `u` -> undo.
+        registry
+            .map_mut("nor")
+            .bind(vec![KeyChord::new(KeyCode::Char('u'), KeyModifiers::empty())],
+                AppAction::Canvas(CanvasAction::Undo));
+        let keymap_catalog = BindingCatalog::from_registry(&registry, BindingSource::Config);
+        let canvas_catalog: BindingCatalog<CanvasAction> =
+            canvas_default_binding_catalog(BuiltinCanvasKeybindingPreset::Vim);
+
+        let command =
+            analyze_canvas_overlaps(&keymap_catalog, &canvas_catalog, InputLayerContext::Command);
+        assert!(command.iter().any(|c| matches!(
+            c,
+            BindingConflict::CanvasOverlap {
+                routing: CanvasRoutingPrecedence::KeymapFirst,
+                ..
+            }
+        )));
+
+        let text =
+            analyze_canvas_overlaps(&keymap_catalog, &canvas_catalog, InputLayerContext::Text);
+        assert!(text.iter().any(|c| matches!(
+            c,
+            BindingConflict::CanvasOverlap {
+                routing: CanvasRoutingPrecedence::CanvasFirst,
+                ..
+            }
+        )));
+    }
 }

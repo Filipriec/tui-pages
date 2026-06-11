@@ -26,6 +26,11 @@ pub use dialog::{render_dialog, DialogData, DialogKey, DialogResult, DialogTheme
 
 #[cfg(feature = "canvas")]
 pub use crate::canvas::{
+    analyze_canvas_overlaps, canvas_action_name, canvas_bindable_actions,
+    canvas_default_binding_catalog, canvas_suggestion_default_bindings,
+};
+#[cfg(feature = "canvas")]
+pub use crate::canvas::{
     accepts_text_input as canvas_accepts_text_input, dispatch_action as dispatch_canvas_action,
     dispatch_key_event as dispatch_canvas_key_event,
     dispatch_text_area_key as dispatch_canvas_text_area_key,
@@ -45,8 +50,11 @@ pub use focus::{
     OverlayFocus, PageFocusBuilder,
 };
 pub use input::{
-    parse_binding, parse_key, try_parse_binding, try_parse_key, ChordSequenceTracker, InputHint,
-    InputPipeline, InputRegistry, KeyChord, KeyMap, ParseKeyError, PipelineResponse,
+    analyze_keymap_bindings, navigation_bindable_actions, parse_binding, parse_key,
+    try_parse_binding, try_parse_key, BindableActionInfo, BindingAnalysis, BindingCatalog,
+    BindingConflict, BindingInfo, BindingLayer, BindingSource, CanvasRoutingPrecedence,
+    ChordSequenceTracker, InputHint, InputPipeline, InputRegistry, KeyChord, KeyMap, ParseKeyError,
+    PipelineResponse,
 };
 pub use keybindings::{
     apply_navigation_preset_toml, bind_builtin_general_defaults, bind_builtin_global_defaults,
@@ -67,9 +75,9 @@ pub use navigation::{
 #[cfg(feature = "command-line")]
 pub use runtime::CommandLineAreas;
 pub use runtime::{
-    modes, ActionContext, ActionOutcome, ModeId, PageFn, PageProvider, PageSpec, TuiActionHandler,
-    TuiApp, TuiEffect, TuiPages, TuiPagesBuilder, TuiPagesError, TuiPagesOutput, TuiPagesResult,
-    TuiPagesStatus,
+    modes, ActionContext, ActionOutcome, InputLayerContext, ModeId, PageFn, PageProvider, PageSpec,
+    TuiActionHandler, TuiApp, TuiEffect, TuiPages, TuiPagesBuilder, TuiPagesError, TuiPagesOutput,
+    TuiPagesResult, TuiPagesStatus,
 };
 pub use terminal::{enter as enter_terminal, TerminalGuard};
 
