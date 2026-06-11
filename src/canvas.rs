@@ -155,6 +155,12 @@ pub trait CanvasFormEditorHost {
     fn mode(&self) -> AppMode;
     fn has_keybindings(&self) -> bool;
     fn use_keybinding_preset(&mut self, preset: BuiltinCanvasKeybindingPreset);
+    /// Whether a multi-key command (sequence/count/operator) is mid-flight, so
+    /// the runtime keeps routing keys here instead of letting the global keymap
+    /// claim the next stroke. Defaults to `false` for hosts without modal state.
+    fn is_sequence_pending(&self) -> bool {
+        false
+    }
     fn input_key(&mut self, key: KeyEvent) -> CanvasKeyDispatchOutcome;
     /// Insert pasted (bracketed-paste) text. Returns whether anything was
     /// inserted.
@@ -178,6 +184,10 @@ where
         FormEditor::use_keybinding_preset(self, preset);
     }
 
+    fn is_sequence_pending(&self) -> bool {
+        FormEditor::is_sequence_pending(self)
+    }
+
     fn input_key(&mut self, key: KeyEvent) -> CanvasKeyDispatchOutcome {
         dispatch_key_event(self, key)
     }
@@ -195,6 +205,12 @@ pub trait CanvasTextAreaHost {
     fn mode(&self) -> AppMode;
     fn has_keybindings(&self) -> bool;
     fn use_keybinding_preset(&mut self, preset: BuiltinCanvasKeybindingPreset);
+    /// Whether a multi-key command (sequence/count/operator/literal-char capture)
+    /// is mid-flight, so the runtime keeps routing keys here instead of letting
+    /// the global keymap claim the next stroke.
+    fn is_sequence_pending(&self) -> bool {
+        false
+    }
     fn commandline_enabled(&self) -> bool {
         false
     }
@@ -221,6 +237,10 @@ where
 
     fn use_keybinding_preset(&mut self, preset: BuiltinCanvasKeybindingPreset) {
         TextAreaState::use_keybinding_preset(self, preset);
+    }
+
+    fn is_sequence_pending(&self) -> bool {
+        TextAreaState::is_sequence_pending(self)
     }
 
     fn commandline_enabled(&self) -> bool {
@@ -892,7 +912,15 @@ where
                 editor.use_keybinding_preset(*preset);
             }
 
-            match editor.input_key(normalize_shift(key)) {
+            let outcome = editor.input_key(normalize_shift(key));
+            // A consumed key that left the editor mid-sequence (operator/count
+            // awaiting more input) is reported as Waiting so the orchestrator
+            // keeps this hook as the sticky owner of the keys that follow.
+            let pending = state.canvas_form_editor(*id)?.is_sequence_pending();
+            match outcome {
+                CanvasKeyDispatchOutcome::Consumed(_) if pending => {
+                    hook_status_outcome(TuiPagesStatus::Waiting(Vec::new()))
+                }
                 CanvasKeyDispatchOutcome::Consumed(_) => {
                     hook_status_outcome(TuiPagesStatus::ActionHandled)
                 }
@@ -984,10 +1012,17 @@ where
                 return hook_focus_outcome(focus_intent_for_boundary(boundary));
             }
 
-            match state
+            let outcome = state
                 .canvas_textarea(*focus_index)?
-                .input_key(normalize_shift(key))
-            {
+                .input_key(normalize_shift(key));
+            // A consumed key that left the editor mid-sequence (operator/count or
+            // an `f`/`r` literal-char capture) is reported as Waiting so the
+            // orchestrator keeps this hook as the sticky owner of the next keys.
+            let pending = state.canvas_textarea(*focus_index)?.is_sequence_pending();
+            match outcome {
+                TextAreaEventOutcome::Handled if pending => {
+                    return hook_status_outcome(TuiPagesStatus::Waiting(Vec::new()));
+                }
                 TextAreaEventOutcome::Handled => {
                     return hook_status_outcome(TuiPagesStatus::TextHandled);
                 }

@@ -401,6 +401,32 @@ pub(crate) struct KeyHook<V, A, S, O, M> {
     ) -> Option<KeyHookOutcome<V, A, O, M>>,
 }
 
+/// Identifies which input layer the orchestrator is talking to. The global
+/// keymap (`self.input`) and each registered canvas [`KeyHook`] are layers; the
+/// orchestrator in [`TuiPages::handle_key`] drives them as an ordered stack and
+/// remembers which one owns an in-flight multi-key sequence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LayerOwner {
+    /// The global keymap pipeline (`self.input`).
+    Keymap,
+    /// The canvas key hook at this index in `key_hooks`.
+    Hook(usize),
+}
+
+/// The result of offering a key to a single input layer. Unifies the keymap's
+/// `PipelineResponse` and a canvas hook's `KeyHookOutcome` so the orchestrator
+/// can treat every layer the same way.
+pub(crate) enum LayerResult<A> {
+    /// The layer began (or continued) a multi-key sequence and now owns
+    /// subsequent keys until it resolves. Carries the status to report.
+    Pending(TuiPagesStatus<A>),
+    /// The layer fully handled the key; nothing else should see it.
+    Handled(TuiPagesOutput<A>),
+    /// The layer declined the key; try the next layer. Carries the typed chord
+    /// when the keymap produced one, so the final text fallback can use it.
+    Ignored(Option<KeyChord>),
+}
+
 #[derive(Debug, Clone)]
 pub struct TuiPages<V, A, S, Pages = (), Handler = (), O = (), M = ()> {
     pub input: InputPipeline<A>,
@@ -413,6 +439,10 @@ pub struct TuiPages<V, A, S, Pages = (), Handler = (), O = (), M = ()> {
     reserve_command_line: bool,
     pub(crate) text_input_mapper: Option<fn(KeyChord) -> Option<A>>,
     pub(crate) key_hooks: Vec<KeyHook<V, A, S, O, M>>,
+    /// The layer that owns the in-flight multi-key sequence, if any. Set when a
+    /// layer returns [`LayerResult::Pending`]; subsequent keys route straight to
+    /// it until it resolves. `None` means the next key is freshly arbitrated.
+    pub(crate) active_owner: Option<LayerOwner>,
     _state: PhantomData<S>,
 }
 
@@ -501,18 +531,6 @@ where
             focus: self.focus.current(),
             has_overlay: self.focus.has_overlay(),
         };
-        let mut hook_response = None;
-        for hook in &mut self.key_hooks {
-            if let Some(response) = (hook.dispatch)(&mut hook.kind, key, ctx.clone(), state) {
-                hook_response = Some(response);
-                break;
-            }
-        }
-        if let Some(response) = hook_response {
-            let quit_requested = self.apply_outcome(response.outcome, state);
-            return Ok(TuiPagesOutput::new(response.status, quit_requested));
-        }
-
         let focus_accepts_mapped_text = accepts_text_input
             && self
                 .focus
@@ -520,34 +538,144 @@ where
                 .as_ref()
                 .map(FocusTarget::is_canvas)
                 .unwrap_or(false);
-        let response = match self.input.process(key, &modes, accepts_text_input) {
-            crate::input::PipelineResponse::Type(chord) if focus_accepts_mapped_text => self
-                .text_input_mapper
-                .and_then(|mapper| mapper(chord))
-                .map(crate::input::PipelineResponse::Execute)
-                .unwrap_or(crate::input::PipelineResponse::Type(chord)),
-            response => response,
-        };
-        match response {
-            crate::input::PipelineResponse::Execute(action) => {
-                let quit_requested = self.dispatch_action(action, state)?;
-                Ok(TuiPagesOutput::new(
-                    TuiPagesStatus::ActionHandled,
-                    quit_requested,
-                ))
+
+        // The orchestrator drives the input layers as an ordered stack. The
+        // global keymap (`self.input`) and each canvas hook are layers; the
+        // first to claim the key wins, and whichever begins a multi-key
+        // sequence becomes the sticky `active_owner` for the keys that follow.
+        //
+        // Precedence depends on the editing context, which is the crux of the
+        // design: tui-pages is the arbiter, and the canvas is consulted for
+        // whatever tui-pages doesn't claim.
+        //   * Command context (`!accepts_text_input`, e.g. a canvas field in
+        //     normal mode): the keymap goes first, so leader/app/navigation
+        //     bindings win. Canvas editing commands aren't in the keymap, so
+        //     they fall through (`Ignored`) to the hooks.
+        //   * Text context (`accepts_text_input`, e.g. insert mode or an
+        //     entered field): the focused widget receives raw input first —
+        //     typed characters, `Esc` — and the keymap only handles what the
+        //     widget declines (e.g. `ctrl` shortcuts).
+        let mut order: Vec<LayerOwner> = Vec::with_capacity(self.key_hooks.len() + 1);
+        if accepts_text_input {
+            order.extend((0..self.key_hooks.len()).map(LayerOwner::Hook));
+            order.push(LayerOwner::Keymap);
+        } else {
+            order.push(LayerOwner::Keymap);
+            order.extend((0..self.key_hooks.len()).map(LayerOwner::Hook));
+        }
+
+        // A sequence in flight routes its continuation straight to its owner.
+        if let Some(owner) = self.active_owner {
+            match self.run_layer(
+                owner,
+                key,
+                &ctx,
+                &modes,
+                accepts_text_input,
+                focus_accepts_mapped_text,
+                state,
+            )? {
+                LayerResult::Pending(status) => return Ok(TuiPagesOutput::new(status, false)),
+                LayerResult::Handled(output) => {
+                    self.active_owner = None;
+                    return Ok(output);
+                }
+                // The owner unexpectedly let go of the key; clear it and fall
+                // through to a fresh arbitration below.
+                LayerResult::Ignored(_) => self.active_owner = None,
             }
-            crate::input::PipelineResponse::Type(chord) => {
-                let quit_requested = self.dispatch_text(chord, state)?;
-                Ok(TuiPagesOutput::new(
-                    TuiPagesStatus::TextHandled,
-                    quit_requested,
-                ))
+        }
+
+        let mut text_chord = None;
+        for owner in order {
+            match self.run_layer(
+                owner,
+                key,
+                &ctx,
+                &modes,
+                accepts_text_input,
+                focus_accepts_mapped_text,
+                state,
+            )? {
+                LayerResult::Pending(status) => {
+                    self.active_owner = Some(owner);
+                    return Ok(TuiPagesOutput::new(status, false));
+                }
+                LayerResult::Handled(output) => return Ok(output),
+                LayerResult::Ignored(chord) => {
+                    if chord.is_some() {
+                        text_chord = chord;
+                    }
+                }
             }
-            crate::input::PipelineResponse::Wait(hints) => {
-                Ok(TuiPagesOutput::new(TuiPagesStatus::Waiting(hints), false))
+        }
+
+        // No layer claimed the key: it is plain text for the focused widget.
+        let chord = text_chord.unwrap_or_else(|| KeyChord::from_event(&key));
+        let quit_requested = self.dispatch_text(chord, state)?;
+        Ok(TuiPagesOutput::new(TuiPagesStatus::TextHandled, quit_requested))
+    }
+
+    /// Offer a key to a single input layer and normalise its outcome into a
+    /// [`LayerResult`] the orchestrator can act on uniformly.
+    #[allow(clippy::too_many_arguments)]
+    fn run_layer(
+        &mut self,
+        owner: LayerOwner,
+        key: KeyEvent,
+        ctx: &ActionContext<V, O>,
+        modes: &[ModeId],
+        accepts_text_input: bool,
+        focus_accepts_mapped_text: bool,
+        state: &mut S,
+    ) -> TuiPagesResult<LayerResult<A>, Handler::Error> {
+        match owner {
+            LayerOwner::Hook(index) => {
+                let response = {
+                    let hook = &mut self.key_hooks[index];
+                    (hook.dispatch)(&mut hook.kind, key, ctx.clone(), state)
+                };
+                match response {
+                    None => Ok(LayerResult::Ignored(None)),
+                    Some(KeyHookOutcome { status, outcome }) => {
+                        let pending = matches!(status, TuiPagesStatus::Waiting(_));
+                        let quit_requested = self.apply_outcome(outcome, state);
+                        if pending {
+                            Ok(LayerResult::Pending(status))
+                        } else {
+                            Ok(LayerResult::Handled(TuiPagesOutput::new(status, quit_requested)))
+                        }
+                    }
+                }
             }
-            crate::input::PipelineResponse::Cancel => {
-                Ok(TuiPagesOutput::new(TuiPagesStatus::Cancelled, false))
+            LayerOwner::Keymap => {
+                let response = match self.input.process(key, modes, accepts_text_input) {
+                    crate::input::PipelineResponse::Type(chord) if focus_accepts_mapped_text => {
+                        self.text_input_mapper
+                            .and_then(|mapper| mapper(chord))
+                            .map(crate::input::PipelineResponse::Execute)
+                            .unwrap_or(crate::input::PipelineResponse::Type(chord))
+                    }
+                    response => response,
+                };
+                match response {
+                    crate::input::PipelineResponse::Execute(action) => {
+                        let quit_requested = self.dispatch_action(action, state)?;
+                        Ok(LayerResult::Handled(TuiPagesOutput::new(
+                            TuiPagesStatus::ActionHandled,
+                            quit_requested,
+                        )))
+                    }
+                    crate::input::PipelineResponse::Wait(hints) => {
+                        Ok(LayerResult::Pending(TuiPagesStatus::Waiting(hints)))
+                    }
+                    crate::input::PipelineResponse::Cancel => Ok(LayerResult::Handled(
+                        TuiPagesOutput::new(TuiPagesStatus::Cancelled, false),
+                    )),
+                    crate::input::PipelineResponse::Type(chord) => {
+                        Ok(LayerResult::Ignored(Some(chord)))
+                    }
+                }
             }
         }
     }
@@ -929,6 +1057,7 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
             reserve_command_line: self.reserve_command_line,
             text_input_mapper: self.text_input_mapper,
             key_hooks: self.key_hooks,
+            active_owner: None,
             _state: PhantomData,
         }
     }
