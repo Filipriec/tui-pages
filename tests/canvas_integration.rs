@@ -886,6 +886,24 @@ fn canvas_form_editor_builder_dispatches_without_canvas_actions_in_app_action() 
 }
 
 #[test]
+fn canvas_insert_mode_owns_text_even_without_page_mode_sync() {
+    let mut app = TuiPages::<View, WidgetAction, WidgetState>::builder(View::Form)
+        .page_fn(widget_page)
+        .handler(WidgetHandler)
+        .canvas_form_editor(0)
+        .bind(tui_pages::modes::GLOBAL, "j", WidgetAction::Quit)
+        .build();
+    let mut state = WidgetState::default();
+    app.refresh_page(&state);
+
+    app.handle_key(key(KeyCode::Char('i')), &mut state).unwrap();
+    let output = app.handle_key(key(KeyCode::Char('j')), &mut state).unwrap();
+
+    assert!(!output.quit_requested);
+    assert_eq!(state.editor.data_provider().field_value(0), "j");
+}
+
+#[test]
 fn canvas_form_editor_receives_bracketed_paste() {
     let mut app = TuiPages::<View, WidgetAction, WidgetState>::builder(View::Form)
         .page_fn(widget_page)

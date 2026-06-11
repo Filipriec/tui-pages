@@ -19,6 +19,13 @@ impl<A> InputPipeline<A> {
     pub fn active(&self) -> bool {
         !self.tracker.is_empty()
     }
+
+    /// Abandon any in-flight multi-key sequence, discarding partial input.
+    /// Pair with clearing the runtime's sticky owner when input ownership must
+    /// be dropped wholesale (remap, page navigation, buffer switch).
+    pub fn reset(&mut self) {
+        self.tracker.reset();
+    }
 }
 
 impl<A: Clone> InputPipeline<A> {

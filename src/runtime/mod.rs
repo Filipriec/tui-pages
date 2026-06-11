@@ -335,6 +335,12 @@ pub(crate) struct KeyHookOutcome<V, A, O, M> {
     pub outcome: ActionOutcome<V, O, M>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum InputLayerContext {
+    Command,
+    Text,
+}
+
 #[cfg(feature = "command-line")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CommandLineAreas {
@@ -385,6 +391,7 @@ pub(crate) enum KeyHookKind {
 #[derive(Debug, Clone)]
 pub(crate) struct KeyHook<V, A, S, O, M> {
     pub kind: KeyHookKind,
+    pub context: fn(&KeyHookKind, &ActionContext<V, O>, &mut S) -> Option<InputLayerContext>,
     pub dispatch: fn(
         &mut KeyHookKind,
         KeyEvent,
@@ -499,6 +506,18 @@ where
         self.sync_focus_to_spec(spec);
     }
 
+    /// Drop all in-flight input-routing state in one place: the keymap's
+    /// partial sequence *and* the sticky [`active_owner`](Self) that a canvas
+    /// hook (or the keymap) may hold. Call this whenever the world shifts out
+    /// from under a pending sequence — page navigation, buffer switch, or after
+    /// remapping bindings at runtime — so a half-typed chord can't resolve
+    /// against the new context or be delivered to a layer that no longer owns
+    /// the focus.
+    pub fn reset_input_routing(&mut self) {
+        self.input.reset();
+        self.active_owner = None;
+    }
+
     /// Register a page spec's focus targets and section item counts. Targets
     /// are only re-registered when they actually change (so focus position is
     /// preserved across redraws), but the section item counts are always
@@ -523,7 +542,7 @@ where
     ) -> TuiPagesResult<TuiPagesOutput<A>, Handler::Error> {
         let spec = self.current_page_spec(state);
         let modes = spec.modes.clone();
-        let accepts_text_input = spec.accepts_text_input;
+        let page_accepts_text_input = spec.accepts_text_input;
         self.sync_focus_to_spec(spec);
 
         let ctx = ActionContext {
@@ -531,38 +550,27 @@ where
             focus: self.focus.current(),
             has_overlay: self.focus.has_overlay(),
         };
-        let focus_accepts_mapped_text = accepts_text_input
-            && self
-                .focus
-                .current()
-                .as_ref()
-                .map(FocusTarget::is_canvas)
-                .unwrap_or(false);
+        let focused_hook = self.focused_hook_context(&ctx, state);
+        let focused_canvas_accepts_text = matches!(
+            focused_hook,
+            Some((_, InputLayerContext::Text))
+        );
+        let accepts_text_input = page_accepts_text_input || focused_canvas_accepts_text;
+        let focus_accepts_mapped_text = focused_canvas_accepts_text
+            || (page_accepts_text_input
+                && self
+                    .focus
+                    .current()
+                    .as_ref()
+                    .map(FocusTarget::is_canvas)
+                    .unwrap_or(false));
 
         // The orchestrator drives the input layers as an ordered stack. The
         // global keymap (`self.input`) and each canvas hook are layers; the
         // first to claim the key wins, and whichever begins a multi-key
         // sequence becomes the sticky `active_owner` for the keys that follow.
         //
-        // Precedence depends on the editing context, which is the crux of the
-        // design: tui-pages is the arbiter, and the canvas is consulted for
-        // whatever tui-pages doesn't claim.
-        //   * Command context (`!accepts_text_input`, e.g. a canvas field in
-        //     normal mode): the keymap goes first, so leader/app/navigation
-        //     bindings win. Canvas editing commands aren't in the keymap, so
-        //     they fall through (`Ignored`) to the hooks.
-        //   * Text context (`accepts_text_input`, e.g. insert mode or an
-        //     entered field): the focused widget receives raw input first —
-        //     typed characters, `Esc` — and the keymap only handles what the
-        //     widget declines (e.g. `ctrl` shortcuts).
-        let mut order: Vec<LayerOwner> = Vec::with_capacity(self.key_hooks.len() + 1);
-        if accepts_text_input {
-            order.extend((0..self.key_hooks.len()).map(LayerOwner::Hook));
-            order.push(LayerOwner::Keymap);
-        } else {
-            order.push(LayerOwner::Keymap);
-            order.extend((0..self.key_hooks.len()).map(LayerOwner::Hook));
-        }
+        let order = self.layer_order(focused_hook, page_accepts_text_input);
 
         // A sequence in flight routes its continuation straight to its owner.
         if let Some(owner) = self.active_owner {
@@ -614,6 +622,51 @@ where
         let chord = text_chord.unwrap_or_else(|| KeyChord::from_event(&key));
         let quit_requested = self.dispatch_text(chord, state)?;
         Ok(TuiPagesOutput::new(TuiPagesStatus::TextHandled, quit_requested))
+    }
+
+    fn focused_hook_context(
+        &self,
+        ctx: &ActionContext<V, O>,
+        state: &mut S,
+    ) -> Option<(usize, InputLayerContext)> {
+        self.key_hooks
+            .iter()
+            .enumerate()
+            .find_map(|(index, hook)| {
+                (hook.context)(&hook.kind, ctx, state).map(|context| (index, context))
+            })
+    }
+
+    fn layer_order(
+        &self,
+        focused_hook: Option<(usize, InputLayerContext)>,
+        page_accepts_text_input: bool,
+    ) -> Vec<LayerOwner> {
+        let mut order = Vec::with_capacity(self.key_hooks.len() + 1);
+        let focused_index = focused_hook.map(|(index, _)| index);
+        let text_context =
+            page_accepts_text_input || matches!(focused_hook, Some((_, InputLayerContext::Text)));
+
+        if text_context {
+            if let Some(index) = focused_index {
+                order.push(LayerOwner::Hook(index));
+            } else {
+                order.extend((0..self.key_hooks.len()).map(LayerOwner::Hook));
+            }
+            order.push(LayerOwner::Keymap);
+        } else {
+            order.push(LayerOwner::Keymap);
+            if let Some(index) = focused_index {
+                order.push(LayerOwner::Hook(index));
+            }
+        }
+
+        order.extend(
+            (0..self.key_hooks.len())
+                .filter(|index| Some(*index) != focused_index)
+                .map(LayerOwner::Hook),
+        );
+        order
     }
 
     /// Offer a key to a single input layer and normalise its outcome into a
@@ -749,19 +802,23 @@ where
                 false
             }
             TuiEffect::Navigate(view) => {
+                self.reset_input_routing();
                 self.buffer.update_history(view);
                 self.refresh_page(state);
                 false
             }
             TuiEffect::NextBuffer => {
+                self.reset_input_routing();
                 self.switch_buffer(true, state);
                 false
             }
             TuiEffect::PreviousBuffer => {
+                self.reset_input_routing();
                 self.switch_buffer(false, state);
                 false
             }
             TuiEffect::CloseBuffer => {
+                self.reset_input_routing();
                 self.buffer.close_active_buffer(self.fallback_view.clone());
                 self.refresh_page(state);
                 false

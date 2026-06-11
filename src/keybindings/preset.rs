@@ -569,7 +569,8 @@ where
         source: &str,
     ) -> Result<(), NavigationPresetError> {
         apply_navigation_preset_toml(&mut self.input.registry, source)?;
-        self.input.tracker.reset();
+        self.input.reset();
+        self.active_owner = None;
         Ok(())
     }
 }
@@ -583,7 +584,8 @@ where
         source: &str,
     ) -> Result<(), NavigationPresetError> {
         remap_navigation_preset_toml(&mut self.input.registry, source)?;
-        self.input.tracker.reset();
+        self.input.reset();
+        self.active_owner = None;
         Ok(())
     }
 }

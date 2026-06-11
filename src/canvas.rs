@@ -9,8 +9,8 @@
 use crate::focus::{FocusIntent, FocusTarget};
 use crate::input::{InputPipeline, InputRegistry, KeyChord, KeyMap, PipelineResponse};
 use crate::runtime::{
-    modes, ActionContext, ActionOutcome, KeyHook, KeyHookKind, KeyHookOutcome, ModeId, PageSpec,
-    TuiEffect, TuiPagesBuilder, TuiPagesStatus,
+    modes, ActionContext, ActionOutcome, InputLayerContext, KeyHook, KeyHookKind, KeyHookOutcome,
+    ModeId, PageSpec, TuiEffect, TuiPagesBuilder, TuiPagesStatus,
 };
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::{layout::Rect, Frame};
@@ -810,6 +810,14 @@ fn focused_canvas_field<V, O>(ctx: &ActionContext<V, O>, index: usize) -> bool {
     )
 }
 
+fn input_layer_context_for_mode(mode: AppMode) -> InputLayerContext {
+    if accepts_text_input(mode) {
+        InputLayerContext::Text
+    } else {
+        InputLayerContext::Command
+    }
+}
+
 fn focus_intent_for_top_level_key<O, M>(key: KeyEvent) -> Option<FocusIntent<O, M>> {
     match (key.code, key.modifiers) {
         (KeyCode::Down | KeyCode::Tab, _) => Some(FocusIntent::ExitCanvasForward),
@@ -886,6 +894,54 @@ where
         input.set_suggestion_suffix(suffix);
     } else {
         input.clear_suggestion_suffix();
+    }
+}
+
+pub(crate) fn canvas_hook_context<V, S, O>(
+    kind: &KeyHookKind,
+    ctx: &ActionContext<V, O>,
+    state: &mut S,
+) -> Option<InputLayerContext>
+where
+    S: CanvasWidgetState,
+{
+    match kind {
+        KeyHookKind::CanvasFormEditor { id, .. } => {
+            if !ctx.focus.as_ref().is_some_and(FocusTarget::is_canvas) {
+                return None;
+            }
+            state
+                .canvas_form_editor(*id)
+                .map(|editor| input_layer_context_for_mode(editor.mode()))
+        }
+        KeyHookKind::CanvasTextArea { focus_index, .. } => {
+            if !focused_canvas_field(ctx, *focus_index) {
+                return None;
+            }
+            if !state
+                .canvas_textarea_entered(*focus_index)
+                .is_some_and(|entered| *entered)
+            {
+                return Some(InputLayerContext::Command);
+            }
+            state
+                .canvas_textarea(*focus_index)
+                .map(|textarea| input_layer_context_for_mode(textarea.mode()))
+        }
+        KeyHookKind::CanvasTextInput { focus_index, .. } => {
+            if !focused_canvas_field(ctx, *focus_index) {
+                return None;
+            }
+            if !state
+                .canvas_textinput_entered(*focus_index)
+                .is_some_and(|entered| *entered)
+            {
+                return Some(InputLayerContext::Command);
+            }
+            state
+                .canvas_textinput(*focus_index)
+                .map(|input| input_layer_context_for_mode(input.mode()))
+        }
     }
 }
 
@@ -1226,6 +1282,7 @@ where
                 id,
                 preset,
             },
+            context: canvas_hook_context::<V, S, O>,
             dispatch: dispatch_canvas_key_hook::<V, A, S, O, M>,
             paste: dispatch_canvas_paste_hook::<V, A, S, O, M>,
         });
@@ -1247,6 +1304,7 @@ where
                 preset,
                 pipeline: canvas_action_pipeline_with_preset(preset, self.input_timeout_ms),
             },
+            context: canvas_hook_context::<V, S, O>,
             dispatch: dispatch_canvas_key_hook::<V, A, S, O, M>,
             paste: dispatch_canvas_paste_hook::<V, A, S, O, M>,
         });
@@ -1267,6 +1325,7 @@ where
                 focus_index,
                 pipeline: canvas_action_pipeline_with_preset(preset, self.input_timeout_ms),
             },
+            context: canvas_hook_context::<V, S, O>,
             dispatch: dispatch_canvas_key_hook::<V, A, S, O, M>,
             paste: dispatch_canvas_paste_hook::<V, A, S, O, M>,
         });
