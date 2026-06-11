@@ -787,12 +787,29 @@ impl Default for WidgetState {
 }
 
 impl canvas::CanvasWidgetState for WidgetState {
+    fn canvas_form_editor_ref(&self, id: usize) -> Option<&dyn canvas::CanvasFormEditorHost> {
+        match id {
+            0 => Some(&self.editor),
+            _ => None,
+        }
+    }
+
     fn canvas_form_editor(
         &mut self,
         id: usize,
     ) -> Option<&mut dyn canvas::CanvasFormEditorHost> {
         match id {
             0 => Some(&mut self.editor),
+            _ => None,
+        }
+    }
+
+    fn canvas_textarea_ref(
+        &self,
+        focus_index: usize,
+    ) -> Option<&dyn canvas::CanvasTextAreaHost> {
+        match focus_index {
+            0 => Some(&self.textarea),
             _ => None,
         }
     }
@@ -807,9 +824,26 @@ impl canvas::CanvasWidgetState for WidgetState {
         }
     }
 
+    fn canvas_textarea_entered_ref(&self, focus_index: usize) -> Option<&bool> {
+        match focus_index {
+            0 => Some(&self.textarea_entered),
+            _ => None,
+        }
+    }
+
     fn canvas_textarea_entered(&mut self, focus_index: usize) -> Option<&mut bool> {
         match focus_index {
             0 => Some(&mut self.textarea_entered),
+            _ => None,
+        }
+    }
+
+    fn canvas_textinput_ref(
+        &self,
+        focus_index: usize,
+    ) -> Option<&dyn canvas::CanvasTextInputHost> {
+        match focus_index {
+            0 => Some(&self.textinput),
             _ => None,
         }
     }
@@ -820,6 +854,13 @@ impl canvas::CanvasWidgetState for WidgetState {
     ) -> Option<&mut dyn canvas::CanvasTextInputHost> {
         match focus_index {
             0 => Some(&mut self.textinput),
+            _ => None,
+        }
+    }
+
+    fn canvas_textinput_entered_ref(&self, focus_index: usize) -> Option<&bool> {
+        match focus_index {
+            0 => Some(&self.textinput_entered),
             _ => None,
         }
     }

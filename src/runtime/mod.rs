@@ -333,6 +333,13 @@ impl<A> TuiPagesOutput<A> {
 pub(crate) struct KeyHookOutcome<V, A, O, M> {
     pub status: TuiPagesStatus<A>,
     pub outcome: ActionOutcome<V, O, M>,
+    pub routing: KeyHookRouting,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum KeyHookRouting {
+    Handled,
+    Pending,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -391,7 +398,7 @@ pub(crate) enum KeyHookKind {
 #[derive(Debug, Clone)]
 pub(crate) struct KeyHook<V, A, S, O, M> {
     pub kind: KeyHookKind,
-    pub context: fn(&KeyHookKind, &ActionContext<V, O>, &mut S) -> Option<InputLayerContext>,
+    pub context: fn(&KeyHookKind, &ActionContext<V, O>, &S) -> Option<InputLayerContext>,
     pub dispatch: fn(
         &mut KeyHookKind,
         KeyEvent,
@@ -627,7 +634,7 @@ where
     fn focused_hook_context(
         &self,
         ctx: &ActionContext<V, O>,
-        state: &mut S,
+        state: &S,
     ) -> Option<(usize, InputLayerContext)> {
         self.key_hooks
             .iter()
@@ -690,10 +697,13 @@ where
                 };
                 match response {
                     None => Ok(LayerResult::Ignored(None)),
-                    Some(KeyHookOutcome { status, outcome }) => {
-                        let pending = matches!(status, TuiPagesStatus::Waiting(_));
+                    Some(KeyHookOutcome {
+                        status,
+                        outcome,
+                        routing,
+                    }) => {
                         let quit_requested = self.apply_outcome(outcome, state);
-                        if pending {
+                        if matches!(routing, KeyHookRouting::Pending) {
                             Ok(LayerResult::Pending(status))
                         } else {
                             Ok(LayerResult::Handled(TuiPagesOutput::new(status, quit_requested)))

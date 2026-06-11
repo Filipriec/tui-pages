@@ -158,9 +158,26 @@ impl Default for AppState {
 }
 
 impl canvas::CanvasWidgetState for AppState {
+    fn canvas_form_editor_ref(&self, id: usize) -> Option<&dyn canvas::CanvasFormEditorHost> {
+        match (self.view, id) {
+            (View::Form, 0) => Some(&self.form),
+            _ => None,
+        }
+    }
+
     fn canvas_form_editor(&mut self, id: usize) -> Option<&mut dyn canvas::CanvasFormEditorHost> {
         match (self.view, id) {
             (View::Form, 0) => Some(&mut self.form),
+            _ => None,
+        }
+    }
+
+    fn canvas_textarea_ref(
+        &self,
+        focus_index: usize,
+    ) -> Option<&dyn canvas::CanvasTextAreaHost> {
+        match (self.view, focus_index) {
+            (View::Editor, 0) => Some(&self.body),
             _ => None,
         }
     }
@@ -178,6 +195,13 @@ impl canvas::CanvasWidgetState for AppState {
     fn canvas_textarea_entered(&mut self, focus_index: usize) -> Option<&mut bool> {
         match (self.view, focus_index) {
             (View::Editor, 0) => Some(&mut self.entered),
+            _ => None,
+        }
+    }
+
+    fn canvas_textarea_entered_ref(&self, focus_index: usize) -> Option<&bool> {
+        match (self.view, focus_index) {
+            (View::Editor, 0) => Some(&self.entered),
             _ => None,
         }
     }

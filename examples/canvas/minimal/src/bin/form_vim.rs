@@ -56,6 +56,10 @@ impl Default for State {
 }
 
 impl canvas::CanvasWidgetState for State {
+    fn canvas_form_editor_ref(&self, id: usize) -> Option<&dyn canvas::CanvasFormEditorHost> {
+        (id == 0).then_some(&self.editor as &dyn canvas::CanvasFormEditorHost)
+    }
+
     fn canvas_form_editor(&mut self, id: usize) -> Option<&mut dyn canvas::CanvasFormEditorHost> {
         (id == 0).then_some(&mut self.editor)
     }

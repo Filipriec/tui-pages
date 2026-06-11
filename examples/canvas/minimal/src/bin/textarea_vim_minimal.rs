@@ -25,6 +25,13 @@ impl Default for State {
 }
 
 impl canvas::CanvasWidgetState for State {
+    fn canvas_textarea_ref(
+        &self,
+        focus_index: usize,
+    ) -> Option<&dyn canvas::CanvasTextAreaHost> {
+        (focus_index == 0).then_some(&self.textarea as &dyn canvas::CanvasTextAreaHost)
+    }
+
     fn canvas_textarea(
         &mut self,
         focus_index: usize,
@@ -34,6 +41,10 @@ impl canvas::CanvasWidgetState for State {
 
     fn canvas_textarea_entered(&mut self, focus_index: usize) -> Option<&mut bool> {
         (focus_index == 0).then_some(&mut self.entered)
+    }
+
+    fn canvas_textarea_entered_ref(&self, focus_index: usize) -> Option<&bool> {
+        (focus_index == 0).then_some(&self.entered)
     }
 }
 

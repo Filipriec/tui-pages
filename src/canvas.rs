@@ -10,7 +10,7 @@ use crate::focus::{FocusIntent, FocusTarget};
 use crate::input::{InputPipeline, InputRegistry, KeyChord, KeyMap, PipelineResponse};
 use crate::runtime::{
     modes, ActionContext, ActionOutcome, InputLayerContext, KeyHook, KeyHookKind, KeyHookOutcome,
-    ModeId, PageSpec, TuiEffect, TuiPagesBuilder, TuiPagesStatus,
+    KeyHookRouting, ModeId, PageSpec, TuiEffect, TuiPagesBuilder, TuiPagesStatus,
 };
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::{layout::Rect, Frame};
@@ -332,7 +332,15 @@ where
 }
 
 pub trait CanvasWidgetState {
+    fn canvas_form_editor_ref(&self, _id: usize) -> Option<&dyn CanvasFormEditorHost> {
+        None
+    }
+
     fn canvas_form_editor(&mut self, _id: usize) -> Option<&mut dyn CanvasFormEditorHost> {
+        None
+    }
+
+    fn canvas_textarea_ref(&self, _focus_index: usize) -> Option<&dyn CanvasTextAreaHost> {
         None
     }
 
@@ -340,11 +348,23 @@ pub trait CanvasWidgetState {
         None
     }
 
+    fn canvas_textarea_entered_ref(&self, _focus_index: usize) -> Option<&bool> {
+        None
+    }
+
     fn canvas_textarea_entered(&mut self, _focus_index: usize) -> Option<&mut bool> {
         None
     }
 
+    fn canvas_textinput_ref(&self, _focus_index: usize) -> Option<&dyn CanvasTextInputHost> {
+        None
+    }
+
     fn canvas_textinput(&mut self, _focus_index: usize) -> Option<&mut dyn CanvasTextInputHost> {
+        None
+    }
+
+    fn canvas_textinput_entered_ref(&self, _focus_index: usize) -> Option<&bool> {
         None
     }
 
@@ -839,8 +859,13 @@ fn focus_intent_for_top_level_key<O, M>(key: KeyEvent) -> Option<FocusIntent<O, 
 fn hook_outcome<V, A, O, M>(
     status: TuiPagesStatus<A>,
     outcome: ActionOutcome<V, O, M>,
+    routing: KeyHookRouting,
 ) -> Option<KeyHookOutcome<V, A, O, M>> {
-    Some(KeyHookOutcome { status, outcome })
+    Some(KeyHookOutcome {
+        status,
+        outcome,
+        routing,
+    })
 }
 
 fn hook_focus_outcome<V, A, O, M>(
@@ -849,13 +874,20 @@ fn hook_focus_outcome<V, A, O, M>(
     hook_outcome(
         TuiPagesStatus::ActionHandled,
         ActionOutcome::effect(TuiEffect::Focus(intent)),
+        KeyHookRouting::Handled,
     )
 }
 
 fn hook_status_outcome<V, A, O, M>(
     status: TuiPagesStatus<A>,
 ) -> Option<KeyHookOutcome<V, A, O, M>> {
-    hook_outcome(status, ActionOutcome::none())
+    hook_outcome(status, ActionOutcome::none(), KeyHookRouting::Handled)
+}
+
+fn hook_pending_outcome<V, A, O, M>(
+    status: TuiPagesStatus<A>,
+) -> Option<KeyHookOutcome<V, A, O, M>> {
+    hook_outcome(status, ActionOutcome::none(), KeyHookRouting::Pending)
 }
 
 fn widget_action_hook_outcome<V, A, O, M>(
@@ -873,7 +905,7 @@ fn pipeline_hook_outcome<V, A, O, M>(
     response: PipelineResponse<CanvasAction>,
 ) -> Option<KeyHookOutcome<V, A, O, M>> {
     match response {
-        PipelineResponse::Wait(_) => hook_status_outcome(TuiPagesStatus::Waiting(Vec::new())),
+        PipelineResponse::Wait(_) => hook_pending_outcome(TuiPagesStatus::Waiting(Vec::new())),
         PipelineResponse::Cancel => hook_status_outcome(TuiPagesStatus::Cancelled),
         PipelineResponse::Execute(_) | PipelineResponse::Type(_) => None,
     }
@@ -900,7 +932,7 @@ where
 pub(crate) fn canvas_hook_context<V, S, O>(
     kind: &KeyHookKind,
     ctx: &ActionContext<V, O>,
-    state: &mut S,
+    state: &S,
 ) -> Option<InputLayerContext>
 where
     S: CanvasWidgetState,
@@ -911,7 +943,7 @@ where
                 return None;
             }
             state
-                .canvas_form_editor(*id)
+                .canvas_form_editor_ref(*id)
                 .map(|editor| input_layer_context_for_mode(editor.mode()))
         }
         KeyHookKind::CanvasTextArea { focus_index, .. } => {
@@ -919,13 +951,13 @@ where
                 return None;
             }
             if !state
-                .canvas_textarea_entered(*focus_index)
+                .canvas_textarea_entered_ref(*focus_index)
                 .is_some_and(|entered| *entered)
             {
                 return Some(InputLayerContext::Command);
             }
             state
-                .canvas_textarea(*focus_index)
+                .canvas_textarea_ref(*focus_index)
                 .map(|textarea| input_layer_context_for_mode(textarea.mode()))
         }
         KeyHookKind::CanvasTextInput { focus_index, .. } => {
@@ -933,13 +965,13 @@ where
                 return None;
             }
             if !state
-                .canvas_textinput_entered(*focus_index)
+                .canvas_textinput_entered_ref(*focus_index)
                 .is_some_and(|entered| *entered)
             {
                 return Some(InputLayerContext::Command);
             }
             state
-                .canvas_textinput(*focus_index)
+                .canvas_textinput_ref(*focus_index)
                 .map(|input| input_layer_context_for_mode(input.mode()))
         }
     }
@@ -975,13 +1007,13 @@ where
             let pending = state.canvas_form_editor(*id)?.is_sequence_pending();
             match outcome {
                 CanvasKeyDispatchOutcome::Consumed(_) if pending => {
-                    hook_status_outcome(TuiPagesStatus::Waiting(Vec::new()))
+                    hook_pending_outcome(TuiPagesStatus::Waiting(Vec::new()))
                 }
                 CanvasKeyDispatchOutcome::Consumed(_) => {
                     hook_status_outcome(TuiPagesStatus::ActionHandled)
                 }
                 CanvasKeyDispatchOutcome::PendingSequence => {
-                    hook_status_outcome(TuiPagesStatus::Waiting(Vec::new()))
+                    hook_pending_outcome(TuiPagesStatus::Waiting(Vec::new()))
                 }
                 CanvasKeyDispatchOutcome::NotHandled => None,
                 CanvasKeyDispatchOutcome::Focus(FocusIntent::ExitCanvasForward) => {
@@ -1077,7 +1109,7 @@ where
             let pending = state.canvas_textarea(*focus_index)?.is_sequence_pending();
             match outcome {
                 TextAreaEventOutcome::Handled if pending => {
-                    return hook_status_outcome(TuiPagesStatus::Waiting(Vec::new()));
+                    return hook_pending_outcome(TuiPagesStatus::Waiting(Vec::new()));
                 }
                 TextAreaEventOutcome::Handled => {
                     return hook_status_outcome(TuiPagesStatus::TextHandled);

@@ -30,6 +30,16 @@ pub struct State {
 }
 
 impl canvas::CanvasWidgetState for State {
+    fn canvas_textarea_ref(
+        &self,
+        focus_index: usize,
+    ) -> Option<&dyn canvas::CanvasTextAreaHost> {
+        match focus_index {
+            0 => Some(&self.body),
+            _ => None,
+        }
+    }
+
     fn canvas_textarea(
         &mut self,
         focus_index: usize,
@@ -43,6 +53,13 @@ impl canvas::CanvasWidgetState for State {
     fn canvas_textarea_entered(&mut self, focus_index: usize) -> Option<&mut bool> {
         match focus_index {
             0 => Some(&mut self.entered),
+            _ => None,
+        }
+    }
+
+    fn canvas_textarea_entered_ref(&self, focus_index: usize) -> Option<&bool> {
+        match focus_index {
+            0 => Some(&self.entered),
             _ => None,
         }
     }

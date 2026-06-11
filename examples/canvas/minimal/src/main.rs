@@ -53,6 +53,13 @@ pub struct State {
 }
 
 impl canvas::CanvasWidgetState for State {
+    fn canvas_form_editor_ref(&self, id: usize) -> Option<&dyn canvas::CanvasFormEditorHost> {
+        match id {
+            0 => Some(&self.editor),
+            _ => None,
+        }
+    }
+
     fn canvas_form_editor(
         &mut self,
         id: usize,
