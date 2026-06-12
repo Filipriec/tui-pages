@@ -1,6 +1,9 @@
 use crate::command::{CommandHint, CommandRegistry, CommandResolver, CommandResponse};
 use crate::focus::{FocusController, FocusIntent, FocusManager, FocusTarget, FocusWrap};
 use crate::input::{parse_binding, InputHint, InputPipeline, InputRegistry, KeyChord, KeyMap};
+use crate::keybindings::{
+    BindingStore, KeybindingConfig, KeybindingConfigError, KeybindingReport, NavigationAction,
+};
 use crate::navigation::{BufferState, PaneSplit};
 use crossterm::event::KeyEvent;
 #[cfg(feature = "command-line")]
@@ -461,6 +464,8 @@ pub struct TuiPages<V, A, S, Pages = (), Handler = (), O = (), M = ()> {
     /// layer returns [`LayerResult::Pending`]; subsequent keys route straight to
     /// it until it resolves. `None` means the next key is freshly arbitrated.
     pub(crate) active_owner: Option<LayerOwner>,
+    keybinding_store: Option<BindingStore<A>>,
+    keybinding_report: Option<KeybindingReport<A>>,
     _state: PhantomData<S>,
 }
 
@@ -527,6 +532,14 @@ where
     pub fn reset_input_routing(&mut self) {
         self.input.reset();
         self.active_owner = None;
+    }
+
+    pub fn take_keybinding_report(&mut self) -> Option<KeybindingReport<A>> {
+        self.keybinding_report.take()
+    }
+
+    pub fn keybinding_store(&self) -> Option<&BindingStore<A>> {
+        self.keybinding_store.as_ref()
     }
 
     /// Register a page spec's focus targets and section item counts. Targets
@@ -672,11 +685,11 @@ where
             }
         }
 
-        order.extend(
-            (0..self.key_hooks.len())
-                .filter(|index| Some(*index) != focused_index)
-                .map(LayerOwner::Hook),
-        );
+        let remaining = (0..self.key_hooks.len())
+            .map(LayerOwner::Hook)
+            .filter(|owner| !order.contains(owner))
+            .collect::<Vec<_>>();
+        order.extend(remaining);
         order
     }
 
@@ -939,6 +952,8 @@ pub struct TuiPagesBuilder<V, A, S, O = (), M = (), Pages = (), Handler = ()> {
     reserve_command_line: bool,
     pub(crate) text_input_mapper: Option<fn(KeyChord) -> Option<A>>,
     pub(crate) key_hooks: Vec<KeyHook<V, A, S, O, M>>,
+    keybinding_store: Option<BindingStore<A>>,
+    keybinding_report: Option<KeybindingReport<A>>,
     pages: Pages,
     handler: Handler,
     _state: PhantomData<S>,
@@ -959,6 +974,8 @@ impl<V, A, S, O, M> TuiPagesBuilder<V, A, S, O, M, (), ()> {
             reserve_command_line: cfg!(feature = "command-line"),
             text_input_mapper: None,
             key_hooks: Vec::new(),
+            keybinding_store: None,
+            keybinding_report: None,
             pages: (),
             handler: (),
             _state: PhantomData,
@@ -999,6 +1016,8 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
             reserve_command_line: self.reserve_command_line,
             text_input_mapper: self.text_input_mapper,
             key_hooks: self.key_hooks,
+            keybinding_store: self.keybinding_store,
+            keybinding_report: self.keybinding_report,
             pages,
             handler: self.handler,
             _state: PhantomData,
@@ -1039,6 +1058,8 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
             reserve_command_line: self.reserve_command_line,
             text_input_mapper: self.text_input_mapper,
             key_hooks: self.key_hooks,
+            keybinding_store: self.keybinding_store,
+            keybinding_report: self.keybinding_report,
             pages: self.pages,
             handler,
             _state: PhantomData,
@@ -1129,7 +1150,32 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
             text_input_mapper: self.text_input_mapper,
             key_hooks: self.key_hooks,
             active_owner: None,
+            keybinding_store: self.keybinding_store,
+            keybinding_report: self.keybinding_report,
             _state: PhantomData,
         }
+    }
+}
+
+impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handler>
+where
+    A: Clone + PartialEq + From<NavigationAction>,
+{
+    pub fn keybindings_toml(mut self, source: &str) -> Result<Self, KeybindingConfigError> {
+        let config = KeybindingConfig::from_toml(source)?;
+        self = self.keybindings_config(config)?;
+        Ok(self)
+    }
+
+    pub fn keybindings_config(
+        mut self,
+        config: KeybindingConfig,
+    ) -> Result<Self, KeybindingConfigError> {
+        let (store, registry, report) =
+            BindingStore::with_user_config(&self.input_registry, &config)?;
+        self.input_registry = registry;
+        self.keybinding_store = Some(store);
+        self.keybinding_report = Some(report);
+        Ok(self)
     }
 }

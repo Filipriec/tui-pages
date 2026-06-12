@@ -42,7 +42,7 @@ pub use ::canvas::{
     CanvasKeyBindingEntry, CanvasKeyBindings, CanvasKeybindingConflictKind,
     CanvasKeybindingProfile, KeyEventOutcome,
 };
-pub use ::canvas::keybindings::{CanvasKeyAction, KeyStroke};
+pub use ::canvas::keybindings::{CanvasKeyAction, CanvasKeybindingPresetError, KeyStroke};
 
 // --- Cursor style ---
 pub use ::canvas::CursorManager;

@@ -180,7 +180,7 @@ impl std::error::Error for NavigationPresetError {
 
 impl NavigationPreset {
     pub fn from_toml(source: &str) -> Result<Self, NavigationPresetError> {
-        let value = source.parse::<Value>().map_err(NavigationPresetError::Toml)?;
+        let value = toml::from_str::<Value>(source).map_err(NavigationPresetError::Toml)?;
         let Some(table) = value.as_table() else {
             return Err(NavigationPresetError::Issues(vec![
                 NavigationPresetIssue::RootNotTable,

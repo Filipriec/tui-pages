@@ -14,6 +14,7 @@
 
 mod action;
 mod builtin;
+mod config;
 mod preset;
 
 pub use action::{
@@ -28,6 +29,9 @@ pub use builtin::{
     bind_vim_navigation_defaults, emacs_preset_toml, helix_preset_toml,
     try_standard_vim_action, vim_action_outcome, vim_preset_toml, BuiltinNavigationPreset,
     VimAction,
+};
+pub use config::{
+    BindingNotice, BindingStore, KeybindingConfig, KeybindingConfigError, KeybindingReport,
 };
 pub use preset::{
     apply_navigation_preset_toml, remap_navigation_preset_toml, NavigationPreset,

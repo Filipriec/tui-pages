@@ -64,6 +64,7 @@ pub use keybindings::{
     bind_vim_navigation_defaults, emacs_preset_toml, helix_preset_toml, navigation_action_infos,
     navigation_action_outcome, remap_navigation_preset_toml, try_standard_navigation_action,
     try_standard_vim_action, vim_action_outcome, vim_preset_toml, BuiltinNavigationPreset,
+    BindingNotice, BindingStore, KeybindingConfig, KeybindingConfigError, KeybindingReport,
     NavigationAction, NavigationActionInfo, NavigationConflictPolicy, NavigationPreset,
     NavigationPresetBinding, NavigationPresetError, NavigationPresetIssue, NavigationPresetSection,
     VimAction,
@@ -101,9 +102,10 @@ pub mod prelude {
         vim_preset_toml,
     };
     pub use crate::{
-        modes, parse_binding, try_parse_binding, ActionContext, ActionOutcome,
-        BuiltinNavigationPreset, FocusController, FocusIntent, FocusManager, FocusQuery,
-        FocusTarget, FocusWrap, KeyChord, ModeId, NavigationAction, NavigationActionInfo,
+        modes, parse_binding, try_parse_binding, ActionContext, ActionOutcome, BindingNotice,
+        BindingStore, BuiltinNavigationPreset, FocusController, FocusIntent, FocusManager,
+        FocusQuery, FocusTarget, FocusWrap, KeybindingConfig, KeybindingConfigError,
+        KeybindingReport, KeyChord, ModeId, NavigationAction, NavigationActionInfo,
         NavigationConflictPolicy, NavigationPreset, NavigationPresetError, NavigationPresetIssue,
         PageFn, PageFocusBuilder, PageProvider, PageSpec, ParseKeyError, TerminalGuard,
         TuiActionHandler, TuiApp, TuiEffect, TuiPages, TuiPagesOutput, TuiPagesStatus, VimAction,
