@@ -219,6 +219,7 @@ impl KeybindingConfig {
     }
 }
 
+#[cfg(feature = "canvas")]
 fn table_toml(value: Value) -> Result<String, KeybindingConfigError> {
     match value {
         Value::Table(table) => {

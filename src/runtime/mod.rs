@@ -373,6 +373,9 @@ pub(crate) struct KeyHookOutcome<V, A, O, M> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+// Both variants are only *constructed* by the canvas key hooks; without the
+// `canvas` feature they're still matched in `run_layer` but never built.
+#[cfg_attr(not(feature = "canvas"), allow(dead_code))]
 pub(crate) enum KeyHookRouting {
     Handled,
     Pending,

@@ -1,0 +1,15 @@
+[package]
+name = "keybindings_config"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+# ratatui/crossterm are pinned to match what tui-pages compiles against (0.30 /
+# 0.29) so the `crossterm::event::KeyEvent` we read unifies with the one
+# `tui.handle_key` expects.
+[dependencies]
+tui-pages = { path = "../../.." }
+ratatui = "0.30"
+crossterm = "0.29"
+anyhow = "1"
