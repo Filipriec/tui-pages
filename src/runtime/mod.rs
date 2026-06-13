@@ -428,14 +428,12 @@ pub(crate) enum KeyHookKind {
         focus_index: usize,
         profile: CanvasKeybindingProfileHandle,
         installed_generation: Option<u64>,
-        pipeline: InputPipeline<crate::canvas::CanvasAction>,
     },
     #[cfg(feature = "canvas")]
     CanvasTextInput {
         focus_index: usize,
         profile: CanvasKeybindingProfileHandle,
         installed_generation: Option<u64>,
-        pipeline: InputPipeline<crate::canvas::CanvasAction>,
     },
 }
 
@@ -491,8 +489,6 @@ pub struct TuiPages<V, A, S, Pages = (), Handler = (), O = (), M = ()> {
     pub commands: CommandResolver<A>,
     pub focus: FocusManager<O, M>,
     pub buffer: BufferState<V>,
-    #[cfg(feature = "canvas")]
-    input_timeout_ms: u64,
     pages: Pages,
     handler: Handler,
     fallback_view: V,
@@ -620,7 +616,6 @@ where
         {
             let profile = config.canvas_profile()?;
             self.canvas_keybinding_profile.borrow_mut().replace(profile);
-            self.refresh_canvas_keybinding_pipelines();
         }
         self.set_keybinding_store_and_registry(store, report.clone());
         Ok(report)
@@ -685,7 +680,6 @@ where
                     self.canvas_keybinding_profile
                         .borrow_mut()
                         .replace(preset.profile());
-                    self.refresh_canvas_keybinding_pipelines();
                 }
             }
             let report = store.report(&["global", "general", "nor", "ins", "sel"]);
@@ -711,6 +705,13 @@ where
                 action: action_name.to_string(),
             });
         }
+        // Parse every sequence with tui-pages' parser up front, before mutating
+        // anything, so a parse error can't leave the live profile half-changed.
+        let parsed_sequences = sequences
+            .iter()
+            .map(|sequence| crate::input::try_parse_binding(sequence))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(KeybindingConfigError::KeyBinding)?;
         {
             let mut profile = self.canvas_keybinding_profile.borrow_mut();
             profile
@@ -719,7 +720,6 @@ where
                 .map_err(KeybindingConfigError::Canvas)?;
             profile.bump();
         }
-        self.refresh_canvas_keybinding_pipelines();
 
         let mut store = self
             .keybinding_store
@@ -737,10 +737,8 @@ where
             !(binding.mode == crate::canvas::mode_for_app_mode(mode).as_str()
                 && crate::canvas::canvas_action_name(&binding.action) == Some(action_name))
         });
-        if let Some(canvas_action) = crate::canvas::canvas_key_action_to_canvas_action(&action) {
-            for sequence in &sequences {
-                let sequence = crate::input::try_parse_binding(sequence)
-                    .map_err(KeybindingConfigError::KeyBinding)?;
+        if let Some(canvas_action) = action.to_canvas_action() {
+            for sequence in parsed_sequences {
                 store.runtime_canvas.push(crate::input::BindingInfo {
                     layer: crate::input::BindingLayer::Canvas,
                     mode: crate::canvas::mode_for_app_mode(mode).as_str().to_string(),
@@ -755,28 +753,6 @@ where
         self.keybinding_report = Some(report.clone());
         self.reset_input_routing();
         Ok(report)
-    }
-
-    #[cfg(feature = "canvas")]
-    fn refresh_canvas_keybinding_pipelines(&mut self) {
-        let bindings = self
-            .canvas_keybinding_profile
-            .borrow()
-            .profile
-            .current()
-            .clone();
-        for hook in &mut self.key_hooks {
-            match &mut hook.kind {
-                KeyHookKind::CanvasTextArea { pipeline, .. }
-                | KeyHookKind::CanvasTextInput { pipeline, .. } => {
-                    *pipeline = crate::canvas::canvas_action_pipeline_from_keybindings(
-                        &bindings,
-                        self.input_timeout_ms,
-                    );
-                }
-                KeyHookKind::CanvasFormEditor { .. } => {}
-            }
-        }
     }
 
     /// Register a page spec's focus targets and section item counts. Targets
@@ -1390,8 +1366,6 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
             commands: CommandResolver::new(self.command_registry, self.command_timeout_ms),
             focus,
             buffer: BufferState::new(self.initial_view),
-            #[cfg(feature = "canvas")]
-            input_timeout_ms: self.input_timeout_ms,
             pages: self.pages,
             handler: self.handler,
             fallback_view,
@@ -1429,24 +1403,6 @@ where
         {
             let profile = config.canvas_profile()?;
             self.canvas_keybinding_profile.borrow_mut().replace(profile);
-            let bindings = self
-                .canvas_keybinding_profile
-                .borrow()
-                .profile
-                .current()
-                .clone();
-            for hook in &mut self.key_hooks {
-                match &mut hook.kind {
-                    KeyHookKind::CanvasTextArea { pipeline, .. }
-                    | KeyHookKind::CanvasTextInput { pipeline, .. } => {
-                        *pipeline = crate::canvas::canvas_action_pipeline_from_keybindings(
-                            &bindings,
-                            self.input_timeout_ms,
-                        );
-                    }
-                    KeyHookKind::CanvasFormEditor { .. } => {}
-                }
-            }
         }
         self.keybinding_store = Some(store);
         self.keybinding_report = Some(report);

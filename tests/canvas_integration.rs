@@ -993,6 +993,31 @@ fn runtime_rebind_canvas_reinstalls_existing_form_editor_bindings() {
 }
 
 #[test]
+fn canvas_config_profile_preserves_exit_suggestions_binding() {
+    // Regression for the lossy pipeline rebuild: a runtime config change used to
+    // reproject the canvas bindings through a path that could not represent
+    // `ExitSuggestions` (the canvas keybinding enum lacked the variant), so
+    // Ctrl+G silently stopped exiting the suggestion dropdown after any
+    // `apply_keybindings_toml` / `rebind_canvas`. The profile that now drives
+    // every widget must carry that binding straight from the preset.
+    use canvas::{CanvasKeyAction, KeyStroke};
+
+    let config =
+        tui_pages::keybindings::KeybindingConfig::from_toml("[canvas]\npreset = \"vim\"\n")
+            .unwrap();
+    let profile = config.canvas_profile().unwrap();
+
+    let ctrl_g = [KeyStroke {
+        code: KeyCode::Char('g'),
+        modifiers: KeyModifiers::CONTROL,
+    }];
+    assert_eq!(
+        profile.current().lookup_action(AppMode::Ins, &ctrl_g).0,
+        Some(&CanvasKeyAction::ExitSuggestions),
+    );
+}
+
+#[test]
 fn handle_paste_is_a_noop_without_a_focused_canvas_widget() {
     // No canvas hook registered, so there is nothing to receive the paste.
     let mut app = TuiPages::<View, WidgetAction, WidgetState>::builder(View::Form)

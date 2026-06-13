@@ -9,7 +9,7 @@
 use crate::focus::{FocusIntent, FocusTarget};
 use crate::input::{
     BindableActionInfo, BindingCatalog, BindingConflict, BindingInfo, BindingLayer, BindingSource,
-    CanvasRoutingPrecedence, InputPipeline, InputRegistry, KeyChord, KeyMap, PipelineResponse,
+    CanvasRoutingPrecedence, KeyChord, KeyMap,
 };
 use crate::runtime::{
     modes, ActionContext, ActionOutcome, InputLayerContext, KeyHook, KeyHookKind, KeyHookOutcome,
@@ -294,11 +294,24 @@ where
     }
 }
 
+/// A single-row text input. It is driven by the same keybinding engine as the
+/// form editor (its inner [`TextFormState`] *is* a [`FormEditor`]), so it is
+/// modal and the widget engine is the single decoder for its keys — the
+/// textinput just adds inline-suggestion (ghost-suffix) glue on top.
 pub trait CanvasTextInputHost {
     fn mode(&self) -> AppMode;
     fn text(&self) -> String;
+    fn has_keybindings(&self) -> bool;
     fn install_keybindings(&mut self, bindings: CanvasKeyBindings);
-    fn input_key(&mut self, key: KeyEvent) -> CanvasTextWidgetOutcome;
+    /// Whether a multi-key command is mid-flight, so the runtime keeps routing
+    /// keys here instead of letting the global keymap claim the next stroke.
+    fn is_sequence_pending(&self) -> bool {
+        false
+    }
+    fn input_key(&mut self, key: KeyEvent) -> CanvasKeyDispatchOutcome;
+    /// Accept the current inline-suggestion suffix (ghost text). Returns whether
+    /// a non-empty suffix was inserted.
+    fn accept_suggestion_suffix(&mut self) -> bool;
     /// Insert pasted (bracketed-paste) text. Returns whether anything was
     /// inserted.
     fn paste(&mut self, text: &str) -> bool;
@@ -320,12 +333,27 @@ where
         TextInputState::text(self)
     }
 
+    fn has_keybindings(&self) -> bool {
+        self.form().core().has_keybindings()
+    }
+
     fn install_keybindings(&mut self, bindings: CanvasKeyBindings) {
         self.form_mut().set_keybindings(bindings);
     }
 
-    fn input_key(&mut self, key: KeyEvent) -> CanvasTextWidgetOutcome {
-        dispatch_text_input_key(self, key)
+    fn is_sequence_pending(&self) -> bool {
+        self.form().is_sequence_pending()
+    }
+
+    fn input_key(&mut self, key: KeyEvent) -> CanvasKeyDispatchOutcome {
+        dispatch_key_event(self.form_mut(), key)
+    }
+
+    fn accept_suggestion_suffix(&mut self) -> bool {
+        matches!(
+            TextInputState::accept_suggestion_suffix(self),
+            TextInputEventOutcome::Handled
+        )
     }
 
     fn paste(&mut self, text: &str) -> bool {
@@ -440,65 +468,21 @@ where
     text_chord_to_canvas_action(chord).map(A::from)
 }
 
-pub(crate) fn canvas_key_action_to_canvas_action(action: &CanvasKeyAction) -> Option<CanvasAction> {
-    Some(match action {
-        CanvasKeyAction::MoveLeft => CanvasAction::MoveLeft,
-        CanvasKeyAction::MoveRight => CanvasAction::MoveRight,
-        CanvasKeyAction::MoveUp => CanvasAction::MoveUp,
-        CanvasKeyAction::MoveDown => CanvasAction::MoveDown,
-        CanvasKeyAction::NextField => CanvasAction::NextField,
-        CanvasKeyAction::PrevField => CanvasAction::PrevField,
-        CanvasKeyAction::MoveLineStart => CanvasAction::MoveLineStart,
-        CanvasKeyAction::MoveLineEnd => CanvasAction::MoveLineEnd,
-        CanvasKeyAction::MoveFirstLine => CanvasAction::MoveFirstLine,
-        CanvasKeyAction::MoveLastLine => CanvasAction::MoveLastLine,
-        CanvasKeyAction::MoveWordNext => CanvasAction::MoveWordNext,
-        CanvasKeyAction::MoveWordPrev => CanvasAction::MoveWordPrev,
-        CanvasKeyAction::MoveWordEnd => CanvasAction::MoveWordEnd,
-        CanvasKeyAction::MoveWordEndPrev => CanvasAction::MoveWordEndPrev,
-        CanvasKeyAction::MoveBigWordNext => CanvasAction::MoveBigWordNext,
-        CanvasKeyAction::MoveBigWordPrev => CanvasAction::MoveBigWordPrev,
-        CanvasKeyAction::MoveBigWordEnd => CanvasAction::MoveBigWordEnd,
-        CanvasKeyAction::MoveBigWordEndPrev => CanvasAction::MoveBigWordEndPrev,
-        CanvasKeyAction::DeleteCharBackward => CanvasAction::DeleteBackward,
-        CanvasKeyAction::DeleteCharForward => CanvasAction::DeleteForward,
-        CanvasKeyAction::Undo => CanvasAction::Undo,
-        CanvasKeyAction::Redo => CanvasAction::Redo,
-        CanvasKeyAction::SuggestionDown => CanvasAction::SuggestionDown,
-        CanvasKeyAction::SuggestionUp => CanvasAction::SuggestionUp,
-        CanvasKeyAction::OpenSuggestions => CanvasAction::TriggerSuggestions,
-        CanvasKeyAction::ApplySuggestion => CanvasAction::SelectSuggestion,
-        CanvasKeyAction::EnterEditModeBefore => CanvasAction::EnterEditMode,
-        CanvasKeyAction::EnterEditModeAfter => CanvasAction::EnterEditModeAfter,
-        CanvasKeyAction::ExitEditMode => CanvasAction::ExitEditMode,
-        CanvasKeyAction::EnterHighlightMode => CanvasAction::EnterHighlightMode,
-        CanvasKeyAction::EnterHighlightModeLinewise => CanvasAction::EnterHighlightModeLinewise,
-        CanvasKeyAction::ExitHighlightMode => CanvasAction::ExitHighlightMode,
-        CanvasKeyAction::OpenLineBelow => CanvasAction::OpenLineBelow,
-        CanvasKeyAction::OpenLineAbove => CanvasAction::OpenLineAbove,
-        _ => return None,
-    })
-}
-
-pub(crate) fn canvas_action_pipeline_from_keybindings(
-    bindings: &CanvasKeyBindings,
-    timeout_ms: u64,
-) -> InputPipeline<CanvasAction> {
-    let mut registry = InputRegistry::empty();
-    for entry in bindings.entries() {
-        let Some(action) = canvas_key_action_to_canvas_action(&entry.action) else {
-            continue;
-        };
-        let sequence = entry
-            .sequence
-            .iter()
-            .map(|stroke| KeyChord::new(stroke.code, stroke.modifiers))
-            .collect::<Vec<_>>();
-        registry
-            .map_mut(mode_for_app_mode(entry.mode).as_str())
-            .bind(sequence, action);
+/// Seed the shared canvas keybinding profile with `preset` only if nothing has
+/// configured it yet (generation 0). This keeps a `keybindings_toml`/`config`
+/// call from being clobbered by a later widget registration, and stops the
+/// last-registered widget's preset from overwriting earlier ones — there is a
+/// single shared profile, so the first writer wins and explicit config always
+/// wins over a widget default.
+#[cfg(feature = "canvas")]
+fn seed_canvas_profile_if_unconfigured(
+    handle: &crate::runtime::CanvasKeybindingProfileHandle,
+    preset: BuiltinCanvasKeybindingPreset,
+) {
+    let mut state = handle.borrow_mut();
+    if state.generation == 0 {
+        state.replace(preset.profile());
     }
-    InputPipeline::new(registry, timeout_ms)
 }
 
 pub fn focus_intent_for_boundary<O, M>(boundary: BoundaryExit) -> FocusIntent<O, M> {
@@ -884,19 +868,6 @@ where
     }
 }
 
-fn canvas_action_pipeline_with_preset(
-    preset: BuiltinCanvasKeybindingPreset,
-    timeout_ms: u64,
-) -> InputPipeline<CanvasAction> {
-    let mut registry = InputRegistry::empty();
-    bind_builtin_defaults_for_mode(preset, registry.map_mut(modes::NORMAL.as_str()), AppMode::Nor);
-    bind_builtin_defaults_for_mode(preset, registry.map_mut(modes::INSERT.as_str()), AppMode::Ins);
-    bind_suggestion_defaults(registry.map_mut(modes::INSERT.as_str()));
-    bind_builtin_defaults_for_mode(preset, registry.map_mut(modes::SELECT.as_str()), AppMode::Sel);
-    bind_suggestion_defaults(registry.map_mut(modes::SELECT.as_str()));
-    InputPipeline::new(registry, timeout_ms)
-}
-
 fn normalize_shift(mut key: KeyEvent) -> KeyEvent {
     if matches!(key.code, KeyCode::Char(_)) && key.modifiers == KeyModifiers::SHIFT {
         key.modifiers = KeyModifiers::NONE;
@@ -970,27 +941,6 @@ fn hook_pending_outcome<V, A, O, M>(
     status: TuiPagesStatus<A>,
 ) -> Option<KeyHookOutcome<V, A, O, M>> {
     hook_outcome(status, ActionOutcome::none(), KeyHookRouting::Pending)
-}
-
-fn widget_action_hook_outcome<V, A, O, M>(
-    outcome: HostActionOutcome,
-) -> Option<KeyHookOutcome<V, A, O, M>> {
-    match outcome {
-        HostActionOutcome::Applied(_) => hook_status_outcome(TuiPagesStatus::ActionHandled),
-        HostActionOutcome::ExitCanvas(boundary) => {
-            hook_focus_outcome(focus_intent_for_boundary(boundary))
-        }
-    }
-}
-
-fn pipeline_hook_outcome<V, A, O, M>(
-    response: PipelineResponse<CanvasAction>,
-) -> Option<KeyHookOutcome<V, A, O, M>> {
-    match response {
-        PipelineResponse::Wait(_) => hook_pending_outcome(TuiPagesStatus::Waiting(Vec::new())),
-        PipelineResponse::Cancel => hook_status_outcome(TuiPagesStatus::Cancelled),
-        PipelineResponse::Execute(_) | PipelineResponse::Type(_) => None,
-    }
 }
 
 fn refresh_textinput_suggestion_suffix<S>(state: &mut S, focus_index: usize)
@@ -1096,7 +1046,7 @@ fn install_textinput_profile(
     installed_generation: &mut Option<u64>,
 ) {
     let (generation, bindings) = canvas_profile_generation_and_bindings(profile);
-    if *installed_generation != Some(generation) {
+    if *installed_generation != Some(generation) || !input.has_keybindings() {
         input.install_keybindings(bindings);
         *installed_generation = Some(generation);
     }
@@ -1155,7 +1105,6 @@ where
             focus_index,
             profile,
             installed_generation,
-            pipeline,
         } => {
             if !focused_canvas_field(&ctx, *focus_index) {
                 if let Some(entered) = state.canvas_textarea_entered(*focus_index) {
@@ -1227,30 +1176,24 @@ where
             // A consumed key that left the editor mid-sequence (operator/count or
             // an `f`/`r` literal-char capture) is reported as Waiting so the
             // orchestrator keeps this hook as the sticky owner of the next keys.
+            // A key the widget engine ignores is handed back (None) so the
+            // orchestrator falls through to the keymap — the widget engine is the
+            // single decoder for canvas keys.
             let pending = state.canvas_textarea(*focus_index)?.is_sequence_pending();
             match outcome {
                 TextAreaEventOutcome::Handled if pending => {
-                    return hook_pending_outcome(TuiPagesStatus::Waiting(Vec::new()));
+                    hook_pending_outcome(TuiPagesStatus::Waiting(Vec::new()))
                 }
                 TextAreaEventOutcome::Handled => {
-                    return hook_status_outcome(TuiPagesStatus::TextHandled);
+                    hook_status_outcome(TuiPagesStatus::TextHandled)
                 }
-                TextAreaEventOutcome::Ignored => {}
-            }
-
-            let modes = modes_for_app_mode(mode);
-            match pipeline.process(key, &modes, accepts_text_input(mode)) {
-                PipelineResponse::Execute(action) => widget_action_hook_outcome(
-                    state.canvas_textarea(*focus_index)?.dispatch_canvas_action(action),
-                ),
-                response => pipeline_hook_outcome(response),
+                TextAreaEventOutcome::Ignored => None,
             }
         }
         KeyHookKind::CanvasTextInput {
             focus_index,
             profile,
             installed_generation,
-            pipeline,
         } => {
             if !focused_canvas_field(&ctx, *focus_index) {
                 if let Some(entered) = state.canvas_textinput_entered(*focus_index) {
@@ -1279,60 +1222,75 @@ where
                 install_textinput_profile(input, profile, installed_generation);
             }
 
-            let mode = state.canvas_textinput(*focus_index)?.mode();
-            if mode == AppMode::Ins {
-                return match (key.code, key.modifiers) {
-                    (KeyCode::Char('c'), KeyModifiers::CONTROL) => None,
-                    (KeyCode::Esc, _) => {
-                        state.canvas_textinput(*focus_index)?.exit_edit_mode();
-                        hook_status_outcome(TuiPagesStatus::ActionHandled)
-                    }
-                    _ => match state
-                        .canvas_textinput(*focus_index)?
-                        .input_key(normalize_shift(key))
-                    {
-                        CanvasTextWidgetOutcome::Handled => {
-                            refresh_textinput_suggestion_suffix(state, *focus_index);
-                            hook_status_outcome(TuiPagesStatus::TextHandled)
-                        }
-                        CanvasTextWidgetOutcome::Submitted => {
-                            if let Some(entered) = state.canvas_textinput_entered(*focus_index) {
-                                *entered = false;
-                            }
-                            hook_focus_outcome(FocusIntent::ExitCanvasForward)
-                        }
-                        CanvasTextWidgetOutcome::Focus(intent) => {
-                            if let Some(entered) = state.canvas_textinput_entered(*focus_index) {
-                                *entered = false;
-                            }
-                            match intent {
-                                FocusIntent::ExitCanvasForward => {
-                                    hook_focus_outcome(FocusIntent::ExitCanvasForward)
-                                }
-                                FocusIntent::ExitCanvasBackward => {
-                                    hook_focus_outcome(FocusIntent::ExitCanvasBackward)
-                                }
-                                _ => hook_status_outcome(TuiPagesStatus::ActionHandled),
-                            }
-                        }
-                        CanvasTextWidgetOutcome::NotHandled => None,
-                    },
-                };
+            // Ctrl+C is never owned by the input — let the global keymap quit.
+            if matches!((key.code, key.modifiers), (KeyCode::Char('c'), KeyModifiers::CONTROL)) {
+                return None;
             }
 
+            // Modal Esc: from INSERT drop to NORMAL (stay in the field); from
+            // NORMAL leave the field back to the surrounding focus order.
             if matches!(key.code, KeyCode::Esc) && key.kind == KeyEventKind::Press {
-                if let Some(entered) = state.canvas_textinput_entered(*focus_index) {
+                if state.canvas_textinput(*focus_index)?.mode() == AppMode::Ins {
+                    state.canvas_textinput(*focus_index)?.exit_edit_mode();
+                } else if let Some(entered) = state.canvas_textinput_entered(*focus_index) {
                     *entered = false;
                 }
                 return hook_status_outcome(TuiPagesStatus::ActionHandled);
             }
 
-            let modes = modes_for_app_mode(mode);
-            match pipeline.process(key, &modes, accepts_text_input(mode)) {
-                PipelineResponse::Execute(action) => widget_action_hook_outcome(
-                    state.canvas_textinput(*focus_index)?.dispatch_canvas_action(action),
-                ),
-                response => pipeline_hook_outcome(response),
+            // Enter submits the single-row input and hands focus forward — the
+            // input has no second line to open, so Enter is always "done".
+            if matches!(key.code, KeyCode::Enter) && key.kind == KeyEventKind::Press {
+                if let Some(entered) = state.canvas_textinput_entered(*focus_index) {
+                    *entered = false;
+                }
+                return hook_focus_outcome(FocusIntent::ExitCanvasForward);
+            }
+
+            // Tab accepts the inline ghost suffix when one is present; otherwise
+            // it falls through to the form engine, which treats it as field
+            // navigation and exits the single-row input.
+            if matches!((key.code, key.modifiers), (KeyCode::Tab, KeyModifiers::NONE))
+                && key.kind == KeyEventKind::Press
+                && state.canvas_textinput(*focus_index)?.accept_suggestion_suffix()
+            {
+                refresh_textinput_suggestion_suffix(state, *focus_index);
+                return hook_status_outcome(TuiPagesStatus::TextHandled);
+            }
+
+            // Decode every other key through the inner form's keybinding engine —
+            // the single decoder, exactly as the form editor does.
+            let outcome = state
+                .canvas_textinput(*focus_index)?
+                .input_key(normalize_shift(key));
+            let pending = state.canvas_textinput(*focus_index)?.is_sequence_pending();
+            match outcome {
+                CanvasKeyDispatchOutcome::Consumed(_) if pending => {
+                    hook_pending_outcome(TuiPagesStatus::Waiting(Vec::new()))
+                }
+                CanvasKeyDispatchOutcome::Consumed(_) => {
+                    refresh_textinput_suggestion_suffix(state, *focus_index);
+                    hook_status_outcome(TuiPagesStatus::TextHandled)
+                }
+                CanvasKeyDispatchOutcome::PendingSequence => {
+                    hook_pending_outcome(TuiPagesStatus::Waiting(Vec::new()))
+                }
+                CanvasKeyDispatchOutcome::NotHandled => None,
+                CanvasKeyDispatchOutcome::Focus(FocusIntent::ExitCanvasBackward) => {
+                    if let Some(entered) = state.canvas_textinput_entered(*focus_index) {
+                        *entered = false;
+                    }
+                    hook_focus_outcome(FocusIntent::ExitCanvasBackward)
+                }
+                CanvasKeyDispatchOutcome::Focus(FocusIntent::ExitCanvasForward) => {
+                    if let Some(entered) = state.canvas_textinput_entered(*focus_index) {
+                        *entered = false;
+                    }
+                    hook_focus_outcome(FocusIntent::ExitCanvasForward)
+                }
+                CanvasKeyDispatchOutcome::Focus(_) => {
+                    hook_status_outcome(TuiPagesStatus::ActionHandled)
+                }
             }
         }
     }
@@ -1436,9 +1394,7 @@ where
         id: usize,
         preset: BuiltinCanvasKeybindingPreset,
     ) -> Self {
-        self.canvas_keybinding_profile
-            .borrow_mut()
-            .replace(preset.profile());
+        seed_canvas_profile_if_unconfigured(&self.canvas_keybinding_profile, preset);
         self.key_hooks.push(KeyHook {
             kind: KeyHookKind::CanvasFormEditor {
                 id,
@@ -1461,15 +1417,12 @@ where
         focus_index: usize,
         preset: BuiltinCanvasKeybindingPreset,
     ) -> Self {
-        self.canvas_keybinding_profile
-            .borrow_mut()
-            .replace(preset.profile());
+        seed_canvas_profile_if_unconfigured(&self.canvas_keybinding_profile, preset);
         self.key_hooks.push(KeyHook {
             kind: KeyHookKind::CanvasTextArea {
                 focus_index,
                 profile: self.canvas_keybinding_profile.clone(),
                 installed_generation: None,
-                pipeline: canvas_action_pipeline_with_preset(preset, self.input_timeout_ms),
             },
             context: canvas_hook_context::<V, S, O>,
             dispatch: dispatch_canvas_key_hook::<V, A, S, O, M>,
@@ -1487,15 +1440,12 @@ where
         focus_index: usize,
         preset: BuiltinCanvasKeybindingPreset,
     ) -> Self {
-        self.canvas_keybinding_profile
-            .borrow_mut()
-            .replace(preset.profile());
+        seed_canvas_profile_if_unconfigured(&self.canvas_keybinding_profile, preset);
         self.key_hooks.push(KeyHook {
             kind: KeyHookKind::CanvasTextInput {
                 focus_index,
                 profile: self.canvas_keybinding_profile.clone(),
                 installed_generation: None,
-                pipeline: canvas_action_pipeline_with_preset(preset, self.input_timeout_ms),
             },
             context: canvas_hook_context::<V, S, O>,
             dispatch: dispatch_canvas_key_hook::<V, A, S, O, M>,

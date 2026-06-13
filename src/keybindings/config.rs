@@ -13,9 +13,8 @@ use super::{NavigationAction, NavigationPreset, NavigationPresetError, Navigatio
 
 #[cfg(feature = "canvas")]
 use crate::canvas::{
-    analyze_canvas_overlaps, canvas_default_binding_catalog, canvas_key_action_to_canvas_action,
-    BuiltinCanvasKeybindingPreset, CanvasAction, CanvasKeybindingPresetError,
-    CanvasKeybindingProfile,
+    analyze_canvas_overlaps, canvas_default_binding_catalog, BuiltinCanvasKeybindingPreset,
+    CanvasAction, CanvasKeybindingPresetError, CanvasKeybindingProfile,
 };
 
 #[derive(Debug)]
@@ -487,7 +486,7 @@ fn canvas_profile_overrides_catalog(profile: &CanvasKeybindingProfile) -> Bindin
     let mut catalog = BindingCatalog::new();
     let default_entries = profile.defaults().entries();
     for entry in profile.current().entries() {
-        let Some(action) = canvas_key_action_to_canvas_action(&entry.action) else {
+        let Some(action) = entry.action.to_canvas_action() else {
             continue;
         };
         let default_same = default_entries.iter().any(|default| {
