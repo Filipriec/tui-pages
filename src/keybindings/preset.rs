@@ -180,11 +180,32 @@ impl std::error::Error for NavigationPresetError {
 
 impl NavigationPreset {
     pub fn from_toml(source: &str) -> Result<Self, NavigationPresetError> {
+        let (preset, issues) = Self::from_toml_lenient(source)?;
+        if issues.is_empty() {
+            return Ok(preset);
+        }
+        Err(NavigationPresetError::Issues(issues))
+    }
+
+    pub(crate) fn from_toml_lenient(
+        source: &str,
+    ) -> Result<(Self, Vec<NavigationPresetIssue>), NavigationPresetError> {
+        if source.trim().is_empty() {
+            return Ok((
+                Self {
+                    sections: Vec::new(),
+                },
+                Vec::new(),
+            ));
+        }
         let value = toml::from_str::<Value>(source).map_err(NavigationPresetError::Toml)?;
         let Some(table) = value.as_table() else {
-            return Err(NavigationPresetError::Issues(vec![
-                NavigationPresetIssue::RootNotTable,
-            ]));
+            return Ok((
+                Self {
+                    sections: Vec::new(),
+                },
+                vec![NavigationPresetIssue::RootNotTable],
+            ));
         };
 
         let mut sections = Vec::with_capacity(table.len());
@@ -247,11 +268,7 @@ impl NavigationPreset {
 
         let preset = Self { sections };
         issues.extend(preset.collect_binding_issues());
-        if issues.is_empty() {
-            Ok(preset)
-        } else {
-            Err(NavigationPresetError::Issues(issues))
-        }
+        Ok((preset, issues))
     }
 
     pub fn sections(&self) -> &[NavigationPresetSection] {

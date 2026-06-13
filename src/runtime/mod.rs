@@ -9,9 +9,42 @@ use crossterm::event::KeyEvent;
 #[cfg(feature = "command-line")]
 use ratatui::layout::{Constraint, Layout, Rect};
 use std::borrow::Cow;
+#[cfg(feature = "canvas")]
+use std::cell::RefCell;
 use std::error::Error;
 use std::fmt;
 use std::marker::PhantomData;
+#[cfg(feature = "canvas")]
+use std::rc::Rc;
+
+#[cfg(feature = "canvas")]
+#[derive(Debug, Clone)]
+pub(crate) struct CanvasKeybindingProfileState {
+    pub profile: crate::canvas::CanvasKeybindingProfile,
+    pub generation: u64,
+}
+
+#[cfg(feature = "canvas")]
+impl CanvasKeybindingProfileState {
+    pub fn new(profile: crate::canvas::CanvasKeybindingProfile) -> Self {
+        Self {
+            profile,
+            generation: 0,
+        }
+    }
+
+    pub fn replace(&mut self, profile: crate::canvas::CanvasKeybindingProfile) {
+        self.profile = profile;
+        self.generation = self.generation.wrapping_add(1);
+    }
+
+    pub fn bump(&mut self) {
+        self.generation = self.generation.wrapping_add(1);
+    }
+}
+
+#[cfg(feature = "canvas")]
+pub(crate) type CanvasKeybindingProfileHandle = Rc<RefCell<CanvasKeybindingProfileState>>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
@@ -387,17 +420,21 @@ pub(crate) enum KeyHookKind {
     #[cfg(feature = "canvas")]
     CanvasFormEditor {
         id: usize,
-        preset: crate::canvas::BuiltinCanvasKeybindingPreset,
+        profile: CanvasKeybindingProfileHandle,
+        installed_generation: Option<u64>,
     },
     #[cfg(feature = "canvas")]
     CanvasTextArea {
         focus_index: usize,
-        preset: crate::canvas::BuiltinCanvasKeybindingPreset,
+        profile: CanvasKeybindingProfileHandle,
+        installed_generation: Option<u64>,
         pipeline: InputPipeline<crate::canvas::CanvasAction>,
     },
     #[cfg(feature = "canvas")]
     CanvasTextInput {
         focus_index: usize,
+        profile: CanvasKeybindingProfileHandle,
+        installed_generation: Option<u64>,
         pipeline: InputPipeline<crate::canvas::CanvasAction>,
     },
 }
@@ -454,6 +491,8 @@ pub struct TuiPages<V, A, S, Pages = (), Handler = (), O = (), M = ()> {
     pub commands: CommandResolver<A>,
     pub focus: FocusManager<O, M>,
     pub buffer: BufferState<V>,
+    #[cfg(feature = "canvas")]
+    input_timeout_ms: u64,
     pages: Pages,
     handler: Handler,
     fallback_view: V,
@@ -466,6 +505,8 @@ pub struct TuiPages<V, A, S, Pages = (), Handler = (), O = (), M = ()> {
     pub(crate) active_owner: Option<LayerOwner>,
     keybinding_store: Option<BindingStore<A>>,
     keybinding_report: Option<KeybindingReport<A>>,
+    #[cfg(feature = "canvas")]
+    canvas_keybinding_profile: CanvasKeybindingProfileHandle,
     _state: PhantomData<S>,
 }
 
@@ -540,6 +581,202 @@ where
 
     pub fn keybinding_store(&self) -> Option<&BindingStore<A>> {
         self.keybinding_store.as_ref()
+    }
+
+    fn keybinding_builtin_registry(&self) -> InputRegistry<A>
+    where
+        A: Clone + PartialEq,
+    {
+        self.keybinding_store
+            .as_ref()
+            .map(BindingStore::builtin_registry)
+            .unwrap_or_else(|| self.input.registry.clone())
+    }
+
+    fn set_keybinding_store_and_registry(
+        &mut self,
+        store: BindingStore<A>,
+        report: KeybindingReport<A>,
+    ) where
+        A: Clone + PartialEq,
+    {
+        self.input.registry = store.effective_registry();
+        self.keybinding_store = Some(store);
+        self.keybinding_report = Some(report);
+        self.reset_input_routing();
+    }
+
+    pub fn apply_keybindings_toml(
+        &mut self,
+        source: &str,
+    ) -> Result<KeybindingReport<A>, KeybindingConfigError>
+    where
+        A: Clone + PartialEq + From<NavigationAction>,
+    {
+        let config = KeybindingConfig::from_toml(source)?;
+        let builtin = self.keybinding_builtin_registry();
+        let (store, _, report) = BindingStore::with_user_config(&builtin, &config)?;
+        #[cfg(feature = "canvas")]
+        {
+            let profile = config.canvas_profile()?;
+            self.canvas_keybinding_profile.borrow_mut().replace(profile);
+            self.refresh_canvas_keybinding_pipelines();
+        }
+        self.set_keybinding_store_and_registry(store, report.clone());
+        Ok(report)
+    }
+
+    pub fn rebind_keymap(
+        &mut self,
+        mode: impl Into<String>,
+        sequence: &str,
+        action: A,
+    ) -> Result<KeybindingReport<A>, KeybindingConfigError>
+    where
+        A: Clone + PartialEq,
+    {
+        let mode = mode.into();
+        let sequence = crate::input::try_parse_binding(sequence)
+            .map_err(KeybindingConfigError::KeyBinding)?;
+        let mut store = self
+            .keybinding_store
+            .clone()
+            .unwrap_or_else(|| {
+                let mut store = BindingStore::default();
+                store.builtin_keymap =
+                    crate::input::BindingCatalog::from_registry(&self.input.registry, crate::input::BindingSource::Builtin);
+                store
+            });
+        store.runtime_keymap.bindings.retain(|binding| {
+            !(binding.mode == mode && binding.action == action)
+        });
+        store.runtime_keymap.push(crate::input::BindingInfo {
+            layer: crate::input::BindingLayer::Keymap,
+            mode,
+            sequence,
+            action,
+            source: crate::input::BindingSource::Runtime,
+        });
+        let report = store.report(&["global", "general", "nor", "ins", "sel"]);
+        self.set_keybinding_store_and_registry(store, report.clone());
+        Ok(report)
+    }
+
+    pub fn reset_keybindings_to_defaults(&mut self)
+    where
+        A: Clone + PartialEq,
+    {
+        if let Some(mut store) = self.keybinding_store.clone() {
+            store.user_keymap.bindings.clear();
+            store.runtime_keymap.bindings.clear();
+            #[cfg(feature = "canvas")]
+            {
+                store.user_canvas.bindings.clear();
+                store.runtime_canvas.bindings.clear();
+                if let Some(first) = store.builtin_canvas.bindings.first() {
+                    let preset = match first.source {
+                        crate::input::BindingSource::CanvasBuiltin => self
+                            .canvas_keybinding_profile
+                            .borrow()
+                            .profile
+                            .preset(),
+                        _ => crate::canvas::BuiltinCanvasKeybindingPreset::Vim,
+                    };
+                    self.canvas_keybinding_profile
+                        .borrow_mut()
+                        .replace(preset.profile());
+                    self.refresh_canvas_keybinding_pipelines();
+                }
+            }
+            let report = store.report(&["global", "general", "nor", "ins", "sel"]);
+            self.set_keybinding_store_and_registry(store, report);
+        } else {
+            self.reset_input_routing();
+        }
+    }
+
+    #[cfg(feature = "canvas")]
+    pub fn rebind_canvas(
+        &mut self,
+        mode: crate::canvas::AppMode,
+        action_name: &str,
+        sequences: Vec<String>,
+    ) -> Result<KeybindingReport<A>, KeybindingConfigError>
+    where
+        A: Clone + PartialEq,
+    {
+        let action = crate::canvas::CanvasKeyAction::from_name(action_name);
+        if matches!(action, crate::canvas::CanvasKeyAction::Unknown(_)) {
+            return Err(KeybindingConfigError::CanvasAction {
+                action: action_name.to_string(),
+            });
+        }
+        {
+            let mut profile = self.canvas_keybinding_profile.borrow_mut();
+            profile
+                .profile
+                .remap_action(mode, action.clone(), sequences.clone())
+                .map_err(KeybindingConfigError::Canvas)?;
+            profile.bump();
+        }
+        self.refresh_canvas_keybinding_pipelines();
+
+        let mut store = self
+            .keybinding_store
+            .clone()
+            .unwrap_or_else(|| {
+                let mut store = BindingStore::default();
+                store.builtin_keymap =
+                    crate::input::BindingCatalog::from_registry(&self.input.registry, crate::input::BindingSource::Builtin);
+                store.builtin_canvas = crate::canvas::canvas_default_binding_catalog(
+                    self.canvas_keybinding_profile.borrow().profile.preset(),
+                );
+                store
+            });
+        store.runtime_canvas.bindings.retain(|binding| {
+            !(binding.mode == crate::canvas::mode_for_app_mode(mode).as_str()
+                && crate::canvas::canvas_action_name(&binding.action) == Some(action_name))
+        });
+        if let Some(canvas_action) = crate::canvas::canvas_key_action_to_canvas_action(&action) {
+            for sequence in &sequences {
+                let sequence = crate::input::try_parse_binding(sequence)
+                    .map_err(KeybindingConfigError::KeyBinding)?;
+                store.runtime_canvas.push(crate::input::BindingInfo {
+                    layer: crate::input::BindingLayer::Canvas,
+                    mode: crate::canvas::mode_for_app_mode(mode).as_str().to_string(),
+                    sequence,
+                    action: canvas_action.clone(),
+                    source: crate::input::BindingSource::Runtime,
+                });
+            }
+        }
+        let report = store.report(&["global", "general", "nor", "ins", "sel"]);
+        self.keybinding_store = Some(store);
+        self.keybinding_report = Some(report.clone());
+        self.reset_input_routing();
+        Ok(report)
+    }
+
+    #[cfg(feature = "canvas")]
+    fn refresh_canvas_keybinding_pipelines(&mut self) {
+        let bindings = self
+            .canvas_keybinding_profile
+            .borrow()
+            .profile
+            .current()
+            .clone();
+        for hook in &mut self.key_hooks {
+            match &mut hook.kind {
+                KeyHookKind::CanvasTextArea { pipeline, .. }
+                | KeyHookKind::CanvasTextInput { pipeline, .. } => {
+                    *pipeline = crate::canvas::canvas_action_pipeline_from_keybindings(
+                        &bindings,
+                        self.input_timeout_ms,
+                    );
+                }
+                KeyHookKind::CanvasFormEditor { .. } => {}
+            }
+        }
     }
 
     /// Register a page spec's focus targets and section item counts. Targets
@@ -954,6 +1191,8 @@ pub struct TuiPagesBuilder<V, A, S, O = (), M = (), Pages = (), Handler = ()> {
     pub(crate) key_hooks: Vec<KeyHook<V, A, S, O, M>>,
     keybinding_store: Option<BindingStore<A>>,
     keybinding_report: Option<KeybindingReport<A>>,
+    #[cfg(feature = "canvas")]
+    pub(crate) canvas_keybinding_profile: CanvasKeybindingProfileHandle,
     pages: Pages,
     handler: Handler,
     _state: PhantomData<S>,
@@ -976,6 +1215,10 @@ impl<V, A, S, O, M> TuiPagesBuilder<V, A, S, O, M, (), ()> {
             key_hooks: Vec::new(),
             keybinding_store: None,
             keybinding_report: None,
+            #[cfg(feature = "canvas")]
+            canvas_keybinding_profile: Rc::new(RefCell::new(CanvasKeybindingProfileState::new(
+                crate::canvas::BuiltinCanvasKeybindingPreset::Vim.profile(),
+            ))),
             pages: (),
             handler: (),
             _state: PhantomData,
@@ -1018,6 +1261,8 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
             key_hooks: self.key_hooks,
             keybinding_store: self.keybinding_store,
             keybinding_report: self.keybinding_report,
+            #[cfg(feature = "canvas")]
+            canvas_keybinding_profile: self.canvas_keybinding_profile,
             pages,
             handler: self.handler,
             _state: PhantomData,
@@ -1060,6 +1305,8 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
             key_hooks: self.key_hooks,
             keybinding_store: self.keybinding_store,
             keybinding_report: self.keybinding_report,
+            #[cfg(feature = "canvas")]
+            canvas_keybinding_profile: self.canvas_keybinding_profile,
             pages: self.pages,
             handler,
             _state: PhantomData,
@@ -1143,6 +1390,8 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
             commands: CommandResolver::new(self.command_registry, self.command_timeout_ms),
             focus,
             buffer: BufferState::new(self.initial_view),
+            #[cfg(feature = "canvas")]
+            input_timeout_ms: self.input_timeout_ms,
             pages: self.pages,
             handler: self.handler,
             fallback_view,
@@ -1152,6 +1401,8 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
             active_owner: None,
             keybinding_store: self.keybinding_store,
             keybinding_report: self.keybinding_report,
+            #[cfg(feature = "canvas")]
+            canvas_keybinding_profile: self.canvas_keybinding_profile,
             _state: PhantomData,
         }
     }
@@ -1174,8 +1425,102 @@ where
         let (store, registry, report) =
             BindingStore::with_user_config(&self.input_registry, &config)?;
         self.input_registry = registry;
+        #[cfg(feature = "canvas")]
+        {
+            let profile = config.canvas_profile()?;
+            self.canvas_keybinding_profile.borrow_mut().replace(profile);
+            let bindings = self
+                .canvas_keybinding_profile
+                .borrow()
+                .profile
+                .current()
+                .clone();
+            for hook in &mut self.key_hooks {
+                match &mut hook.kind {
+                    KeyHookKind::CanvasTextArea { pipeline, .. }
+                    | KeyHookKind::CanvasTextInput { pipeline, .. } => {
+                        *pipeline = crate::canvas::canvas_action_pipeline_from_keybindings(
+                            &bindings,
+                            self.input_timeout_ms,
+                        );
+                    }
+                    KeyHookKind::CanvasFormEditor { .. } => {}
+                }
+            }
+        }
         self.keybinding_store = Some(store);
         self.keybinding_report = Some(report);
         Ok(self)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::keybindings::NavigationAction;
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum View {
+        Main,
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum Action {
+        Nav(NavigationAction),
+    }
+
+    impl From<NavigationAction> for Action {
+        fn from(value: NavigationAction) -> Self {
+            Self::Nav(value)
+        }
+    }
+
+    struct Handler;
+
+    impl TuiActionHandler<View, Action, ()> for Handler {
+        type Error = std::convert::Infallible;
+
+        fn handle_action(
+            &mut self,
+            _action: Action,
+            _ctx: ActionContext<View>,
+            _state: &mut (),
+        ) -> Result<ActionOutcome<View>, Self::Error> {
+            Ok(ActionOutcome::none())
+        }
+    }
+
+    fn page_spec(_view: &View, _state: &(), _focus: Option<&FocusTarget>) -> PageSpec {
+        PageSpec::new()
+    }
+
+    #[test]
+    fn runtime_rebind_keymap_and_reset_restore_defaults() {
+        let mut app = TuiPages::builder(View::Main)
+            .page_fn(page_spec)
+            .handler(Handler)
+            .bind(modes::GLOBAL, "ctrl+c", Action::Nav(NavigationAction::Quit))
+            .build();
+
+        let report = app
+            .rebind_keymap("global", "ctrl+q", Action::Nav(NavigationAction::Quit))
+            .unwrap();
+        assert!(report.notices.is_empty());
+        let global = app.input.registry.maps.get("global").unwrap();
+        assert!(global
+            .bindings
+            .contains_key(&crate::input::try_parse_binding("ctrl+q").unwrap()));
+        assert!(!global
+            .bindings
+            .contains_key(&crate::input::try_parse_binding("ctrl+c").unwrap()));
+
+        app.reset_keybindings_to_defaults();
+        let global = app.input.registry.maps.get("global").unwrap();
+        assert!(global
+            .bindings
+            .contains_key(&crate::input::try_parse_binding("ctrl+c").unwrap()));
+        assert!(!global
+            .bindings
+            .contains_key(&crate::input::try_parse_binding("ctrl+q").unwrap()));
     }
 }

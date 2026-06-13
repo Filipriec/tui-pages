@@ -963,6 +963,36 @@ fn canvas_form_editor_receives_bracketed_paste() {
 }
 
 #[test]
+fn runtime_rebind_canvas_reinstalls_existing_form_editor_bindings() {
+    let mut app = TuiPages::<View, WidgetAction, WidgetState>::builder(View::Form)
+        .page_fn(widget_page)
+        .handler(WidgetHandler)
+        .canvas_form_editor(0)
+        .build();
+    let mut state = WidgetState::default();
+    app.refresh_page(&state);
+
+    app.handle_key(key(KeyCode::Char('i')), &mut state).unwrap();
+    app.handle_key(
+        KeyEvent::new(KeyCode::Char('A'), KeyModifiers::SHIFT),
+        &mut state,
+    )
+    .unwrap();
+    app.handle_key(key(KeyCode::Esc), &mut state).unwrap();
+    assert_eq!(state.editor.data_provider().field_value(0), "A");
+
+    app.rebind_canvas(AppMode::Nor, "undo", vec!["U".to_string()])
+        .unwrap();
+    app.handle_key(
+        KeyEvent::new(KeyCode::Char('U'), KeyModifiers::SHIFT),
+        &mut state,
+    )
+    .unwrap();
+
+    assert_eq!(state.editor.data_provider().field_value(0), "");
+}
+
+#[test]
 fn handle_paste_is_a_noop_without_a_focused_canvas_widget() {
     // No canvas hook registered, so there is nothing to receive the paste.
     let mut app = TuiPages::<View, WidgetAction, WidgetState>::builder(View::Form)
