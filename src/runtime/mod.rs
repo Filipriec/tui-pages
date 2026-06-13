@@ -501,6 +501,7 @@ pub struct TuiPages<V, A, S, Pages = (), Handler = (), O = (), M = ()> {
     pub(crate) active_owner: Option<LayerOwner>,
     keybinding_store: Option<BindingStore<A>>,
     keybinding_report: Option<KeybindingReport<A>>,
+    action_registry: Option<crate::keybindings::ActionRegistry<A>>,
     #[cfg(feature = "canvas")]
     canvas_keybinding_profile: CanvasKeybindingProfileHandle,
     _state: PhantomData<S>,
@@ -611,7 +612,11 @@ where
     {
         let config = KeybindingConfig::from_toml(source)?;
         let builtin = self.keybinding_builtin_registry();
-        let (store, _, report) = BindingStore::with_user_config(&builtin, &config)?;
+        let actions = self
+            .action_registry
+            .clone()
+            .unwrap_or_else(crate::keybindings::ActionRegistry::navigation);
+        let (store, _, report) = BindingStore::with_user_config(&builtin, &config, &actions)?;
         #[cfg(feature = "canvas")]
         {
             let profile = config.canvas_profile()?;
@@ -619,6 +624,31 @@ where
         }
         self.set_keybinding_store_and_registry(store, report.clone());
         Ok(report)
+    }
+
+    /// Serialize the current live keybindings (config + runtime rebinds) to the
+    /// unified TOML schema — the inverse of [`Self::apply_keybindings_toml`] and
+    /// the builder's `keybindings_toml`. Persisting the string is the caller's
+    /// job, e.g. `std::fs::write(path, app.export_keybindings_toml()?)?;`, and a
+    /// later launch loads it back via `builder.keybindings_toml(&contents)`.
+    pub fn export_keybindings_toml(&self) -> Result<String, KeybindingConfigError>
+    where
+        A: Clone + PartialEq + From<NavigationAction>,
+    {
+        let actions = self
+            .action_registry
+            .clone()
+            .unwrap_or_else(crate::keybindings::ActionRegistry::navigation);
+        let store = self.keybinding_store.clone().unwrap_or_default();
+        #[cfg(feature = "canvas")]
+        {
+            let profile = self.canvas_keybinding_profile.borrow().profile.clone();
+            crate::keybindings::export_to_toml(&store, &actions, &profile)
+        }
+        #[cfg(not(feature = "canvas"))]
+        {
+            crate::keybindings::export_to_toml(&store, &actions)
+        }
     }
 
     pub fn rebind_keymap(
@@ -1167,6 +1197,7 @@ pub struct TuiPagesBuilder<V, A, S, O = (), M = (), Pages = (), Handler = ()> {
     pub(crate) key_hooks: Vec<KeyHook<V, A, S, O, M>>,
     keybinding_store: Option<BindingStore<A>>,
     keybinding_report: Option<KeybindingReport<A>>,
+    pub(crate) action_registry: Option<crate::keybindings::ActionRegistry<A>>,
     #[cfg(feature = "canvas")]
     pub(crate) canvas_keybinding_profile: CanvasKeybindingProfileHandle,
     pages: Pages,
@@ -1191,6 +1222,7 @@ impl<V, A, S, O, M> TuiPagesBuilder<V, A, S, O, M, (), ()> {
             key_hooks: Vec::new(),
             keybinding_store: None,
             keybinding_report: None,
+            action_registry: None,
             #[cfg(feature = "canvas")]
             canvas_keybinding_profile: Rc::new(RefCell::new(CanvasKeybindingProfileState::new(
                 crate::canvas::BuiltinCanvasKeybindingPreset::Vim.profile(),
@@ -1205,6 +1237,19 @@ impl<V, A, S, O, M> TuiPagesBuilder<V, A, S, O, M, (), ()> {
 }
 
 impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handler> {
+    /// Supply the table that maps `[keymap.*]` action *names* to the app's
+    /// action type `A`, used to load and export keybindings. When unset, the
+    /// crate defaults to [`ActionRegistry::navigation`](crate::keybindings::ActionRegistry::navigation).
+    /// Build one from `navigation_bindable_actions()` /
+    /// `canvas_bindable_actions()` plus the app's own bindable actions.
+    pub fn action_registry(
+        mut self,
+        registry: crate::keybindings::ActionRegistry<A>,
+    ) -> Self {
+        self.action_registry = Some(registry);
+        self
+    }
+
     pub fn fallback_view(mut self, fallback_view: V) -> Self {
         self.fallback_view = Some(fallback_view);
         self
@@ -1237,6 +1282,7 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
             key_hooks: self.key_hooks,
             keybinding_store: self.keybinding_store,
             keybinding_report: self.keybinding_report,
+            action_registry: self.action_registry,
             #[cfg(feature = "canvas")]
             canvas_keybinding_profile: self.canvas_keybinding_profile,
             pages,
@@ -1281,6 +1327,7 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
             key_hooks: self.key_hooks,
             keybinding_store: self.keybinding_store,
             keybinding_report: self.keybinding_report,
+            action_registry: self.action_registry,
             #[cfg(feature = "canvas")]
             canvas_keybinding_profile: self.canvas_keybinding_profile,
             pages: self.pages,
@@ -1332,6 +1379,16 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
         self
     }
 
+    /// Replace the built-in keymap layer with a pre-built registry. This is the
+    /// app's default bindings, on top of which `[keymap.*]` config overrides and
+    /// runtime rebinds layer. Use when the app builds its defaults as a whole
+    /// [`InputRegistry`] rather than one `.bind()` at a time; call it before
+    /// [`keybindings_toml`](Self::keybindings_toml) so the config layers on top.
+    pub fn input_registry(mut self, registry: InputRegistry<A>) -> Self {
+        self.input_registry = registry;
+        self
+    }
+
     pub fn command<I, Alias>(
         mut self,
         action_name: impl Into<String>,
@@ -1375,6 +1432,7 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
             active_owner: None,
             keybinding_store: self.keybinding_store,
             keybinding_report: self.keybinding_report,
+            action_registry: self.action_registry,
             #[cfg(feature = "canvas")]
             canvas_keybinding_profile: self.canvas_keybinding_profile,
             _state: PhantomData,
@@ -1396,8 +1454,12 @@ where
         mut self,
         config: KeybindingConfig,
     ) -> Result<Self, KeybindingConfigError> {
+        let actions = self
+            .action_registry
+            .clone()
+            .unwrap_or_else(crate::keybindings::ActionRegistry::navigation);
         let (store, registry, report) =
-            BindingStore::with_user_config(&self.input_registry, &config)?;
+            BindingStore::with_user_config(&self.input_registry, &config, &actions)?;
         self.input_registry = registry;
         #[cfg(feature = "canvas")]
         {
@@ -1478,5 +1540,42 @@ mod tests {
         assert!(!global
             .bindings
             .contains_key(&crate::input::try_parse_binding("ctrl+q").unwrap()));
+    }
+
+    #[test]
+    fn export_keybindings_toml_round_trips_and_is_idempotent() {
+        // Config override (`focus_next = j` in general) + a runtime rebind
+        // (`quit = ctrl+q` in global), exported and reloaded into a fresh app.
+        let mut app = TuiPages::builder(View::Main)
+            .page_fn(page_spec)
+            .handler(Handler)
+            .bind(modes::GLOBAL, "ctrl+c", Action::Nav(NavigationAction::Quit))
+            .keybindings_toml("[keymap.general]\nfocus_next = [\"j\"]\n")
+            .unwrap()
+            .build();
+        app.rebind_keymap("global", "ctrl+q", Action::Nav(NavigationAction::Quit))
+            .unwrap();
+
+        let exported = app.export_keybindings_toml().unwrap();
+
+        let reloaded = TuiPages::builder(View::Main)
+            .page_fn(page_spec)
+            .handler(Handler)
+            .bind(modes::GLOBAL, "ctrl+c", Action::Nav(NavigationAction::Quit))
+            .keybindings_toml(&exported)
+            .unwrap()
+            .build();
+
+        let general = reloaded.input.registry.maps.get("general").unwrap();
+        assert!(general
+            .bindings
+            .contains_key(&crate::input::try_parse_binding("j").unwrap()));
+        let global = reloaded.input.registry.maps.get("global").unwrap();
+        assert!(global
+            .bindings
+            .contains_key(&crate::input::try_parse_binding("ctrl+q").unwrap()));
+
+        // Re-exporting the reloaded state yields the identical document.
+        assert_eq!(reloaded.export_keybindings_toml().unwrap(), exported);
     }
 }

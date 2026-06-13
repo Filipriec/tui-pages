@@ -622,7 +622,7 @@ fn parse_user_preset_toml(source: &str) -> Result<NavigationPreset, NavigationPr
     }
 }
 
-fn parse_string_list(
+pub(crate) fn parse_string_list(
     section: &str,
     action: &str,
     value: &Value,

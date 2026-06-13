@@ -9,7 +9,8 @@ use crate::input::{
 #[cfg(feature = "canvas")]
 use crate::runtime::InputLayerContext;
 
-use super::{NavigationAction, NavigationPreset, NavigationPresetError, NavigationPresetIssue};
+use super::preset::parse_string_list;
+use super::{ActionRegistry, NavigationPresetError, NavigationPresetIssue};
 
 #[cfg(feature = "canvas")]
 use crate::canvas::{
@@ -59,9 +60,101 @@ impl std::error::Error for KeybindingConfigError {
     }
 }
 
+/// A `[keymap.*]` table parsed but **not** yet resolved to an action type. The
+/// schema names actions as strings; resolution to the application's `A` happens
+/// later via an [`ActionRegistry`], so an app can bind its own action names —
+/// not just the built-in navigation ones.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct RawKeymap {
+    pub sections: Vec<RawKeymapSection>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RawKeymapSection {
+    /// The TOML section name (`[keymap.<name>]`).
+    pub name: String,
+    /// The input mode this section binds in (defaults to the section name).
+    pub mode: String,
+    pub bindings: Vec<RawKeymapBinding>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RawKeymapBinding {
+    /// The config action name, resolved to `A` via an [`ActionRegistry`].
+    pub name: String,
+    /// The key bindings (each a chord-sequence string like `"ctrl+q"`).
+    pub keys: Vec<String>,
+}
+
+impl RawKeymap {
+    /// Parse the `[keymap]` table, collecting malformed-entry issues. Unknown
+    /// *action names* are not flagged here — that needs the registry and happens
+    /// during resolution.
+    fn from_value(value: Option<&Value>) -> (Self, Vec<NavigationPresetIssue>) {
+        let mut issues = Vec::new();
+        let Some(value) = value else {
+            return (Self::default(), issues);
+        };
+        let Some(table) = value.as_table() else {
+            issues.push(NavigationPresetIssue::RootNotTable);
+            return (Self::default(), issues);
+        };
+
+        let mut sections = Vec::with_capacity(table.len());
+        for (section_name, section_value) in table {
+            let Some(section) = section_value.as_table() else {
+                issues.push(NavigationPresetIssue::SectionNotTable {
+                    section: section_name.clone(),
+                });
+                continue;
+            };
+            let mode = match section.get("mode") {
+                Some(value) => value.as_str().map(ToString::to_string).unwrap_or_else(|| {
+                    issues.push(NavigationPresetIssue::ModeNotString {
+                        section: section_name.clone(),
+                    });
+                    section_name.clone()
+                }),
+                None => section_name.clone(),
+            };
+
+            let mut bindings = Vec::new();
+            for (action_name, bindings_value) in section {
+                if action_name == "mode" {
+                    continue;
+                }
+                let Some(keys) =
+                    parse_string_list(section_name, action_name, bindings_value, &mut issues)
+                else {
+                    continue;
+                };
+                if keys.is_empty() {
+                    issues.push(NavigationPresetIssue::EmptyBindings {
+                        section: section_name.clone(),
+                        action: action_name.clone(),
+                    });
+                    continue;
+                }
+                bindings.push(RawKeymapBinding {
+                    name: action_name.clone(),
+                    keys,
+                });
+            }
+
+            sections.push(RawKeymapSection {
+                name: section_name.clone(),
+                mode,
+                bindings,
+            });
+        }
+
+        (Self { sections }, issues)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KeybindingConfig {
-    pub keymap: NavigationPreset,
+    pub keymap: RawKeymap,
     pub keymap_issues: Vec<NavigationPresetIssue>,
     #[cfg(feature = "canvas")]
     pub canvas_preset: BuiltinCanvasKeybindingPreset,
@@ -81,14 +174,7 @@ impl KeybindingConfig {
             .cloned()
             .unwrap_or_else(Map::new);
 
-        let keymap_toml = root
-            .get("keymap")
-            .cloned()
-            .map(table_toml)
-            .transpose()?
-            .unwrap_or_default();
-        let (keymap, keymap_issues) = NavigationPreset::from_toml_lenient(&keymap_toml)
-            .map_err(KeybindingConfigError::Navigation)?;
+        let (keymap, keymap_issues) = RawKeymap::from_value(root.get("keymap"));
 
         #[cfg(feature = "canvas")]
         {
@@ -328,16 +414,22 @@ where
 
 impl<A> BindingStore<A>
 where
-    A: Clone + PartialEq + From<NavigationAction>,
+    A: Clone + PartialEq,
 {
+    /// Build the layered store from a parsed config, resolving `[keymap.*]`
+    /// action names through `actions`. Unknown names become `InvalidEntry`
+    /// notices rather than aborting the load.
     pub fn with_user_config(
         builtin_keymap: &InputRegistry<A>,
         config: &KeybindingConfig,
+        actions: &ActionRegistry<A>,
     ) -> Result<(Self, InputRegistry<A>, KeybindingReport<A>), KeybindingConfigError> {
         let mut store = Self::default();
         store.builtin_keymap =
             BindingCatalog::from_registry(builtin_keymap, BindingSource::Builtin);
-        store.user_keymap = preset_catalog(&config.keymap, BindingSource::Config);
+        let (user_keymap, unknown_issues) =
+            resolve_raw_keymap(&config.keymap, actions, BindingSource::Config);
+        store.user_keymap = user_keymap;
 
         #[cfg(feature = "canvas")]
         {
@@ -352,6 +444,7 @@ where
                 .keymap_issues
                 .iter()
                 .cloned()
+                .chain(unknown_issues)
                 .map(BindingNotice::InvalidEntry),
         );
         let registry = store.effective_registry();
@@ -387,13 +480,25 @@ where
     apply_catalog_to_registry(registry, catalog);
 }
 
-fn preset_catalog<A>(preset: &NavigationPreset, source: BindingSource) -> BindingCatalog<A>
+fn resolve_raw_keymap<A>(
+    keymap: &RawKeymap,
+    actions: &ActionRegistry<A>,
+    source: BindingSource,
+) -> (BindingCatalog<A>, Vec<NavigationPresetIssue>)
 where
-    A: Clone + From<NavigationAction>,
+    A: Clone,
 {
     let mut catalog = BindingCatalog::new();
-    for section in preset.sections() {
+    let mut issues = Vec::new();
+    for section in &keymap.sections {
         for binding in &section.bindings {
+            let Some(action) = actions.resolve(&binding.name) else {
+                issues.push(NavigationPresetIssue::UnknownAction {
+                    section: section.name.clone(),
+                    action: binding.name.clone(),
+                });
+                continue;
+            };
             for key in &binding.keys {
                 let Ok(sequence) = try_parse_binding(key) else {
                     continue;
@@ -402,13 +507,13 @@ where
                     layer: BindingLayer::Keymap,
                     mode: section.mode.clone(),
                     sequence,
-                    action: A::from(binding.action),
+                    action: action.clone(),
                     source,
                 });
             }
         }
     }
-    catalog
+    (catalog, issues)
 }
 
 fn user_override_notices<A>(
@@ -512,6 +617,109 @@ fn canvas_profile_overrides_catalog(profile: &CanvasKeybindingProfile) -> Bindin
     catalog
 }
 
+#[cfg(feature = "canvas")]
+fn canvas_preset_name(preset: BuiltinCanvasKeybindingPreset) -> &'static str {
+    match preset {
+        BuiltinCanvasKeybindingPreset::Vim => "vim",
+        BuiltinCanvasKeybindingPreset::Helix => "helix",
+        BuiltinCanvasKeybindingPreset::Emacs => "emacs",
+        BuiltinCanvasKeybindingPreset::Vscode => "vscode",
+    }
+}
+
+/// Serialize the live override layers back to the unified TOML schema, the exact
+/// inverse of [`KeybindingConfig::from_toml`]. Only the user + runtime keymap
+/// overrides and the canvas preset-diff are emitted (builtin defaults come from
+/// the preset/registry on reload), so the document round-trips through
+/// `from_toml`. `actions` provides the action → name mapping.
+pub fn export_to_toml<A>(
+    store: &BindingStore<A>,
+    actions: &ActionRegistry<A>,
+    #[cfg(feature = "canvas")] profile: &CanvasKeybindingProfile,
+) -> Result<String, KeybindingConfigError>
+where
+    A: Clone + PartialEq,
+{
+    use std::collections::{BTreeMap, BTreeSet};
+
+    // mode -> action_name -> key strings.
+    let mut keymap: BTreeMap<String, BTreeMap<&'static str, Vec<String>>> = BTreeMap::new();
+    // (mode, name) pairs a runtime rebind owns, so the stale user binding for the
+    // same action is dropped rather than emitted alongside the new one.
+    let mut runtime_owned: BTreeSet<(String, &'static str)> = BTreeSet::new();
+
+    let mut record = |binding: &BindingInfo<A>| {
+        let Some(name) = actions.name_of(&binding.action) else {
+            return;
+        };
+        let sequence = binding
+            .sequence
+            .iter()
+            .map(KeyChord::display_string)
+            .collect::<Vec<_>>()
+            .join(" ");
+        keymap
+            .entry(binding.mode.clone())
+            .or_default()
+            .entry(name)
+            .or_default()
+            .push(sequence);
+    };
+
+    for binding in &store.runtime_keymap.bindings {
+        if actions.name_of(&binding.action).is_some() {
+            runtime_owned.insert((binding.mode.clone(), actions.name_of(&binding.action).unwrap()));
+        }
+        record(binding);
+    }
+    for binding in &store.user_keymap.bindings {
+        if let Some(name) = actions.name_of(&binding.action) {
+            if runtime_owned.contains(&(binding.mode.clone(), name)) {
+                continue;
+            }
+        }
+        record(binding);
+    }
+
+    let mut root = Map::new();
+    if !keymap.is_empty() {
+        let mut keymap_table = Map::new();
+        for (mode, actions_map) in keymap {
+            let mut section = Map::new();
+            for (name, keys) in actions_map {
+                section.insert(
+                    name.to_string(),
+                    Value::Array(keys.into_iter().map(Value::String).collect()),
+                );
+            }
+            keymap_table.insert(mode, Value::Table(section));
+        }
+        root.insert("keymap".to_string(), Value::Table(keymap_table));
+    }
+
+    #[cfg(feature = "canvas")]
+    {
+        let mut canvas_table = Map::new();
+        canvas_table.insert(
+            "preset".to_string(),
+            Value::String(canvas_preset_name(profile.preset()).to_string()),
+        );
+        let overrides = profile.overrides_toml();
+        if !overrides.trim().is_empty() {
+            let parsed =
+                toml::from_str::<Value>(&overrides).map_err(KeybindingConfigError::Toml)?;
+            if let Some(table) = parsed.as_table() {
+                if !table.is_empty() {
+                    canvas_table.insert("bindings".to_string(), Value::Table(table.clone()));
+                }
+            }
+        }
+        root.insert("canvas".to_string(), Value::Table(canvas_table));
+    }
+
+    toml::to_string(&Value::Table(root)).map_err(KeybindingConfigError::Serialize)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -533,6 +741,53 @@ mod tests {
     }
 
     #[test]
+    fn keymap_resolves_app_specific_action_names_via_registry() {
+        // A name the crate has never heard of resolves through the app-supplied
+        // registry — the whole point of the registry indirection.
+        #[derive(Debug, Clone, PartialEq, Eq)]
+        enum App {
+            DoTheThing,
+            Nav(NavigationAction),
+        }
+        impl From<NavigationAction> for App {
+            fn from(value: NavigationAction) -> Self {
+                App::Nav(value)
+            }
+        }
+
+        let registry = ActionRegistry::from_entries(vec![crate::input::BindableActionInfo {
+            action: App::DoTheThing,
+            name: "do_the_thing",
+            description: "",
+            modes: &["global"],
+        }]);
+        let config = KeybindingConfig::from_toml(
+            r#"
+[keymap.global]
+do_the_thing = "ctrl+t"
+"#,
+        )
+        .unwrap();
+        let builtin = InputRegistry::<App>::empty();
+        let (_store, registry_out, report) =
+            BindingStore::with_user_config(&builtin, &config, &registry).unwrap();
+
+        assert_eq!(
+            registry_out
+                .maps
+                .get("global")
+                .unwrap()
+                .bindings
+                .get(&seq("ctrl+t")),
+            Some(&App::DoTheThing)
+        );
+        assert!(report
+            .notices
+            .iter()
+            .all(|notice| !matches!(notice, BindingNotice::InvalidEntry(_))));
+    }
+
+    #[test]
     fn parses_keymap_section_from_unified_toml() {
         let config = KeybindingConfig::from_toml(
             r#"
@@ -545,17 +800,13 @@ focus_next = ["j", "down"]
         )
         .unwrap();
 
-        assert_eq!(
-            config
-                .keymap
-                .section("global")
-                .unwrap()
-                .bindings
-                .first()
-                .unwrap()
-                .action,
-            NavigationAction::Quit
-        );
+        let global = config
+            .keymap
+            .sections
+            .iter()
+            .find(|section| section.name == "global")
+            .unwrap();
+        assert_eq!(global.bindings.first().unwrap().name, "quit");
     }
 
     #[test]
@@ -574,7 +825,12 @@ quit = "ctrl+q"
         .unwrap();
 
         let (store, registry, report) =
-            BindingStore::<TestAction>::with_user_config(&builtin, &config).unwrap();
+            BindingStore::<TestAction>::with_user_config(
+                &builtin,
+                &config,
+                &ActionRegistry::navigation(),
+            )
+            .unwrap();
 
         assert_eq!(
             registry
@@ -623,7 +879,12 @@ focus_next = "not+a+key"
         .unwrap();
 
         let (_store, registry, report) =
-            BindingStore::<TestAction>::with_user_config(&builtin, &config).unwrap();
+            BindingStore::<TestAction>::with_user_config(
+                &builtin,
+                &config,
+                &ActionRegistry::navigation(),
+            )
+            .unwrap();
 
         assert_eq!(
             registry

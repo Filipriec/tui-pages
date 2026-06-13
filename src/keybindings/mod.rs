@@ -13,9 +13,13 @@
 //! ```
 
 mod action;
+mod action_registry;
 mod builtin;
 mod config;
 mod preset;
+
+pub use action_registry::ActionRegistry;
+pub(crate) use config::export_to_toml;
 
 pub use action::{
     navigation_action_infos, navigation_action_outcome, try_standard_navigation_action,
