@@ -60,16 +60,12 @@ impl TuiActionHandler<View, Action, State> for Handler {
     fn handle_action(
         &mut self,
         action: Action,
-        _ctx: ActionContext<View>,
+        ctx: ActionContext<View>,
         state: &mut State,
     ) -> Result<ActionOutcome<View>, Self::Error> {
         match action {
             Action::ToggleSidebar => {
-                state.sidebar_open = !state.sidebar_open;
-                state.status = format!(
-                    "sidebar {}",
-                    if state.sidebar_open { "opened" } else { "closed" }
-                );
+                toggle_sidebar(state);
                 Ok(ActionOutcome::none())
             }
             Action::SaveConfig => {
@@ -80,14 +76,48 @@ impl TuiActionHandler<View, Action, State> for Handler {
                 state.cycle_requested = true;
                 Ok(ActionOutcome::none())
             }
+            // Enter on a focused button runs that button's action — each button
+            // is just a clickable twin of a keybinding.
+            Action::Nav(NavigationAction::Activate) => {
+                match ctx.focus {
+                    Some(FocusTarget::Button(BTN_TOGGLE)) => toggle_sidebar(state),
+                    Some(FocusTarget::Button(BTN_SAVE)) => state.save_requested = true,
+                    Some(FocusTarget::Button(BTN_CYCLE)) => state.cycle_requested = true,
+                    Some(FocusTarget::Button(BTN_QUIT)) => {
+                        return Ok(ActionOutcome::effect(TuiEffect::Quit))
+                    }
+                    _ => {}
+                }
+                Ok(ActionOutcome::none())
+            }
             Action::Nav(nav) => Ok(ActionOutcome::effect(nav.to_effect())),
         }
     }
 }
 
+const BTN_TOGGLE: usize = 0;
+const BTN_SAVE: usize = 1;
+const BTN_CYCLE: usize = 2;
+const BTN_QUIT: usize = 3;
+
+fn toggle_sidebar(state: &mut State) {
+    state.sidebar_open = !state.sidebar_open;
+    state.status = format!(
+        "sidebar {}",
+        if state.sidebar_open { "opened" } else { "closed" }
+    );
+}
+
 fn page_spec(_view: &View, _state: &State, _focus: Option<&FocusTarget>) -> PageSpec {
     PageSpec::new()
-        .focus_targets(PageFocusBuilder::new().button(0).button(1).build())
+        .focus_targets(
+            PageFocusBuilder::new()
+                .button(BTN_TOGGLE)
+                .button(BTN_SAVE)
+                .button(BTN_CYCLE)
+                .button(BTN_QUIT)
+                .build(),
+        )
         .modes(vec![modes::GENERAL, modes::GLOBAL])
 }
 
@@ -166,6 +196,12 @@ fn main() -> Result<()> {
         let save_key = current_key(&app, &Action::SaveConfig);
         let cycle_key = current_key(&app, &Action::CycleToggleKey);
         let quit_key = current_key(&app, &Action::Nav(NavigationAction::Quit));
+        let buttons = [
+            format!("Toggle sidebar  ({toggle_key})"),
+            format!("Save to config.toml  ({save_key})"),
+            format!("Rebind toggle key  ({cycle_key})"),
+            format!("Quit  ({quit_key})"),
+        ];
         terminal.draw(|frame| {
             ui::render(
                 frame,
@@ -177,6 +213,7 @@ fn main() -> Result<()> {
                     cycle: cycle_key,
                     quit: quit_key,
                 },
+                &buttons,
             )
         })?;
 

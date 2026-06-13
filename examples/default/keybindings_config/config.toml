@@ -1,19 +1,10 @@
-# Keybindings for this example, in tui-pages' unified schema.
-#
-# `[keymap.<mode>]` maps an action *name* to its key(s). The names
-# (focus_next, quit, …) are resolved by the app's ActionRegistry — including the
-# app-specific ones (toggle_sidebar, save_config, cycle_toggle_key).
-#
-# Edit this file and relaunch to change the bindings; or press the
-# `cycle_toggle_key` / `save_config` keys in the app to rebind + rewrite it live.
+[keymap.general]
+activate = ["Enter"]
+focus_next = ["Tab", "Down"]
+focus_prev = ["BackTab", "Up"]
 
 [keymap.global]
-quit = "ctrl+q"
-toggle_sidebar = "ctrl+b"
-save_config = "ctrl+s"
-cycle_toggle_key = "ctrl+y"
-
-[keymap.general]
-focus_next = ["Tab", "Down"]
-focus_prev = ["Shift+Tab", "Up"]
-activate = "Enter"
+cycle_toggle_key = ["Ctrl+y"]
+quit = ["Ctrl+q"]
+save_config = ["Ctrl+s"]
+toggle_sidebar = ["Ctrl+g"]

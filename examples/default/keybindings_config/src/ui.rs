@@ -20,7 +20,13 @@ pub struct Keys {
     pub quit: String,
 }
 
-pub fn render(frame: &mut Frame, state: &State, focus: Option<FocusTarget>, keys: &Keys) {
+pub fn render(
+    frame: &mut Frame,
+    state: &State,
+    focus: Option<FocusTarget>,
+    keys: &Keys,
+    buttons: &[String],
+) {
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -38,7 +44,7 @@ pub fn render(frame: &mut Frame, state: &State, focus: Option<FocusTarget>, keys
         rows[0],
     );
 
-    render_body(frame, rows[1], state, &focus);
+    render_body(frame, rows[1], state, &focus, buttons);
 
     frame.render_widget(
         Paragraph::new(if state.status.is_empty() {
@@ -57,7 +63,7 @@ pub fn render(frame: &mut Frame, state: &State, focus: Option<FocusTarget>, keys
             keys.toggle, keys.cycle, keys.save
         )),
         Line::from(format!(
-            "Tab/↓ next · Shift+Tab/↑ prev · Enter activate · {} quit",
+            "Tab/↓ next · Shift+Tab/↑ prev · Enter runs the focused button · {} quit",
             keys.quit
         )),
         Line::from("edit config.toml and relaunch to change these bindings"),
@@ -70,7 +76,13 @@ pub fn render(frame: &mut Frame, state: &State, focus: Option<FocusTarget>, keys
     );
 }
 
-fn render_body(frame: &mut Frame, area: Rect, state: &State, focus: &Option<FocusTarget>) {
+fn render_body(
+    frame: &mut Frame,
+    area: Rect,
+    state: &State,
+    focus: &Option<FocusTarget>,
+    buttons: &[String],
+) {
     let columns = if state.sidebar_open {
         Layout::default()
             .direction(Direction::Horizontal)
@@ -95,13 +107,16 @@ fn render_body(frame: &mut Frame, area: Rect, state: &State, focus: &Option<Focu
         columns[0]
     };
 
-    let buttons = Layout::default()
+    let mut constraints: Vec<Constraint> = buttons.iter().map(|_| Constraint::Length(3)).collect();
+    constraints.push(Constraint::Min(0));
+    let slots = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(3), Constraint::Length(3), Constraint::Min(0)])
+        .constraints(constraints)
         .split(main_area);
 
-    render_button(frame, buttons[0], "Button A", focus, 0);
-    render_button(frame, buttons[1], "Button B", focus, 1);
+    for (index, label) in buttons.iter().enumerate() {
+        render_button(frame, slots[index], label, focus, index);
+    }
 }
 
 fn render_button(
