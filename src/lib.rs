@@ -57,7 +57,8 @@ pub use input::{
     PipelineResponse,
 };
 pub use keybindings::{
-    apply_navigation_preset_toml, bind_builtin_general_defaults, bind_builtin_global_defaults,
+    ActionRegistry, apply_navigation_preset_toml, bind_builtin_general_defaults,
+    bind_builtin_global_defaults,
     bind_builtin_navigation_defaults, bind_emacs_general_defaults, bind_emacs_global_defaults,
     bind_emacs_navigation_defaults, bind_helix_general_defaults, bind_helix_global_defaults,
     bind_helix_navigation_defaults, bind_vim_general_defaults, bind_vim_global_defaults,
@@ -102,7 +103,8 @@ pub mod prelude {
         vim_preset_toml,
     };
     pub use crate::{
-        modes, parse_binding, try_parse_binding, ActionContext, ActionOutcome, BindingNotice,
+        modes, parse_binding, try_parse_binding, ActionContext, ActionOutcome, ActionRegistry,
+        BindableActionInfo, BindingNotice,
         BindingStore, BuiltinNavigationPreset, FocusController, FocusIntent, FocusManager,
         FocusQuery, FocusTarget, FocusWrap, KeybindingConfig, KeybindingConfigError,
         KeybindingReport, KeyChord, ModeId, NavigationAction, NavigationActionInfo,

@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Unified `[keymap.*]` TOML-based keybinding configuration via `KeybindingConfig`
+- `ActionRegistry` for mapping config action names to application action types
+- Binding introspection API (`BindingCatalog`, `BindingInfo`, `BindingConflict`, `BindingSource`, `CanvasRoutingPrecedence`) for help screens and conflict diagnostics
+- `InputLayerContext` (Command / Text) for smarter routing between global keymap and canvas editing layer
+- `CanvasKeybindingProfileState` with generation tracking for shared canvas keybinding profiles
+- `install_keybindings()` and `is_sequence_pending()` methods on canvas host traits
+- `analyze_canvas_overlaps()` and related public API for canvas binding overlap analysis
+- Runtime rebind (`rebind_keymap`) and reset (`reset_keybindings_to_defaults`) on `TuiPages`
+- `export_keybindings_toml()` for serializing the current keybinding state to TOML
+- `keybindings_config` example demonstrating TOML-based keybinding configuration
+- Canvas integration tests (`tests/canvas_integration.rs`)
+
+### Changed
+- tui-pages runtime now owns input pipelines and canvas keybinding profiles internally
+- Canvas `KeyHookKind` variants now use `CanvasKeybindingProfileHandle` instead of raw preset enums
+- `CanvasTextInputHost` trait expanded with `has_keybindings`, `install_keybindings`, `is_sequence_pending`, and `accept_suggestion_suffix`
+- `CanvasTextInputHost::input_key` return type changed from `CanvasTextWidgetOutcome` to `CanvasKeyDispatchOutcome`
+- Canvas public API surface expanded with analysis and introspection re-exports
+- `NavigationPreset::from_toml` now uses internal lenient parsing path
+
+### Fixed
+- Pipeline issues with input sequence tracker resets
+- Missed error conditions in input handling
+
 ## [0.8.2]
 
 ### Changed

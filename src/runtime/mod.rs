@@ -583,6 +583,50 @@ where
         self.keybinding_store.as_ref()
     }
 
+    /// The key currently bound to `action`, formatted for display (e.g.
+    /// `"Ctrl+b"`, or `"g d"` for a chord sequence), or `None` if it is
+    /// unbound. The one-liner behind a footer/help hint — "which key does X?".
+    ///
+    /// If the action is bound to several sequences, the lexicographically first
+    /// is returned; use [`keys_for`](Self::keys_for) to get them all.
+    ///
+    /// ```ignore
+    /// let hint = app.key_for(&Action::ToggleSidebar).unwrap_or_else(|| "(unbound)".into());
+    /// ```
+    pub fn key_for(&self, action: &A) -> Option<String>
+    where
+        A: PartialEq,
+    {
+        self.keys_for(action).into_iter().next()
+    }
+
+    /// Every key sequence currently bound to `action`, each formatted for
+    /// display and sorted for stable output. Use for actions that may carry
+    /// more than one binding; for the common single-binding case reach for
+    /// [`key_for`](Self::key_for).
+    pub fn keys_for(&self, action: &A) -> Vec<String>
+    where
+        A: PartialEq,
+    {
+        let mut keys: Vec<String> = self
+            .input
+            .registry
+            .maps
+            .values()
+            .flat_map(|map| map.bindings_for(action))
+            .map(|sequence| {
+                sequence
+                    .iter()
+                    .map(|chord| chord.display_string())
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            })
+            .collect();
+        keys.sort();
+        keys.dedup();
+        keys
+    }
+
     fn keybinding_builtin_registry(&self) -> InputRegistry<A>
     where
         A: Clone + PartialEq,

@@ -19,9 +19,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use ratatui::{backend::CrosstermBackend, Terminal};
-use tui_pages::keybindings::ActionRegistry;
 use tui_pages::prelude::*;
-use tui_pages::BindableActionInfo;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum View {
@@ -126,20 +124,11 @@ fn page_spec(_view: &View, _state: &State, _focus: Option<&FocusTarget>) -> Page
 fn action_registry() -> ActionRegistry<Action> {
     let mut registry = ActionRegistry::navigation();
     registry.extend([
-        info(Action::ToggleSidebar, "toggle_sidebar", "Show/hide the sidebar"),
-        info(Action::SaveConfig, "save_config", "Write keybindings to config.toml"),
-        info(Action::CycleToggleKey, "cycle_toggle_key", "Rebind the sidebar key"),
+        BindableActionInfo::new(Action::ToggleSidebar, "toggle_sidebar", "Show/hide the sidebar"),
+        BindableActionInfo::new(Action::SaveConfig, "save_config", "Write keybindings to config.toml"),
+        BindableActionInfo::new(Action::CycleToggleKey, "cycle_toggle_key", "Rebind the sidebar key"),
     ]);
     registry
-}
-
-fn info(action: Action, name: &'static str, description: &'static str) -> BindableActionInfo<Action> {
-    BindableActionInfo {
-        action,
-        name,
-        description,
-        modes: &["global"],
-    }
 }
 
 fn config_path() -> PathBuf {
@@ -162,19 +151,10 @@ fn build_app(config_toml: &str) -> Result<App> {
 }
 
 /// The key currently bound to an action in the live keymap (for the footer).
+/// `app.key_for` is the crate's typed "which key does X?" lookup; we just add
+/// the display fallback for an unbound action.
 fn current_key(app: &App, action: &Action) -> String {
-    for map in app.input.registry.maps.values() {
-        for (sequence, bound) in &map.bindings {
-            if bound == action {
-                return sequence
-                    .iter()
-                    .map(|chord| chord.display_string())
-                    .collect::<Vec<_>>()
-                    .join(" ");
-            }
-        }
-    }
-    "(unbound)".to_string()
+    app.key_for(action).unwrap_or_else(|| "(unbound)".to_string())
 }
 
 fn main() -> Result<()> {

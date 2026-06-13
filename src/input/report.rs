@@ -186,6 +186,31 @@ pub struct BindableActionInfo<A> {
 const NAV_FOCUS_MODES: &[&str] = &["general"];
 const NAV_GLOBAL_MODES: &[&str] = &["global"];
 
+impl<A> BindableActionInfo<A> {
+    /// A bindable action with a stable config `name` (the string it answers to
+    /// in `[keymap.*]`) and a human-facing `description`. It is bindable in
+    /// every mode (`["global"]`) by default; chain [`modes`](Self::modes) to
+    /// scope it.
+    ///
+    /// ```ignore
+    /// BindableActionInfo::new(Action::ToggleSidebar, "toggle_sidebar", "Show/hide the sidebar")
+    /// ```
+    pub fn new(action: A, name: &'static str, description: &'static str) -> Self {
+        Self {
+            action,
+            name,
+            description,
+            modes: NAV_GLOBAL_MODES,
+        }
+    }
+
+    /// Restrict the modes this action may be bound in (default `["global"]`).
+    pub fn modes(mut self, modes: &'static [&'static str]) -> Self {
+        self.modes = modes;
+        self
+    }
+}
+
 /// The built-in [`NavigationAction`](crate::keybindings::NavigationAction)s as
 /// bindable entries, lifted into the application's own action type `A`.
 pub fn navigation_bindable_actions<A>() -> Vec<BindableActionInfo<A>>

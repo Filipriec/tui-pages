@@ -1,7 +1,7 @@
 [package]
 name = "tui-pages"
 # version.workspace = true
-version = "0.8.3"
+version = "0.8.5"
 edition.workspace = true
 license = "MIT"
 description = "Core for TUI apps with multiple pages"
@@ -20,7 +20,7 @@ crossterm = { workspace = true }
 serde  = { workspace = true, optional = true }
 toml = { workspace = true }
 tracing = { workspace = true }
-canvas = { path = "../tui-canvas", package = "tui-canvas", version = "0.8.3", optional = true }
+canvas = { path = "../tui-canvas", package = "tui-canvas", version = "0.8.5", optional = true }
 
 [features]
 default = []
