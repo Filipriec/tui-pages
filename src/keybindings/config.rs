@@ -209,7 +209,13 @@ impl KeybindingConfig {
             let canvas_preset = canvas
                 .and_then(|table| table.get("preset"))
                 .and_then(Value::as_str)
-                .map(BuiltinCanvasKeybindingPreset::from_config_name)
+                .map(|preset| {
+                    preset
+                        .parse::<BuiltinCanvasKeybindingPreset>()
+                        .map_err(|err| KeybindingConfigError::CanvasPreset {
+                            preset: err.name().to_string(),
+                        })
+                })
                 .transpose()?
                 .unwrap_or(BuiltinCanvasKeybindingPreset::Vim);
 
@@ -300,36 +306,6 @@ fn fold_keymap_canvas_overrides(keymap: &mut RawKeymap, overrides: &mut Map<Stri
                     Value::Array(binding.keys.into_iter().map(Value::String).collect()),
                 );
             }
-        }
-    }
-}
-
-#[cfg(feature = "canvas")]
-trait CanvasPresetConfigName: Sized {
-    fn from_config_name(name: &str) -> Result<Self, KeybindingConfigError>;
-    fn config_name(self) -> &'static str;
-}
-
-#[cfg(feature = "canvas")]
-impl CanvasPresetConfigName for BuiltinCanvasKeybindingPreset {
-    fn from_config_name(name: &str) -> Result<Self, KeybindingConfigError> {
-        match name {
-            "vim" => Ok(BuiltinCanvasKeybindingPreset::Vim),
-            "helix" => Ok(BuiltinCanvasKeybindingPreset::Helix),
-            "emacs" => Ok(BuiltinCanvasKeybindingPreset::Emacs),
-            "vscode" => Ok(BuiltinCanvasKeybindingPreset::Vscode),
-            preset => Err(KeybindingConfigError::CanvasPreset {
-                preset: preset.to_string(),
-            }),
-        }
-    }
-
-    fn config_name(self) -> &'static str {
-        match self {
-            BuiltinCanvasKeybindingPreset::Vim => "vim",
-            BuiltinCanvasKeybindingPreset::Helix => "helix",
-            BuiltinCanvasKeybindingPreset::Emacs => "emacs",
-            BuiltinCanvasKeybindingPreset::Vscode => "vscode",
         }
     }
 }
@@ -899,7 +875,7 @@ where
         if profile.preset() != BuiltinCanvasKeybindingPreset::Vim {
             canvas_table.insert(
                 "preset".to_string(),
-                Value::String(profile.preset().config_name().to_string()),
+                Value::String(profile.preset().to_string()),
             );
         }
         let overrides = profile.overrides_toml();
