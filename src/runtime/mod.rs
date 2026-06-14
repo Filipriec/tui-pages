@@ -505,7 +505,7 @@ pub struct TuiPages<V, A, S, Pages = (), Handler = (), O = (), M = ()> {
     pub(crate) active_owner: Option<LayerOwner>,
     keybinding_store: Option<BindingStore<A>>,
     keybinding_report: Option<KeybindingReport<A>>,
-    keybinding_inheritances: Vec<KeybindingInheritance>,
+    keybinding_inheritances: Vec<KeybindingInheritance<A>>,
     action_registry: Option<crate::keybindings::ActionRegistry<A>>,
     #[cfg(feature = "canvas")]
     canvas_keybinding_profile: CanvasKeybindingProfileHandle,
@@ -1251,7 +1251,7 @@ pub struct TuiPagesBuilder<V, A, S, O = (), M = (), Pages = (), Handler = ()> {
     pub(crate) key_hooks: Vec<KeyHook<V, A, S, O, M>>,
     keybinding_store: Option<BindingStore<A>>,
     keybinding_report: Option<KeybindingReport<A>>,
-    keybinding_inheritances: Vec<KeybindingInheritance>,
+    keybinding_inheritances: Vec<KeybindingInheritance<A>>,
     pub(crate) action_registry: Option<crate::keybindings::ActionRegistry<A>>,
     #[cfg(feature = "canvas")]
     pub(crate) canvas_keybinding_profile: CanvasKeybindingProfileHandle,
@@ -1449,10 +1449,10 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
 
     pub fn inherit_keybinding(
         mut self,
-        target_mode: impl Into<String>,
-        target_action: impl Into<String>,
-        source_mode: impl Into<String>,
-        source_action: impl Into<String>,
+        target_mode: impl Into<ModeId>,
+        target_action: A,
+        source_mode: impl Into<ModeId>,
+        source_action: A,
     ) -> Self {
         self.keybinding_inheritances.push(KeybindingInheritance::new(
             target_mode,

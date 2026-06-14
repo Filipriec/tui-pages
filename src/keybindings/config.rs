@@ -6,6 +6,7 @@ use crate::input::{
     analyze_keymap_bindings, try_parse_binding, BindingCatalog, BindingConflict, BindingInfo,
     BindingLayer, BindingSource, InputRegistry, KeyChord, ParseKeyError,
 };
+use crate::runtime::ModeId;
 #[cfg(feature = "canvas")]
 use crate::runtime::InputLayerContext;
 
@@ -385,35 +386,27 @@ impl<A: fmt::Debug> fmt::Display for BindingNotice<A> {
 }
 
 #[derive(Debug, Clone)]
-pub struct KeybindingInheritance {
-    pub target_mode: String,
-    pub target_action: String,
-    pub source_mode: String,
-    pub source_action: String,
+pub struct KeybindingInheritance<A> {
+    pub target_mode: ModeId,
+    pub target_action: A,
+    pub source_mode: ModeId,
+    pub source_action: A,
 }
 
-impl KeybindingInheritance {
+impl<A> KeybindingInheritance<A> {
     pub fn new(
-        target_mode: impl Into<String>,
-        target_action: impl Into<String>,
-        source_mode: impl Into<String>,
-        source_action: impl Into<String>,
+        target_mode: impl Into<ModeId>,
+        target_action: A,
+        source_mode: impl Into<ModeId>,
+        source_action: A,
     ) -> Self {
         Self {
             target_mode: target_mode.into(),
-            target_action: target_action.into(),
+            target_action,
             source_mode: source_mode.into(),
-            source_action: source_action.into(),
+            source_action,
         }
     }
-}
-
-#[derive(Debug, Clone)]
-struct ResolvedKeybindingInheritance<A> {
-    target_mode: String,
-    target_action: A,
-    source_mode: String,
-    source_action: A,
 }
 
 #[derive(Debug, Clone)]
@@ -421,7 +414,7 @@ pub struct BindingStore<A> {
     pub builtin_keymap: BindingCatalog<A>,
     pub user_keymap: BindingCatalog<A>,
     pub runtime_keymap: BindingCatalog<A>,
-    keymap_inheritances: Vec<ResolvedKeybindingInheritance<A>>,
+    keymap_inheritances: Vec<KeybindingInheritance<A>>,
     #[cfg(feature = "canvas")]
     pub builtin_canvas: BindingCatalog<CanvasAction>,
     #[cfg(feature = "canvas")]
@@ -539,20 +532,24 @@ where
         config: &KeybindingConfig,
         actions: &ActionRegistry<A>,
     ) -> Result<(Self, InputRegistry<A>, KeybindingReport<A>), KeybindingConfigError> {
-        Self::with_user_config_and_inheritances(builtin_keymap, config, actions, [])
+        Self::with_user_config_and_inheritances(
+            builtin_keymap,
+            config,
+            actions,
+            Vec::<KeybindingInheritance<A>>::new(),
+        )
     }
 
     pub fn with_user_config_and_inheritances(
         builtin_keymap: &InputRegistry<A>,
         config: &KeybindingConfig,
         actions: &ActionRegistry<A>,
-        keymap_inheritances: impl IntoIterator<Item = KeybindingInheritance>,
+        keymap_inheritances: impl IntoIterator<Item = KeybindingInheritance<A>>,
     ) -> Result<(Self, InputRegistry<A>, KeybindingReport<A>), KeybindingConfigError> {
         let mut store = Self::default();
         store.builtin_keymap =
             BindingCatalog::from_registry(builtin_keymap, BindingSource::Builtin);
-        store.keymap_inheritances =
-            resolve_keymap_inheritances(keymap_inheritances, actions);
+        store.keymap_inheritances = keymap_inheritances.into_iter().collect();
         let (user_keymap, unknown_issues) =
             resolve_raw_keymap(&config.keymap, actions, BindingSource::Config);
         store.user_keymap = user_keymap;
@@ -606,21 +603,21 @@ where
     apply_catalog_to_registry(registry, catalog);
 }
 
-fn catalog_has_action<A: PartialEq>(catalog: &BindingCatalog<A>, mode: &str, action: &A) -> bool {
+fn catalog_has_action<A: PartialEq>(catalog: &BindingCatalog<A>, mode: &ModeId, action: &A) -> bool {
     catalog
         .bindings
         .iter()
-        .any(|binding| binding.mode == mode && &binding.action == action)
+        .any(|binding| binding.mode == mode.as_str() && &binding.action == action)
 }
 
 fn registry_bindings_for_action<A: PartialEq + Clone>(
     registry: &InputRegistry<A>,
-    mode: &str,
+    mode: &ModeId,
     action: &A,
 ) -> Vec<Vec<KeyChord>> {
     registry
         .maps
-        .get(mode)
+        .get(mode.as_str())
         .map(|map| {
             map.bindings
                 .iter()
@@ -636,30 +633,11 @@ fn registry_bindings_for_action<A: PartialEq + Clone>(
         .unwrap_or_default()
 }
 
-fn resolve_keymap_inheritances<A: Clone>(
-    inheritances: impl IntoIterator<Item = KeybindingInheritance>,
-    actions: &ActionRegistry<A>,
-) -> Vec<ResolvedKeybindingInheritance<A>> {
-    inheritances
-        .into_iter()
-        .filter_map(|inheritance| {
-            let target_action = actions.resolve(&inheritance.target_action)?;
-            let source_action = actions.resolve(&inheritance.source_action)?;
-            Some(ResolvedKeybindingInheritance {
-                target_mode: inheritance.target_mode,
-                target_action,
-                source_mode: inheritance.source_mode,
-                source_action,
-            })
-        })
-        .collect()
-}
-
 fn apply_keymap_inheritances<A: Clone + PartialEq>(
     registry: &mut InputRegistry<A>,
     user_keymap: &BindingCatalog<A>,
     runtime_keymap: &BindingCatalog<A>,
-    inheritances: &[ResolvedKeybindingInheritance<A>],
+    inheritances: &[KeybindingInheritance<A>],
 ) {
     for inheritance in inheritances {
         let source_sequences = registry_bindings_for_action(
@@ -1142,10 +1120,10 @@ nav_select = "ctrl+j"
                 &config,
                 &actions,
                 [KeybindingInheritance::new(
-                    "command",
-                    "command_execute",
-                    "general",
-                    "nav_select",
+                    crate::runtime::modes::COMMAND,
+                    App::Execute,
+                    crate::runtime::modes::GENERAL,
+                    App::Select,
                 )],
             )
             .unwrap();
@@ -1197,10 +1175,10 @@ command_execute = "-"
                 &config,
                 &actions,
                 [KeybindingInheritance::new(
-                    "command",
-                    "command_execute",
-                    "general",
-                    "nav_select",
+                    crate::runtime::modes::COMMAND,
+                    App::Execute,
+                    crate::runtime::modes::GENERAL,
+                    App::Select,
                 )],
             )
             .unwrap();
