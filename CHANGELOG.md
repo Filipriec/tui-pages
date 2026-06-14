@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Runtime rebind (`rebind_keymap`) and reset (`reset_keybindings_to_defaults`) on `TuiPages`
 - `export_keybindings_toml()` for serializing the current keybinding state to TOML
 - `keybindings_config` example demonstrating TOML-based keybinding configuration
+- `inherit_keybinding(target_mode, target_action, source_mode, source_action)` API for declarative keybinding inheritance across modes, resolved through `ActionRegistry`. The target action mirrors the source action's binding unless explicitly overridden in config, and tracks future rebinds of the source.
 - Canvas integration tests (`tests/canvas_integration.rs`)
 
 ### Changed

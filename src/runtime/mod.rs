@@ -2,7 +2,8 @@ use crate::command::{CommandHint, CommandRegistry, CommandResolver, CommandRespo
 use crate::focus::{FocusController, FocusIntent, FocusManager, FocusTarget, FocusWrap};
 use crate::input::{parse_binding, InputHint, InputPipeline, InputRegistry, KeyChord, KeyMap};
 use crate::keybindings::{
-    BindingStore, KeybindingConfig, KeybindingConfigError, KeybindingReport, NavigationAction,
+    BindingStore, KeybindingConfig, KeybindingConfigError, KeybindingInheritance,
+    KeybindingReport, NavigationAction,
 };
 use crate::navigation::{BufferState, PaneSplit};
 use crossterm::event::KeyEvent;
@@ -504,6 +505,7 @@ pub struct TuiPages<V, A, S, Pages = (), Handler = (), O = (), M = ()> {
     pub(crate) active_owner: Option<LayerOwner>,
     keybinding_store: Option<BindingStore<A>>,
     keybinding_report: Option<KeybindingReport<A>>,
+    keybinding_inheritances: Vec<KeybindingInheritance>,
     action_registry: Option<crate::keybindings::ActionRegistry<A>>,
     #[cfg(feature = "canvas")]
     canvas_keybinding_profile: CanvasKeybindingProfileHandle,
@@ -663,7 +665,12 @@ where
             .action_registry
             .clone()
             .unwrap_or_else(crate::keybindings::ActionRegistry::navigation);
-        let (store, _, report) = BindingStore::with_user_config(&builtin, &config, &actions)?;
+        let (store, _, report) = BindingStore::with_user_config_and_inheritances(
+            &builtin,
+            &config,
+            &actions,
+            self.keybinding_inheritances.clone(),
+        )?;
         #[cfg(feature = "canvas")]
         {
             let profile = config.canvas_profile()?;
@@ -1244,6 +1251,7 @@ pub struct TuiPagesBuilder<V, A, S, O = (), M = (), Pages = (), Handler = ()> {
     pub(crate) key_hooks: Vec<KeyHook<V, A, S, O, M>>,
     keybinding_store: Option<BindingStore<A>>,
     keybinding_report: Option<KeybindingReport<A>>,
+    keybinding_inheritances: Vec<KeybindingInheritance>,
     pub(crate) action_registry: Option<crate::keybindings::ActionRegistry<A>>,
     #[cfg(feature = "canvas")]
     pub(crate) canvas_keybinding_profile: CanvasKeybindingProfileHandle,
@@ -1269,6 +1277,7 @@ impl<V, A, S, O, M> TuiPagesBuilder<V, A, S, O, M, (), ()> {
             key_hooks: Vec::new(),
             keybinding_store: None,
             keybinding_report: None,
+            keybinding_inheritances: Vec::new(),
             action_registry: None,
             #[cfg(feature = "canvas")]
             canvas_keybinding_profile: Rc::new(RefCell::new(CanvasKeybindingProfileState::new(
@@ -1329,6 +1338,7 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
             key_hooks: self.key_hooks,
             keybinding_store: self.keybinding_store,
             keybinding_report: self.keybinding_report,
+            keybinding_inheritances: self.keybinding_inheritances,
             action_registry: self.action_registry,
             #[cfg(feature = "canvas")]
             canvas_keybinding_profile: self.canvas_keybinding_profile,
@@ -1374,6 +1384,7 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
             key_hooks: self.key_hooks,
             keybinding_store: self.keybinding_store,
             keybinding_report: self.keybinding_report,
+            keybinding_inheritances: self.keybinding_inheritances,
             action_registry: self.action_registry,
             #[cfg(feature = "canvas")]
             canvas_keybinding_profile: self.canvas_keybinding_profile,
@@ -1436,6 +1447,22 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
         self
     }
 
+    pub fn inherit_keybinding(
+        mut self,
+        target_mode: impl Into<String>,
+        target_action: impl Into<String>,
+        source_mode: impl Into<String>,
+        source_action: impl Into<String>,
+    ) -> Self {
+        self.keybinding_inheritances.push(KeybindingInheritance::new(
+            target_mode,
+            target_action,
+            source_mode,
+            source_action,
+        ));
+        self
+    }
+
     pub fn command<I, Alias>(
         mut self,
         action_name: impl Into<String>,
@@ -1479,6 +1506,7 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
             active_owner: None,
             keybinding_store: self.keybinding_store,
             keybinding_report: self.keybinding_report,
+            keybinding_inheritances: self.keybinding_inheritances,
             action_registry: self.action_registry,
             #[cfg(feature = "canvas")]
             canvas_keybinding_profile: self.canvas_keybinding_profile,
@@ -1505,8 +1533,12 @@ where
             .action_registry
             .clone()
             .unwrap_or_else(crate::keybindings::ActionRegistry::navigation);
-        let (store, registry, report) =
-            BindingStore::with_user_config(&self.input_registry, &config, &actions)?;
+        let (store, registry, report) = BindingStore::with_user_config_and_inheritances(
+            &self.input_registry,
+            &config,
+            &actions,
+            self.keybinding_inheritances.clone(),
+        )?;
         self.input_registry = registry;
         #[cfg(feature = "canvas")]
         {

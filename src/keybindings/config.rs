@@ -60,7 +60,7 @@ impl std::error::Error for KeybindingConfigError {
     }
 }
 
-/// A `[keymap.*]` table parsed but **not** yet resolved to an action type. The
+/// A mode keybinding table parsed but **not** yet resolved to an action type. The
 /// schema names actions as strings; resolution to the application's `A` happens
 /// later via an [`ActionRegistry`], so an app can bind its own action names —
 /// not just the built-in navigation ones.
@@ -71,7 +71,7 @@ pub struct RawKeymap {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RawKeymapSection {
-    /// The TOML section name (`[keymap.<name>]`).
+    /// The TOML section name.
     pub name: String,
     /// The input mode this section binds in (defaults to the section name).
     pub mode: String,
@@ -87,6 +87,22 @@ pub struct RawKeymapBinding {
 }
 
 impl RawKeymap {
+    fn from_root(root: &Map<String, Value>) -> (Self, Vec<NavigationPresetIssue>) {
+        let (mut keymap, mut issues) = Self::from_value(root.get("keymap"));
+        for (section_name, section_value) in root {
+            if matches!(section_name.as_str(), "keymap" | "canvas") {
+                continue;
+            }
+            Self::push_section(
+                &mut keymap.sections,
+                section_name,
+                section_value,
+                &mut issues,
+            );
+        }
+        (keymap, issues)
+    }
+
     /// Parse the `[keymap]` table, collecting malformed-entry issues. Unknown
     /// *action names* are not flagged here — that needs the registry and happens
     /// during resolution.
@@ -102,53 +118,62 @@ impl RawKeymap {
 
         let mut sections = Vec::with_capacity(table.len());
         for (section_name, section_value) in table {
-            let Some(section) = section_value.as_table() else {
-                issues.push(NavigationPresetIssue::SectionNotTable {
-                    section: section_name.clone(),
-                });
-                continue;
-            };
-            let mode = match section.get("mode") {
-                Some(value) => value.as_str().map(ToString::to_string).unwrap_or_else(|| {
-                    issues.push(NavigationPresetIssue::ModeNotString {
-                        section: section_name.clone(),
-                    });
-                    section_name.clone()
-                }),
-                None => section_name.clone(),
-            };
-
-            let mut bindings = Vec::new();
-            for (action_name, bindings_value) in section {
-                if action_name == "mode" {
-                    continue;
-                }
-                let Some(keys) =
-                    parse_string_list(section_name, action_name, bindings_value, &mut issues)
-                else {
-                    continue;
-                };
-                if keys.is_empty() {
-                    issues.push(NavigationPresetIssue::EmptyBindings {
-                        section: section_name.clone(),
-                        action: action_name.clone(),
-                    });
-                    continue;
-                }
-                bindings.push(RawKeymapBinding {
-                    name: action_name.clone(),
-                    keys,
-                });
-            }
-
-            sections.push(RawKeymapSection {
-                name: section_name.clone(),
-                mode,
-                bindings,
-            });
+            Self::push_section(&mut sections, section_name, section_value, &mut issues);
         }
 
         (Self { sections }, issues)
+    }
+
+    fn push_section(
+        sections: &mut Vec<RawKeymapSection>,
+        section_name: &str,
+        section_value: &Value,
+        issues: &mut Vec<NavigationPresetIssue>,
+    ) {
+        let Some(section) = section_value.as_table() else {
+            issues.push(NavigationPresetIssue::SectionNotTable {
+                section: section_name.to_string(),
+            });
+            return;
+        };
+        let mode = match section.get("mode") {
+            Some(value) => value.as_str().map(ToString::to_string).unwrap_or_else(|| {
+                issues.push(NavigationPresetIssue::ModeNotString {
+                    section: section_name.to_string(),
+                });
+                section_name.to_string()
+            }),
+            None => section_name.to_string(),
+        };
+
+        let mut bindings = Vec::new();
+        for (action_name, bindings_value) in section {
+            if action_name == "mode" {
+                continue;
+            }
+            let Some(keys) =
+                parse_string_list(section_name, action_name, bindings_value, issues)
+            else {
+                continue;
+            };
+            if keys.is_empty() {
+                issues.push(NavigationPresetIssue::EmptyBindings {
+                    section: section_name.to_string(),
+                    action: action_name.clone(),
+                });
+                continue;
+            }
+            bindings.push(RawKeymapBinding {
+                name: action_name.clone(),
+                keys,
+            });
+        }
+
+        sections.push(RawKeymapSection {
+            name: section_name.to_string(),
+            mode,
+            bindings,
+        });
     }
 }
 
@@ -174,7 +199,8 @@ impl KeybindingConfig {
             .cloned()
             .unwrap_or_else(Map::new);
 
-        let (keymap, keymap_issues) = RawKeymap::from_value(root.get("keymap"));
+        #[cfg_attr(not(feature = "canvas"), allow(unused_mut))]
+        let (mut keymap, keymap_issues) = RawKeymap::from_root(&root);
 
         #[cfg(feature = "canvas")]
         {
@@ -185,12 +211,27 @@ impl KeybindingConfig {
                 .map(parse_canvas_preset)
                 .transpose()?
                 .unwrap_or(BuiltinCanvasKeybindingPreset::Vim);
-            let canvas_overrides_toml = canvas
+
+            // Canvas overrides come from two places, merged into one table:
+            //   * the explicit `[canvas.bindings.<mode>]` sections, and
+            //   * canvas-action bindings written in modal keymap sections
+            //     (`[nor]`, `[keymap.nor]`, etc.). The latter let a consumer remap a
+            //     canvas key in the same place it binds everything else; we move
+            //     them out of the keymap here so they drive the canvas profile
+            //     rather than the navigation keymap.
+            let mut canvas_overrides: Map<String, Value> = canvas
                 .and_then(|table| table.get("bindings"))
+                .and_then(Value::as_table)
                 .cloned()
-                .map(table_toml)
-                .transpose()?
                 .unwrap_or_default();
+            fold_keymap_canvas_overrides(&mut keymap, &mut canvas_overrides);
+
+            let canvas_overrides_toml = if canvas_overrides.is_empty() {
+                String::new()
+            } else {
+                toml::to_string(&Value::Table(canvas_overrides))
+                    .map_err(KeybindingConfigError::Serialize)?
+            };
 
             Ok(Self {
                 keymap,
@@ -219,13 +260,46 @@ impl KeybindingConfig {
     }
 }
 
+/// Whether an action *name* belongs to the canvas modal editor rather than the
+/// navigation keymap. `exit` / `enter_decider` are excluded: they are canvas
+/// vocabulary, but the keymap owns them (an app typically binds `exit` to quit),
+/// so they stay keymap bindings. Mirrors the routing the client used to do.
 #[cfg(feature = "canvas")]
-fn table_toml(value: Value) -> Result<String, KeybindingConfigError> {
-    match value {
-        Value::Table(table) => {
-            toml::to_string(&Value::Table(table)).map_err(KeybindingConfigError::Serialize)
+fn is_canvas_override_action(name: &str) -> bool {
+    use crate::canvas::CanvasKeyAction as C;
+    !matches!(
+        C::from_name(name),
+        C::Unknown(_) | C::Exit | C::EnterDecider
+    )
+}
+
+/// Move canvas-action bindings out of the keymap's modal sections
+/// (`nor`/`ins`/`sel`) and into `overrides`, keyed by mode name — the schema
+/// `CanvasKeybindingProfile::with_overrides_toml` expects. Non-canvas bindings
+/// (and the keymap-owned `exit`/`enter_decider`) are left in the keymap.
+#[cfg(feature = "canvas")]
+fn fold_keymap_canvas_overrides(keymap: &mut RawKeymap, overrides: &mut Map<String, Value>) {
+    for section in &mut keymap.sections {
+        if !matches!(section.mode.as_str(), "nor" | "ins" | "sel") {
+            continue;
         }
-        other => toml::to_string(&other).map_err(KeybindingConfigError::Serialize),
+        let mut i = 0;
+        while i < section.bindings.len() {
+            if !is_canvas_override_action(&section.bindings[i].name) {
+                i += 1;
+                continue;
+            }
+            let binding = section.bindings.remove(i);
+            let mode_table = overrides
+                .entry(section.mode.clone())
+                .or_insert_with(|| Value::Table(Map::new()));
+            if let Value::Table(table) = mode_table {
+                table.insert(
+                    binding.name,
+                    Value::Array(binding.keys.into_iter().map(Value::String).collect()),
+                );
+            }
+        }
     }
 }
 
@@ -311,10 +385,43 @@ impl<A: fmt::Debug> fmt::Display for BindingNotice<A> {
 }
 
 #[derive(Debug, Clone)]
+pub struct KeybindingInheritance {
+    pub target_mode: String,
+    pub target_action: String,
+    pub source_mode: String,
+    pub source_action: String,
+}
+
+impl KeybindingInheritance {
+    pub fn new(
+        target_mode: impl Into<String>,
+        target_action: impl Into<String>,
+        source_mode: impl Into<String>,
+        source_action: impl Into<String>,
+    ) -> Self {
+        Self {
+            target_mode: target_mode.into(),
+            target_action: target_action.into(),
+            source_mode: source_mode.into(),
+            source_action: source_action.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct ResolvedKeybindingInheritance<A> {
+    target_mode: String,
+    target_action: A,
+    source_mode: String,
+    source_action: A,
+}
+
+#[derive(Debug, Clone)]
 pub struct BindingStore<A> {
     pub builtin_keymap: BindingCatalog<A>,
     pub user_keymap: BindingCatalog<A>,
     pub runtime_keymap: BindingCatalog<A>,
+    keymap_inheritances: Vec<ResolvedKeybindingInheritance<A>>,
     #[cfg(feature = "canvas")]
     pub builtin_canvas: BindingCatalog<CanvasAction>,
     #[cfg(feature = "canvas")]
@@ -329,6 +436,7 @@ impl<A> Default for BindingStore<A> {
             builtin_keymap: BindingCatalog::new(),
             user_keymap: BindingCatalog::new(),
             runtime_keymap: BindingCatalog::new(),
+            keymap_inheritances: Vec::new(),
             #[cfg(feature = "canvas")]
             builtin_canvas: BindingCatalog::new(),
             #[cfg(feature = "canvas")]
@@ -359,6 +467,12 @@ where
         apply_catalog_to_registry(&mut registry, &self.builtin_keymap);
         remap_catalog_to_registry(&mut registry, &self.user_keymap);
         remap_catalog_to_registry(&mut registry, &self.runtime_keymap);
+        apply_keymap_inheritances(
+            &mut registry,
+            &self.user_keymap,
+            &self.runtime_keymap,
+            &self.keymap_inheritances,
+        );
         registry
     }
 
@@ -425,9 +539,20 @@ where
         config: &KeybindingConfig,
         actions: &ActionRegistry<A>,
     ) -> Result<(Self, InputRegistry<A>, KeybindingReport<A>), KeybindingConfigError> {
+        Self::with_user_config_and_inheritances(builtin_keymap, config, actions, [])
+    }
+
+    pub fn with_user_config_and_inheritances(
+        builtin_keymap: &InputRegistry<A>,
+        config: &KeybindingConfig,
+        actions: &ActionRegistry<A>,
+        keymap_inheritances: impl IntoIterator<Item = KeybindingInheritance>,
+    ) -> Result<(Self, InputRegistry<A>, KeybindingReport<A>), KeybindingConfigError> {
         let mut store = Self::default();
         store.builtin_keymap =
             BindingCatalog::from_registry(builtin_keymap, BindingSource::Builtin);
+        store.keymap_inheritances =
+            resolve_keymap_inheritances(keymap_inheritances, actions);
         let (user_keymap, unknown_issues) =
             resolve_raw_keymap(&config.keymap, actions, BindingSource::Config);
         store.user_keymap = user_keymap;
@@ -479,6 +604,92 @@ where
         cleared.push((binding.mode.clone(), binding.action.clone()));
     }
     apply_catalog_to_registry(registry, catalog);
+}
+
+fn catalog_has_action<A: PartialEq>(catalog: &BindingCatalog<A>, mode: &str, action: &A) -> bool {
+    catalog
+        .bindings
+        .iter()
+        .any(|binding| binding.mode == mode && &binding.action == action)
+}
+
+fn registry_bindings_for_action<A: PartialEq + Clone>(
+    registry: &InputRegistry<A>,
+    mode: &str,
+    action: &A,
+) -> Vec<Vec<KeyChord>> {
+    registry
+        .maps
+        .get(mode)
+        .map(|map| {
+            map.bindings
+                .iter()
+                .filter_map(|(sequence, bound_action)| {
+                    if bound_action == action {
+                        Some(sequence.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn resolve_keymap_inheritances<A: Clone>(
+    inheritances: impl IntoIterator<Item = KeybindingInheritance>,
+    actions: &ActionRegistry<A>,
+) -> Vec<ResolvedKeybindingInheritance<A>> {
+    inheritances
+        .into_iter()
+        .filter_map(|inheritance| {
+            let target_action = actions.resolve(&inheritance.target_action)?;
+            let source_action = actions.resolve(&inheritance.source_action)?;
+            Some(ResolvedKeybindingInheritance {
+                target_mode: inheritance.target_mode,
+                target_action,
+                source_mode: inheritance.source_mode,
+                source_action,
+            })
+        })
+        .collect()
+}
+
+fn apply_keymap_inheritances<A: Clone + PartialEq>(
+    registry: &mut InputRegistry<A>,
+    user_keymap: &BindingCatalog<A>,
+    runtime_keymap: &BindingCatalog<A>,
+    inheritances: &[ResolvedKeybindingInheritance<A>],
+) {
+    for inheritance in inheritances {
+        let source_sequences = registry_bindings_for_action(
+            registry,
+            &inheritance.source_mode,
+            &inheritance.source_action,
+        );
+        if source_sequences.is_empty() {
+            continue;
+        }
+
+        if catalog_has_action(user_keymap, &inheritance.target_mode, &inheritance.target_action)
+            || catalog_has_action(
+                runtime_keymap,
+                &inheritance.target_mode,
+                &inheritance.target_action,
+            )
+        {
+            continue;
+        }
+
+        registry
+            .map_mut(inheritance.target_mode.as_str())
+            .unbind_action(&inheritance.target_action);
+        for sequence in source_sequences {
+            registry
+                .map_mut(inheritance.target_mode.as_str())
+                .bind(sequence, inheritance.target_action.clone());
+        }
+    }
 }
 
 fn resolve_raw_keymap<A>(
@@ -683,39 +894,49 @@ where
     }
 
     let mut root = Map::new();
-    if !keymap.is_empty() {
-        let mut keymap_table = Map::new();
-        for (mode, actions_map) in keymap {
-            let mut section = Map::new();
+    for (mode, actions_map) in keymap {
+        let section = root
+            .entry(mode)
+            .or_insert_with(|| Value::Table(Map::new()));
+        if let Value::Table(section) = section {
             for (name, keys) in actions_map {
                 section.insert(
                     name.to_string(),
                     Value::Array(keys.into_iter().map(Value::String).collect()),
                 );
             }
-            keymap_table.insert(mode, Value::Table(section));
         }
-        root.insert("keymap".to_string(), Value::Table(keymap_table));
     }
 
     #[cfg(feature = "canvas")]
     {
         let mut canvas_table = Map::new();
-        canvas_table.insert(
-            "preset".to_string(),
-            Value::String(canvas_preset_name(profile.preset()).to_string()),
-        );
+        if profile.preset() != BuiltinCanvasKeybindingPreset::Vim {
+            canvas_table.insert(
+                "preset".to_string(),
+                Value::String(canvas_preset_name(profile.preset()).to_string()),
+            );
+        }
         let overrides = profile.overrides_toml();
         if !overrides.trim().is_empty() {
             let parsed =
                 toml::from_str::<Value>(&overrides).map_err(KeybindingConfigError::Toml)?;
             if let Some(table) = parsed.as_table() {
-                if !table.is_empty() {
-                    canvas_table.insert("bindings".to_string(), Value::Table(table.clone()));
+                for (mode, actions) in table {
+                    let section = root
+                        .entry(mode.clone())
+                        .or_insert_with(|| Value::Table(Map::new()));
+                    if let (Value::Table(section), Value::Table(actions)) = (section, actions) {
+                        for (name, keys) in actions {
+                            section.insert(name.clone(), keys.clone());
+                        }
+                    }
                 }
             }
         }
-        root.insert("canvas".to_string(), Value::Table(canvas_table));
+        if !canvas_table.is_empty() {
+            root.insert("canvas".to_string(), Value::Table(canvas_table));
+        }
     }
 
     toml::to_string(&Value::Table(root)).map_err(KeybindingConfigError::Serialize)
@@ -811,6 +1032,28 @@ focus_next = ["j", "down"]
     }
 
     #[test]
+    fn parses_root_mode_sections_from_unified_toml() {
+        let config = KeybindingConfig::from_toml(
+            r#"
+[global]
+quit = "ctrl+q"
+
+[general]
+focus_next = ["j", "down"]
+"#,
+        )
+        .unwrap();
+
+        let global = config
+            .keymap
+            .sections
+            .iter()
+            .find(|section| section.name == "global")
+            .unwrap();
+        assert_eq!(global.bindings.first().unwrap().name, "quit");
+    }
+
+    #[test]
     fn reports_user_override_default_and_effective_registry_uses_user_binding() {
         let mut builtin = InputRegistry::empty();
         builtin
@@ -861,6 +1104,114 @@ quit = "ctrl+q"
     }
 
     #[test]
+    fn inherited_keybinding_follows_source_user_override() {
+        #[derive(Debug, Clone, PartialEq, Eq)]
+        enum App {
+            Select,
+            Execute,
+        }
+
+        let actions = ActionRegistry::from_entries(vec![
+            crate::input::BindableActionInfo {
+                action: App::Select,
+                name: "nav_select",
+                description: "",
+                modes: &["general"],
+            },
+            crate::input::BindableActionInfo {
+                action: App::Execute,
+                name: "command_execute",
+                description: "",
+                modes: &["command"],
+            },
+        ]);
+        let mut builtin = InputRegistry::empty();
+        builtin.map_mut("general").bind(seq("enter"), App::Select);
+        builtin.map_mut("command").bind(seq("ctrl+x"), App::Execute);
+        let config = KeybindingConfig::from_toml(
+            r#"
+[keymap.general]
+nav_select = "ctrl+j"
+"#,
+        )
+        .unwrap();
+
+        let (_store, registry, _report) =
+            BindingStore::with_user_config_and_inheritances(
+                &builtin,
+                &config,
+                &actions,
+                [KeybindingInheritance::new(
+                    "command",
+                    "command_execute",
+                    "general",
+                    "nav_select",
+                )],
+            )
+            .unwrap();
+
+        let command = registry.maps.get("command").unwrap();
+        assert_eq!(command.bindings.get(&seq("ctrl+j")), Some(&App::Execute));
+        assert!(!command.bindings.contains_key(&seq("ctrl+x")));
+    }
+
+    #[test]
+    fn inherited_keybinding_does_not_replace_explicit_target() {
+        #[derive(Debug, Clone, PartialEq, Eq)]
+        enum App {
+            Select,
+            Execute,
+        }
+
+        let actions = ActionRegistry::from_entries(vec![
+            crate::input::BindableActionInfo {
+                action: App::Select,
+                name: "nav_select",
+                description: "",
+                modes: &["general"],
+            },
+            crate::input::BindableActionInfo {
+                action: App::Execute,
+                name: "command_execute",
+                description: "",
+                modes: &["command"],
+            },
+        ]);
+        let mut builtin = InputRegistry::empty();
+        builtin.map_mut("general").bind(seq("enter"), App::Select);
+        builtin.map_mut("command").bind(seq("ctrl+x"), App::Execute);
+        let config = KeybindingConfig::from_toml(
+            r#"
+[keymap.general]
+nav_select = "ctrl+j"
+
+[keymap.command]
+command_execute = "-"
+"#,
+        )
+        .unwrap();
+
+        let (_store, registry, _report) =
+            BindingStore::with_user_config_and_inheritances(
+                &builtin,
+                &config,
+                &actions,
+                [KeybindingInheritance::new(
+                    "command",
+                    "command_execute",
+                    "general",
+                    "nav_select",
+                )],
+            )
+            .unwrap();
+
+        let command = registry.maps.get("command").unwrap();
+        assert_eq!(command.bindings.get(&seq("-")), Some(&App::Execute));
+        assert!(!command.bindings.contains_key(&seq("ctrl+j")));
+        assert!(!command.bindings.contains_key(&seq("ctrl+x")));
+    }
+
+    #[test]
     fn invalid_navigation_entries_are_not_all_or_nothing() {
         let mut builtin = InputRegistry::empty();
         builtin
@@ -900,5 +1251,89 @@ focus_next = "not+a+key"
             .notices
             .iter()
             .any(|notice| matches!(notice, BindingNotice::InvalidEntry(_))));
+    }
+
+    /// Canvas-action names written in a modal keymap section are routed to the
+    /// canvas profile, not the navigation keymap — so a consumer can remap a
+    /// canvas key by editing `[keymap.nor]`. Non-canvas names in the same section
+    /// stay in the keymap, and explicit `[canvas.bindings]` still works.
+    #[cfg(feature = "canvas")]
+    #[test]
+    fn modal_section_canvas_actions_route_to_canvas_profile() {
+        let config = KeybindingConfig::from_toml(
+            r#"
+[keymap.nor]
+undo = ["ctrl+z"]
+previous_entry = ["q"]
+
+[canvas]
+preset = "helix"
+
+[canvas.bindings.nor]
+redo = ["ctrl+y"]
+"#,
+        )
+        .unwrap();
+
+        // `undo` (canvas) was pulled out of the keymap; `previous_entry` (not a
+        // canvas action) stays.
+        let nor = config
+            .keymap
+            .sections
+            .iter()
+            .find(|section| section.mode == "nor")
+            .expect("nor keymap section survives");
+        assert!(nor.bindings.iter().any(|b| b.name == "previous_entry"));
+        assert!(nor.bindings.iter().all(|b| b.name != "undo"));
+
+        // The canvas profile reflects both the keymap-sourced `undo` remap and
+        // the explicit `[canvas.bindings]` `redo` override.
+        let overrides = config.canvas_profile().unwrap().overrides_toml();
+        assert!(overrides.contains("undo"), "overrides: {overrides}");
+        assert!(overrides.contains("redo"), "overrides: {overrides}");
+    }
+
+    #[cfg(feature = "canvas")]
+    #[test]
+    fn root_modal_sections_split_canvas_and_app_actions() {
+        #[derive(Debug, Clone, PartialEq, Eq)]
+        enum App {
+            MyAppAction,
+        }
+
+        let actions = ActionRegistry::from_entries(vec![crate::input::BindableActionInfo {
+            action: App::MyAppAction,
+            name: "my_app_action",
+            description: "",
+            modes: &["nor"],
+        }]);
+        let config = KeybindingConfig::from_toml(
+            r#"
+[nor]
+undo = ["ctrl+z"]
+my_app_action = ["x"]
+"#,
+        )
+        .unwrap();
+        let builtin = InputRegistry::<App>::empty();
+        let (_store, registry, report) =
+            BindingStore::with_user_config(&builtin, &config, &actions).unwrap();
+
+        assert_eq!(
+            registry
+                .maps
+                .get("nor")
+                .unwrap()
+                .bindings
+                .get(&seq("x")),
+            Some(&App::MyAppAction)
+        );
+        assert!(report
+            .notices
+            .iter()
+            .all(|notice| !matches!(notice, BindingNotice::InvalidEntry(_))));
+
+        let overrides = config.canvas_profile().unwrap().overrides_toml();
+        assert!(overrides.contains("undo = [\"Ctrl+z\"]"), "overrides: {overrides}");
     }
 }

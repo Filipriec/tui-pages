@@ -35,7 +35,8 @@ pub use builtin::{
     VimAction,
 };
 pub use config::{
-    BindingNotice, BindingStore, KeybindingConfig, KeybindingConfigError, KeybindingReport,
+    BindingNotice, BindingStore, KeybindingConfig, KeybindingConfigError, KeybindingInheritance,
+    KeybindingReport,
 };
 pub use preset::{
     apply_navigation_preset_toml, remap_navigation_preset_toml, NavigationPreset,
