@@ -23,7 +23,7 @@ pub(crate) use config::export_to_toml;
 
 pub use action::{
     navigation_action_infos, navigation_action_outcome, try_standard_navigation_action,
-    NavigationAction, NavigationActionInfo,
+    NavigationAction, NavigationActionInfo, ParseNavigationActionError,
 };
 pub use builtin::{
     bind_builtin_general_defaults, bind_builtin_global_defaults,

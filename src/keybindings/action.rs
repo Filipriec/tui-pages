@@ -1,5 +1,7 @@
 //! Shared navigation actions for all editor presets in this module.
 
+use std::{fmt, str::FromStr};
+
 use crate::focus::FocusIntent;
 use crate::runtime::{ActionOutcome, TuiEffect};
 
@@ -29,6 +31,25 @@ pub struct NavigationActionInfo {
     pub description: &'static str,
     pub category: &'static str,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParseNavigationActionError {
+    name: String,
+}
+
+impl ParseNavigationActionError {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+}
+
+impl fmt::Display for ParseNavigationActionError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "unknown navigation action {:?}", self.name)
+    }
+}
+
+impl std::error::Error for ParseNavigationActionError {}
 
 impl NavigationAction {
     pub const FOCUS: [NavigationAction; 5] = [
@@ -83,23 +104,7 @@ impl NavigationAction {
     }
 
     pub fn from_name(name: &str) -> Option<Self> {
-        let normalized = name.replace('-', "_").to_ascii_lowercase();
-        match normalized.as_str() {
-            "focus_next" => Some(NavigationAction::FocusNext),
-            "focus_prev" => Some(NavigationAction::FocusPrev),
-            "activate" => Some(NavigationAction::Activate),
-            "leave_section" => Some(NavigationAction::LeaveSection),
-            "quit" => Some(NavigationAction::Quit),
-            "next_buffer" => Some(NavigationAction::NextBuffer),
-            "prev_buffer" | "previous_buffer" => Some(NavigationAction::PrevBuffer),
-            "close_buffer" => Some(NavigationAction::CloseBuffer),
-            "next_pane" => Some(NavigationAction::NextPane),
-            "prev_pane" | "previous_pane" => Some(NavigationAction::PrevPane),
-            "close_pane" => Some(NavigationAction::ClosePane),
-            "split_vertical" | "split_pane_vertical" => Some(NavigationAction::SplitVertical),
-            "split_horizontal" | "split_pane_horizontal" => Some(NavigationAction::SplitHorizontal),
-            _ => None,
-        }
+        name.parse().ok()
     }
 
     pub fn to_effect<V, O, M>(self) -> TuiEffect<V, O, M> {
@@ -122,6 +127,38 @@ impl NavigationAction {
                 TuiEffect::SplitPane(crate::navigation::PaneSplit::Horizontal)
             }
         }
+    }
+}
+
+impl FromStr for NavigationAction {
+    type Err = ParseNavigationActionError;
+
+    fn from_str(name: &str) -> Result<Self, Self::Err> {
+        let normalized = name.replace('-', "_").to_ascii_lowercase();
+        match normalized.as_str() {
+            "focus_next" => Ok(NavigationAction::FocusNext),
+            "focus_prev" => Ok(NavigationAction::FocusPrev),
+            "activate" => Ok(NavigationAction::Activate),
+            "leave_section" => Ok(NavigationAction::LeaveSection),
+            "quit" => Ok(NavigationAction::Quit),
+            "next_buffer" => Ok(NavigationAction::NextBuffer),
+            "prev_buffer" | "previous_buffer" => Ok(NavigationAction::PrevBuffer),
+            "close_buffer" => Ok(NavigationAction::CloseBuffer),
+            "next_pane" => Ok(NavigationAction::NextPane),
+            "prev_pane" | "previous_pane" => Ok(NavigationAction::PrevPane),
+            "close_pane" => Ok(NavigationAction::ClosePane),
+            "split_vertical" | "split_pane_vertical" => Ok(NavigationAction::SplitVertical),
+            "split_horizontal" | "split_pane_horizontal" => Ok(NavigationAction::SplitHorizontal),
+            _ => Err(ParseNavigationActionError {
+                name: name.to_string(),
+            }),
+        }
+    }
+}
+
+impl fmt::Display for NavigationAction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_name())
     }
 }
 
@@ -261,7 +298,8 @@ mod tests {
     #[test]
     fn navigation_actions_round_trip_names() {
         for action in NavigationAction::all() {
-            assert_eq!(NavigationAction::from_name(action.as_name()), Some(action));
+            assert_eq!(action.as_name().parse::<NavigationAction>(), Ok(action));
+            assert_eq!(action.to_string(), action.as_name());
         }
     }
 

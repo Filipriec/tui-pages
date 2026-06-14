@@ -236,7 +236,7 @@ impl NavigationPreset {
                     continue;
                 }
 
-                let Some(action) = NavigationAction::from_name(action_name) else {
+                let Ok(action) = action_name.parse::<NavigationAction>() else {
                     issues.push(NavigationPresetIssue::UnknownAction {
                         section: section_name.clone(),
                         action: action_name.clone(),

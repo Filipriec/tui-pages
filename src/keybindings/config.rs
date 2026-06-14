@@ -209,7 +209,7 @@ impl KeybindingConfig {
             let canvas_preset = canvas
                 .and_then(|table| table.get("preset"))
                 .and_then(Value::as_str)
-                .map(parse_canvas_preset)
+                .map(BuiltinCanvasKeybindingPreset::from_config_name)
                 .transpose()?
                 .unwrap_or(BuiltinCanvasKeybindingPreset::Vim);
 
@@ -305,15 +305,32 @@ fn fold_keymap_canvas_overrides(keymap: &mut RawKeymap, overrides: &mut Map<Stri
 }
 
 #[cfg(feature = "canvas")]
-fn parse_canvas_preset(name: &str) -> Result<BuiltinCanvasKeybindingPreset, KeybindingConfigError> {
-    match name {
-        "vim" => Ok(BuiltinCanvasKeybindingPreset::Vim),
-        "helix" => Ok(BuiltinCanvasKeybindingPreset::Helix),
-        "emacs" => Ok(BuiltinCanvasKeybindingPreset::Emacs),
-        "vscode" => Ok(BuiltinCanvasKeybindingPreset::Vscode),
-        preset => Err(KeybindingConfigError::CanvasPreset {
-            preset: preset.to_string(),
-        }),
+trait CanvasPresetConfigName: Sized {
+    fn from_config_name(name: &str) -> Result<Self, KeybindingConfigError>;
+    fn config_name(self) -> &'static str;
+}
+
+#[cfg(feature = "canvas")]
+impl CanvasPresetConfigName for BuiltinCanvasKeybindingPreset {
+    fn from_config_name(name: &str) -> Result<Self, KeybindingConfigError> {
+        match name {
+            "vim" => Ok(BuiltinCanvasKeybindingPreset::Vim),
+            "helix" => Ok(BuiltinCanvasKeybindingPreset::Helix),
+            "emacs" => Ok(BuiltinCanvasKeybindingPreset::Emacs),
+            "vscode" => Ok(BuiltinCanvasKeybindingPreset::Vscode),
+            preset => Err(KeybindingConfigError::CanvasPreset {
+                preset: preset.to_string(),
+            }),
+        }
+    }
+
+    fn config_name(self) -> &'static str {
+        match self {
+            BuiltinCanvasKeybindingPreset::Vim => "vim",
+            BuiltinCanvasKeybindingPreset::Helix => "helix",
+            BuiltinCanvasKeybindingPreset::Emacs => "emacs",
+            BuiltinCanvasKeybindingPreset::Vscode => "vscode",
+        }
     }
 }
 
@@ -807,16 +824,6 @@ fn canvas_profile_overrides_catalog(profile: &CanvasKeybindingProfile) -> Bindin
     catalog
 }
 
-#[cfg(feature = "canvas")]
-fn canvas_preset_name(preset: BuiltinCanvasKeybindingPreset) -> &'static str {
-    match preset {
-        BuiltinCanvasKeybindingPreset::Vim => "vim",
-        BuiltinCanvasKeybindingPreset::Helix => "helix",
-        BuiltinCanvasKeybindingPreset::Emacs => "emacs",
-        BuiltinCanvasKeybindingPreset::Vscode => "vscode",
-    }
-}
-
 /// Serialize the live override layers back to the unified TOML schema, the exact
 /// inverse of [`KeybindingConfig::from_toml`]. Only the user + runtime keymap
 /// overrides and the canvas preset-diff are emitted (builtin defaults come from
@@ -892,7 +899,7 @@ where
         if profile.preset() != BuiltinCanvasKeybindingPreset::Vim {
             canvas_table.insert(
                 "preset".to_string(),
-                Value::String(canvas_preset_name(profile.preset()).to_string()),
+                Value::String(profile.preset().config_name().to_string()),
             );
         }
         let overrides = profile.overrides_toml();

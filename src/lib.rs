@@ -68,7 +68,7 @@ pub use keybindings::{
     BindingNotice, BindingStore, KeybindingConfig, KeybindingConfigError, KeybindingReport,
     NavigationAction, NavigationActionInfo, NavigationConflictPolicy, NavigationPreset,
     NavigationPresetBinding, NavigationPresetError, NavigationPresetIssue, NavigationPresetSection,
-    VimAction,
+    ParseNavigationActionError, VimAction,
 };
 pub use navigation::{
     BufferState, NavigationCoordinator, NavigationEvent, NavigationResult, NavigationRouter,
