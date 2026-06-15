@@ -12,17 +12,26 @@
 #[cfg(feature = "canvas")]
 pub mod canvas;
 pub mod command;
-#[cfg(feature = "dialog")]
+#[cfg(feature = "tui")]
 pub mod dialog;
 pub mod focus;
 pub mod input;
 pub mod keybindings;
 pub mod navigation;
+#[cfg(feature = "tui")]
+pub mod picker;
 pub mod runtime;
 pub mod terminal;
 
-#[cfg(feature = "dialog")]
+#[cfg(feature = "tui")]
 pub use dialog::{render_dialog, DialogData, DialogKey, DialogResult, DialogTheme};
+
+#[cfg(feature = "tui")]
+pub use picker::{
+    centered_picker_area, render_picker, render_picker_with_custom_preview, PickerData,
+    PickerEntry, PickerField, PickerFieldWeights, PickerHead, PickerHeadColumn, PickerLayout,
+    PickerScope, PickerTheme,
+};
 
 #[cfg(feature = "canvas")]
 pub use crate::canvas::{
@@ -92,8 +101,8 @@ pub use terminal::{enter as enter_terminal, TerminalGuard};
 /// This pulls in the runtime, the focus types, and — crucially — the
 /// [`FocusController`] trait, whose [`apply_focus_intent`](FocusController::apply_focus_intent)
 /// method is otherwise invisible until the trait is in scope. With the
-/// `dialog` feature it also brings in the dialog content, result, theme,
-/// renderer, and the `dialog::*` driver helpers.
+/// `tui` feature it also brings in the dialog and picker content, result,
+/// theme, and renderer types, plus the `dialog::*` driver helpers.
 pub mod prelude {
     pub use crate::terminal;
     pub use crate::{
@@ -121,10 +130,17 @@ pub mod prelude {
         dispatch_text_input_key as dispatch_canvas_text_input_key, CanvasAction,
         CanvasDispatchOutcome, CanvasKeyDispatchOutcome, CanvasTextWidgetOutcome,
     };
-    #[cfg(feature = "dialog")]
+    #[cfg(feature = "tui")]
     pub use crate::dialog::{
         self, DialogData, DialogKey, DialogKeyBindings, DialogResult, DialogTheme,
     };
-    #[cfg(feature = "dialog")]
+    #[cfg(feature = "tui")]
     pub use crate::render_dialog;
+
+    #[cfg(feature = "tui")]
+    pub use crate::picker::{
+        centered_picker_area, render_picker, render_picker_with_custom_preview, PickerData,
+        PickerEntry, PickerField, PickerFieldWeights, PickerHead, PickerHeadColumn, PickerLayout,
+        PickerScope, PickerTheme,
+    };
 }

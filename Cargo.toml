@@ -21,6 +21,8 @@ serde  = { workspace = true, optional = true }
 toml = { workspace = true }
 tracing = { workspace = true }
 canvas = { path = "../tui-canvas", package = "tui-canvas", version = "0.8.5", optional = true }
+nucleo = { workspace = true, optional = true }
+unicode-width = { workspace = true, optional = true }
 
 [features]
 default = []
@@ -52,8 +54,11 @@ canvas = [
 # Derives serde on the input/mode types. KeyChord embeds crossterm's KeyCode /
 # KeyModifiers, so we also turn on crossterm's own serde impls.
 serde = ["dep:serde", "crossterm/serde"]
-# Built-in modal dialog: content/result types plus a ratatui renderer.
-# Pulls in ratatui; the rest of the crate stays rendering-agnostic.
-dialog = ["dep:ratatui"]
+# Built-in ratatui overlays: the modal dialog (content/result types + renderer)
+# and the generic, scope-aware fuzzy picker. The picker drives a canvas text
+# input (scope autocompletion, inline suffixes), so this turns on `canvas`; it
+# also needs `nucleo` for fuzzy matching and `unicode-width` for column-aware
+# truncation in the renderer.
+tui = ["canvas", "dep:ratatui", "dep:nucleo", "dep:unicode-width"]
 
-full = ["canvas", "serde", "dialog", "command-line"]
+full = ["canvas", "serde", "tui", "command-line"]

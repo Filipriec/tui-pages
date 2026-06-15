@@ -1,4 +1,4 @@
-// Demonstrates the built-in dialog system (feature = "dialog").
+// Demonstrates the built-in dialog system (feature = "tui").
 //
 // The runtime's modal payload type `M` is `DialogData<Purpose>`, so the focus
 // manager stores the dialog content and tracks the active button. The handler

@@ -1,4 +1,4 @@
-//! Built-in modal dialog system (feature = `dialog`).
+//! Built-in modal dialog system (feature = `tui`).
 //!
 //! The crate's focus manager already tracks an open dialog overlay, the active
 //! button index, and button navigation. This module adds the missing pieces of
