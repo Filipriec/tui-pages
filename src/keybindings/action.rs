@@ -168,6 +168,30 @@ impl fmt::Display for NavigationAction {
     }
 }
 
+// Serde delegates to `Display`/`FromStr` so the metadata-backed names and the
+// alias-aware parser stay the single source of truth (a derive would invent a
+// second representation that rejects the `FromStr` aliases).
+#[cfg(feature = "serde")]
+impl serde::Serialize for NavigationAction {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(self.as_name())
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for NavigationAction {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let name = <String as serde::Deserialize>::deserialize(deserializer)?;
+        name.parse().map_err(serde::de::Error::custom)
+    }
+}
+
 pub const NAVIGATION_ACTION_INFOS: &[NavigationActionInfo] = &[
     NavigationActionInfo {
         action: NavigationAction::FocusNext,
@@ -307,6 +331,36 @@ mod tests {
             assert_eq!(action.as_name().parse::<NavigationAction>(), Ok(action));
             assert_eq!(action.to_string(), action.as_name());
         }
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn navigation_actions_serde_round_trips() {
+        #[derive(Debug, serde::Deserialize, serde::Serialize)]
+        struct Config {
+            action: NavigationAction,
+        }
+
+        assert_eq!(
+            toml::from_str::<Config>("action = \"focus_next\"")
+                .unwrap()
+                .action,
+            NavigationAction::FocusNext
+        );
+        // Serde routes through FromStr, so its aliases are honored too.
+        assert_eq!(
+            toml::from_str::<Config>("action = \"previous_buffer\"")
+                .unwrap()
+                .action,
+            NavigationAction::PrevBuffer
+        );
+        assert_eq!(
+            toml::to_string(&Config {
+                action: NavigationAction::Quit,
+            })
+            .unwrap(),
+            "action = \"quit\"\n"
+        );
     }
 
     #[test]

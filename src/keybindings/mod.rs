@@ -32,7 +32,7 @@ pub use builtin::{
     bind_helix_navigation_defaults, bind_vim_general_defaults, bind_vim_global_defaults,
     bind_vim_navigation_defaults, emacs_preset_toml, helix_preset_toml,
     try_standard_vim_action, vim_action_outcome, vim_preset_toml, BuiltinNavigationPreset,
-    VimAction,
+    ParseBuiltinNavigationPresetError, VimAction,
 };
 pub use config::{
     BindingNotice, BindingStore, KeybindingConfig, KeybindingConfigError, KeybindingInheritance,

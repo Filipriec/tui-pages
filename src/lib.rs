@@ -65,10 +65,10 @@ pub use keybindings::{
     bind_vim_navigation_defaults, emacs_preset_toml, helix_preset_toml, navigation_action_infos,
     navigation_action_outcome, remap_navigation_preset_toml, try_standard_navigation_action,
     try_standard_vim_action, vim_action_outcome, vim_preset_toml, BuiltinNavigationPreset,
-    BindingNotice, BindingStore, KeybindingConfig, KeybindingConfigError, KeybindingReport,
-    NavigationAction, NavigationActionInfo, NavigationConflictPolicy, NavigationPreset,
-    NavigationPresetBinding, NavigationPresetError, NavigationPresetIssue, NavigationPresetSection,
-    ParseNavigationActionError, VimAction,
+    ParseBuiltinNavigationPresetError, BindingNotice, BindingStore, KeybindingConfig,
+    KeybindingConfigError, KeybindingReport, NavigationAction, NavigationActionInfo,
+    NavigationConflictPolicy, NavigationPreset, NavigationPresetBinding, NavigationPresetError,
+    NavigationPresetIssue, NavigationPresetSection, ParseNavigationActionError, VimAction,
 };
 pub use navigation::{
     BufferState, NavigationCoordinator, NavigationEvent, NavigationResult, NavigationRouter,
@@ -105,7 +105,8 @@ pub mod prelude {
     pub use crate::{
         modes, parse_binding, try_parse_binding, ActionContext, ActionOutcome, ActionRegistry,
         BindableActionInfo, BindingNotice,
-        BindingStore, BuiltinNavigationPreset, FocusController, FocusIntent, FocusManager,
+        BindingStore, BuiltinNavigationPreset, ParseBuiltinNavigationPresetError,
+        FocusController, FocusIntent, FocusManager,
         FocusQuery, FocusTarget, FocusWrap, KeybindingConfig, KeybindingConfigError,
         KeybindingReport, KeyChord, ModeId, NavigationAction, NavigationActionInfo,
         NavigationConflictPolicy, NavigationPreset, NavigationPresetError, NavigationPresetIssue,

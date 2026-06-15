@@ -1,5 +1,8 @@
 //! Built-in editor-style presets backed by TOML data files.
 
+use std::fmt;
+use std::str::FromStr;
+
 use crate::input::KeyMap;
 use crate::runtime::{modes, TuiPagesBuilder};
 
@@ -12,19 +15,50 @@ use super::preset::{builtin_preset, NavigationPreset};
 pub type VimAction = NavigationAction;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum BuiltinNavigationPreset {
     Vim,
     Emacs,
     Helix,
 }
 
-impl BuiltinNavigationPreset {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParseBuiltinNavigationPresetError {
+    name: String,
+}
+
+impl ParseBuiltinNavigationPresetError {
     pub fn name(&self) -> &str {
+        &self.name
+    }
+}
+
+impl fmt::Display for ParseBuiltinNavigationPresetError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "unknown navigation preset {:?}", self.name)
+    }
+}
+
+impl std::error::Error for ParseBuiltinNavigationPresetError {}
+
+impl BuiltinNavigationPreset {
+    fn as_name(&self) -> &'static str {
         match self {
             BuiltinNavigationPreset::Vim => "vim",
             BuiltinNavigationPreset::Emacs => "emacs",
             BuiltinNavigationPreset::Helix => "helix",
         }
+    }
+
+    #[deprecated(
+        since = "0.8.5",
+        note = "use Display/to_string() or parse::<BuiltinNavigationPreset>(); this compatibility shim will be removed in 1.0.0"
+    )]
+    pub fn name(&self) -> &'static str {
+        panic!(
+            "BuiltinNavigationPreset::name() is deprecated; use Display/to_string() or parse::<BuiltinNavigationPreset>() instead. It will be removed in 1.0.0."
+        )
     }
 
     pub fn toml(&self) -> &str {
@@ -36,7 +70,28 @@ impl BuiltinNavigationPreset {
     }
 
     pub fn preset(self) -> NavigationPreset {
-        builtin_preset(self.name(), self.toml())
+        builtin_preset(self.as_name(), self.toml())
+    }
+}
+
+impl FromStr for BuiltinNavigationPreset {
+    type Err = ParseBuiltinNavigationPresetError;
+
+    fn from_str(name: &str) -> Result<Self, Self::Err> {
+        match name {
+            "vim" => Ok(BuiltinNavigationPreset::Vim),
+            "emacs" => Ok(BuiltinNavigationPreset::Emacs),
+            "helix" => Ok(BuiltinNavigationPreset::Helix),
+            _ => Err(ParseBuiltinNavigationPresetError {
+                name: name.to_string(),
+            }),
+        }
+    }
+}
+
+impl fmt::Display for BuiltinNavigationPreset {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_name())
     }
 }
 
@@ -218,6 +273,47 @@ mod tests {
         fn from(value: NavigationAction) -> Self {
             TestAction::Nav(value)
         }
+    }
+
+    #[test]
+    fn preset_names_round_trip_through_traits() {
+        for preset in [
+            BuiltinNavigationPreset::Vim,
+            BuiltinNavigationPreset::Emacs,
+            BuiltinNavigationPreset::Helix,
+        ] {
+            assert_eq!(
+                preset.to_string().parse::<BuiltinNavigationPreset>(),
+                Ok(preset)
+            );
+            assert_eq!(preset.to_string(), preset.as_name());
+
+            let parsed = NavigationPreset::from_toml(preset.toml()).unwrap();
+            assert_eq!(parsed.sections().len(), 3);
+        }
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn serde_uses_config_names() {
+        #[derive(Debug, serde::Deserialize, serde::Serialize)]
+        struct Config {
+            preset: BuiltinNavigationPreset,
+        }
+
+        assert_eq!(
+            toml::from_str::<Config>("preset = \"helix\"")
+                .unwrap()
+                .preset,
+            BuiltinNavigationPreset::Helix
+        );
+        assert_eq!(
+            toml::to_string(&Config {
+                preset: BuiltinNavigationPreset::Emacs,
+            })
+            .unwrap(),
+            "preset = \"emacs\"\n"
+        );
     }
 
     #[test]
