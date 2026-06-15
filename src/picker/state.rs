@@ -1095,41 +1095,28 @@ impl<'a> ParsedQuery<'a> {
         };
 
         let typed = segment.text.as_str();
-        let candidate_lower = candidate.to_lowercase();
-        let typed_lower = typed.to_lowercase();
-        if !candidate_lower.starts_with(&typed_lower) || candidate.len() <= typed.len() {
-            if typed.is_empty() {
-                return match &segment.kind {
-                    QuerySegmentKind::Scoped {
-                        scope_token_char_end,
-                        ..
-                    } if *scope_token_char_end == self.query_char_len => {
-                        Some(format!(" {}", candidate))
-                    }
-                    _ if candidate.is_empty() => None,
-                    _ => Some(candidate.to_string()),
-                };
-            }
-
-            return None;
+        if typed.is_empty() {
+            return match &segment.kind {
+                QuerySegmentKind::Scoped {
+                    scope_token_char_end,
+                    ..
+                } if *scope_token_char_end == self.query_char_len => {
+                    Some(format!(" {}", candidate))
+                }
+                _ if candidate.is_empty() => None,
+                _ => Some(candidate.to_string()),
+            };
         }
 
-        let suffix = candidate[typed.len()..].to_string();
+        let Some(suffix_start) = case_insensitive_prefix_boundary(candidate, typed) else {
+            return None;
+        };
+        let suffix = candidate[suffix_start..].to_string();
         if suffix.is_empty() {
             return None;
         }
 
-        if typed.is_empty() {
-            match &segment.kind {
-                QuerySegmentKind::Scoped {
-                    scope_token_char_end,
-                    ..
-                } if *scope_token_char_end == self.query_char_len => Some(format!(" {}", suffix)),
-                _ => Some(suffix),
-            }
-        } else {
-            Some(suffix)
-        }
+        Some(suffix)
     }
 
     fn trailing_active_segment(&self, cursor_chars: usize) -> Option<&QuerySegment<'a>> {
@@ -1378,6 +1365,28 @@ fn field_match_bonus(query: &str, value: &str) -> u32 {
     }
 }
 
+fn case_insensitive_prefix_boundary(candidate: &str, typed: &str) -> Option<usize> {
+    let typed_lower = typed.to_lowercase();
+
+    let mut candidate_prefix_lower = String::new();
+    for (byte_index, ch) in candidate.char_indices() {
+        candidate_prefix_lower.extend(ch.to_lowercase());
+        let next_boundary = byte_index + ch.len_utf8();
+
+        if candidate_prefix_lower.len() >= typed_lower.len() {
+            return candidate_prefix_lower
+                .starts_with(&typed_lower)
+                .then_some(next_boundary);
+        }
+
+        if !typed_lower.starts_with(&candidate_prefix_lower) {
+            return None;
+        }
+    }
+
+    None
+}
+
 fn tokenize_query(query: &str) -> Vec<QueryToken<'_>> {
     let mut tokens = Vec::new();
     let mut token_byte_start = None;
@@ -1517,6 +1526,16 @@ mod tests {
         picker.refresh_filter();
 
         assert_eq!(picker.input.suggestion_suffix(), Some("oice"));
+    }
+
+    #[test]
+    fn inline_suffix_uses_unicode_boundary_after_case_folded_prefix() {
+        let entries = vec![PickerEntry::new("İstanbul", vec![])];
+        let mut picker = PickerData::<()>::with_entries(entries);
+        picker.input.set_text("i");
+        picker.refresh_filter();
+
+        assert_eq!(picker.input.suggestion_suffix(), Some("stanbul"));
     }
 
     #[test]
