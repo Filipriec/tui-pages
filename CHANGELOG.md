@@ -8,13 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Built-in generic fuzzy picker overlay (feature `tui`) with `nucleo`-backed ranking, scope (`%token`) parsing and autocompletion, and custom preview rendering (`PickerData`, `PickerEntry`, `PickerScope`, `PickerFieldWeights`, `PickerTheme`)
+- `WorkspaceState<V, S>` and `PaneSession<V, S>` — panes now carry typed user-state `S` alongside their view
+- `PaneId` and `PaneSplit` (Vertical / Horizontal) for workspace layout management
+- `CommandRegistry::bind_aliases()` and `TuiPagesBuilder::command()` for binding multiple command-line aliases to a single action
 - Unified `[keymap.*]` TOML-based keybinding configuration via `KeybindingConfig`
 - `ActionRegistry` for mapping config action names to application action types
-- Binding introspection API (`BindingCatalog`, `BindingInfo`, `BindingConflict`, `BindingSource`, `CanvasRoutingPrecedence`) for help screens and conflict diagnostics
+- Binding introspection API (`BindingCatalog`, `BindingInfo`, `BindingConflict`, `BindingSource`, `BindingLayer`) for help screens and conflict diagnostics
+- `CanvasRoutingPrecedence` for tuning input dispatch between global keymap and canvas editing
+- `BindingAnalysis` and `BindableActionInfo` for programmatic keybinding analysis
 - `InputLayerContext` (Command / Text) for smarter routing between global keymap and canvas editing layer
 - `CanvasKeybindingProfileState` with generation tracking for shared canvas keybinding profiles
 - `install_keybindings()` and `is_sequence_pending()` methods on canvas host traits
-- `analyze_canvas_overlaps()` and related public API for canvas binding overlap analysis
+- `analyze_canvas_overlaps()`, `canvas_action_name()`, `canvas_bindable_actions()`, `canvas_default_binding_catalog()`, and `canvas_suggestion_default_bindings()` for canvas binding overlap analysis and introspection
 - Runtime rebind (`rebind_keymap`) and reset (`reset_keybindings_to_defaults`) on `TuiPages`
 - `export_keybindings_toml()` for serializing the current keybinding state to TOML
 - `keybindings_config` example demonstrating TOML-based keybinding configuration
@@ -22,12 +28,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Canvas integration tests (`tests/canvas_integration.rs`)
 
 ### Changed
+- **Feature rename**: `dialog` feature replaced by `tui` feature, which bundles the modal dialog, the fuzzy picker, and the canvas + nucleo + unicode-width dependencies
+- tui-pages migrated to new typesafe API of `tui-canvas`, eliminating raw string action names from canvas dispatch
 - tui-pages runtime now owns input pipelines and canvas keybinding profiles internally
 - Canvas `KeyHookKind` variants now use `CanvasKeybindingProfileHandle` instead of raw preset enums
 - `CanvasTextInputHost` trait expanded with `has_keybindings`, `install_keybindings`, `is_sequence_pending`, and `accept_suggestion_suffix`
 - `CanvasTextInputHost::input_key` return type changed from `CanvasTextWidgetOutcome` to `CanvasKeyDispatchOutcome`
 - Canvas public API surface expanded with analysis and introspection re-exports
 - `NavigationPreset::from_toml` now uses internal lenient parsing path
+- Canvas dependency bumped to `0.8.5`
+- Crate version bumped to `0.8.5`
+- Deprecated API methods no longer panic — they emit warnings instead
 
 ### Fixed
 - Pipeline issues with input sequence tracker resets
