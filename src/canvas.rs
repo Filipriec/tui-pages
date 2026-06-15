@@ -12,39 +12,39 @@ use crate::input::{
     CanvasRoutingPrecedence, KeyChord, KeyMap,
 };
 use crate::runtime::{
-    modes, ActionContext, ActionOutcome, InputLayerContext, KeyHook, KeyHookKind, KeyHookOutcome,
-    KeyHookRouting, ModeId, PageSpec, TuiEffect, TuiPagesBuilder, TuiPagesStatus,
+    ActionContext, ActionOutcome, InputLayerContext, KeyHook, KeyHookKind, KeyHookOutcome,
+    KeyHookRouting, ModeId, PageSpec, TuiEffect, TuiPagesBuilder, TuiPagesStatus, modes,
 };
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
-use ratatui::{layout::Rect, Frame};
+use ratatui::{Frame, layout::Rect};
 
 // The `canvas` feature enables full canvas support — every surface below is
 // available unconditionally. We do not split canvas into sub-features.
 
 // --- Base surface ---
+pub use ::canvas::integration::focus_handoff::{
+    BoundaryExit, HostActionOutcome, execute_action_for_host, execute_action_for_host_with_options,
+};
 pub use ::canvas::{
     ActionResult, AppMode, CanvasAction, DataProvider, EditorState, TextFormEventOutcome,
     TextFormState,
 };
-pub use ::canvas::integration::focus_handoff::{
-    execute_action_for_host, execute_action_for_host_with_options, BoundaryExit, HostActionOutcome,
-};
 
 // --- Keymap-driven host handoff ---
 pub use ::canvas::integration::focus_handoff::{
-    boundary_from_key_outcome, handle_key_event_for_host, key_outcome_for_vertical_navigation,
-    map_key_event_outcome_for_host, HostKeyEventOutcome,
-};
-pub use ::canvas::{
-    default_builtin_action_bindings, default_emacs_action_bindings,
-    default_helix_action_bindings, default_vim_action_bindings, display_binding, preset,
-    BuiltinCanvasKeybindingPreset, CanvasActionBinding, CanvasActionKeyBinding,
-    CanvasKeyBindingEntry, CanvasKeyBindings, CanvasKeybindingConflictKind,
-    CanvasKeybindingProfile, KeyEventOutcome,
+    HostKeyEventOutcome, boundary_from_key_outcome, handle_key_event_for_host,
+    key_outcome_for_vertical_navigation, map_key_event_outcome_for_host,
 };
 pub use ::canvas::keybindings::{
-    try_parse_binding as try_parse_canvas_binding, CanvasKeyAction, CanvasKeybindingPresetError,
-    KeyStroke,
+    CanvasKeyAction, CanvasKeybindingPresetError, KeyStroke,
+    try_parse_binding as try_parse_canvas_binding,
+};
+pub use ::canvas::{
+    BuiltinCanvasKeybindingPreset, CanvasActionBinding, CanvasActionKeyBinding,
+    CanvasKeyBindingEntry, CanvasKeyBindings, CanvasKeybindingConflictKind,
+    CanvasKeybindingProfile, KeyEventOutcome, default_builtin_action_bindings,
+    default_emacs_action_bindings, default_helix_action_bindings, default_vim_action_bindings,
+    display_binding, preset,
 };
 
 // --- Cursor style ---
@@ -52,25 +52,25 @@ pub use ::canvas::CursorManager;
 
 // --- Suggestions ---
 pub use ::canvas::{
-    render_suggestions_dropdown, SuggestionItem, SuggestionQuery, SuggestionTrigger,
+    SuggestionItem, SuggestionQuery, SuggestionTrigger, render_suggestions_dropdown,
 };
 
 // --- Validation ---
+pub use ::canvas::validation::limits::{CountMode, LimitCheckResult};
 pub use ::canvas::{
     AppliedValidation, CharacterFilter, CharacterLimits, CustomFormatter, DefaultPositionMapper,
     DisplayMask, FormattingResult, PatternFilters, PositionFilter, PositionMapper, PositionRange,
     ValidationConfig, ValidationConfigBuilder, ValidationError, ValidationResult, ValidationRule,
     ValidationSet, ValidationSettings, ValidationState, ValidationSummary,
 };
-pub use ::canvas::validation::limits::{CountMode, LimitCheckResult};
 
 // --- Computed fields ---
 pub use ::canvas::{ComputedContext, ComputedProvider, ComputedState};
 
 // --- GUI: renderers, themes, display options ---
 pub use ::canvas::{
-    render_canvas, render_canvas_default, render_canvas_with_options, CanvasDisplayOptions,
-    CanvasTheme, DefaultCanvasTheme, OverflowMode,
+    CanvasDisplayOptions, CanvasTheme, DefaultCanvasTheme, OverflowMode, render_canvas,
+    render_canvas_default, render_canvas_with_options,
 };
 
 // Crossterm terminal-input session helpers (raw mode, bracketed paste, mouse
@@ -81,26 +81,23 @@ pub use ::canvas::integration::crossterm_input::{
 };
 
 // --- Text area ---
-pub use ::canvas::{
-    TextArea, TextAreaDataProvider, TextAreaProvider, TextAreaState,
-};
 pub use ::canvas::textarea::{
     TextAreaCommandLineState, TextAreaEventOutcome, TextAreaLineNumberMode, TextAreaSearchMatch,
     TextOverflowMode,
 };
+pub use ::canvas::{TextArea, TextAreaDataProvider, TextAreaProvider, TextAreaState};
 
 // --- Command line ---
 pub use ::canvas::{
-    parse_command_args, parse_command_line, CommandLine, CommandLineCommand,
-    CommandLineCommandInvocation, CommandLineDispatchError, CommandLineEventOutcome,
-    CommandLineMode, CommandLineParseError, CommandLineParsedCommand, CommandLinePlacement,
-    CommandLineRegistry, CommandLineRegistrationError, CommandLineState, CommandLineSubmit,
+    CommandLine, CommandLineCommand, CommandLineCommandInvocation, CommandLineDispatchError,
+    CommandLineEventOutcome, CommandLineMode, CommandLineParseError, CommandLineParsedCommand,
+    CommandLinePlacement, CommandLineRegistrationError, CommandLineRegistry, CommandLineState,
+    CommandLineSubmit, parse_command_args, parse_command_line,
 };
 
 // --- Text input ---
 pub use ::canvas::{
-    TextInput, TextInputDataProvider, TextInputEventOutcome, TextInputProvider,
-    TextInputState,
+    TextInput, TextInputDataProvider, TextInputEventOutcome, TextInputProvider, TextInputState,
 };
 
 pub type FormEditor<D> = TextFormState<D>;
@@ -282,7 +279,10 @@ where
     }
 
     fn paste(&mut self, text: &str) -> bool {
-        matches!(TextAreaState::paste(self, text), TextAreaEventOutcome::Handled)
+        matches!(
+            TextAreaState::paste(self, text),
+            TextAreaEventOutcome::Handled
+        )
     }
 
     fn exit_edit_mode(&mut self) {
@@ -453,8 +453,7 @@ pub fn accepts_text_input(mode: AppMode) -> bool {
 }
 
 pub fn text_chord_to_canvas_action(chord: KeyChord) -> Option<CanvasAction> {
-    let is_plain_char =
-        chord.modifiers.is_empty() || chord.modifiers == KeyModifiers::SHIFT;
+    let is_plain_char = chord.modifiers.is_empty() || chord.modifiers == KeyModifiers::SHIFT;
     match chord.code {
         KeyCode::Char(c) if is_plain_char => Some(CanvasAction::InsertChar(c)),
         _ => None,
@@ -502,14 +501,9 @@ where
     let before_field = editor.current_field();
     let at_boundary = action_boundary(editor, &action).is_some();
     match execute_action_for_host(editor, action) {
-        HostActionOutcome::Applied(result) => {
-            CanvasDispatchOutcome::Applied(validation_aware_action_result(
-                editor,
-                before_field,
-                at_boundary,
-                result,
-            ))
-        }
+        HostActionOutcome::Applied(result) => CanvasDispatchOutcome::Applied(
+            validation_aware_action_result(editor, before_field, at_boundary, result),
+        ),
         HostActionOutcome::ExitCanvas(boundary) => {
             CanvasDispatchOutcome::Focus(focus_intent_for_boundary(boundary))
         }
@@ -672,8 +666,7 @@ where
             Some(BoundaryExit::Top)
         }
         CanvasAction::MoveDown | CanvasAction::NextField
-            if editor.current_field()
-                >= editor.data_provider().field_count().saturating_sub(1) =>
+            if editor.current_field() >= editor.data_provider().field_count().saturating_sub(1) =>
         {
             Some(BoundaryExit::Bottom)
         }
@@ -688,8 +681,7 @@ where
     match event.code {
         KeyCode::Up | KeyCode::BackTab if editor.current_field() == 0 => Some(BoundaryExit::Top),
         KeyCode::Down | KeyCode::Tab
-            if editor.current_field()
-                >= editor.data_provider().field_count().saturating_sub(1) =>
+            if editor.current_field() >= editor.data_provider().field_count().saturating_sub(1) =>
         {
             Some(BoundaryExit::Bottom)
         }
@@ -796,16 +788,10 @@ pub fn bind_default_keymaps<A>(
     normal: &mut KeyMap<A>,
     insert: &mut KeyMap<A>,
     select: &mut KeyMap<A>,
-)
-where
+) where
     A: From<CanvasAction>,
 {
-    bind_builtin_keymaps(
-        BuiltinCanvasKeybindingPreset::Vim,
-        normal,
-        insert,
-        select,
-    );
+    bind_builtin_keymaps(BuiltinCanvasKeybindingPreset::Vim, normal, insert, select);
 }
 
 pub fn bind_builtin_keymaps<A>(
@@ -813,8 +799,7 @@ pub fn bind_builtin_keymaps<A>(
     normal: &mut KeyMap<A>,
     insert: &mut KeyMap<A>,
     select: &mut KeyMap<A>,
-)
-where
+) where
     A: From<CanvasAction>,
 {
     bind_builtin_defaults_for_mode(preset, normal, AppMode::Nor);
@@ -851,8 +836,7 @@ fn bind_builtin_defaults_for_mode<A>(
     preset: BuiltinCanvasKeybindingPreset,
     map: &mut KeyMap<A>,
     mode: AppMode,
-)
-where
+) where
     A: From<CanvasAction>,
 {
     for binding in default_builtin_action_bindings(preset)
@@ -921,9 +905,7 @@ fn hook_outcome<V, A, O, M>(
     })
 }
 
-fn hook_focus_outcome<V, A, O, M>(
-    intent: FocusIntent<O, M>,
-) -> Option<KeyHookOutcome<V, A, O, M>> {
+fn hook_focus_outcome<V, A, O, M>(intent: FocusIntent<O, M>) -> Option<KeyHookOutcome<V, A, O, M>> {
     hook_outcome(
         TuiPagesStatus::ActionHandled,
         ActionOutcome::effect(TuiEffect::Focus(intent)),
@@ -947,7 +929,10 @@ fn refresh_textinput_suggestion_suffix<S>(state: &mut S, focus_index: usize)
 where
     S: CanvasWidgetState,
 {
-    let Some(text) = state.canvas_textinput(focus_index).map(|input| input.text()) else {
+    let Some(text) = state
+        .canvas_textinput(focus_index)
+        .map(|input| input.text())
+    else {
         return;
     };
     let suffix = state.canvas_textinput_suggestion_suffix(focus_index, &text);
@@ -1157,8 +1142,10 @@ where
                 };
             }
 
-            if matches!((key.code, key.modifiers), (KeyCode::Char('g'), KeyModifiers::CONTROL))
-                && key.kind == KeyEventKind::Press
+            if matches!(
+                (key.code, key.modifiers),
+                (KeyCode::Char('g'), KeyModifiers::CONTROL)
+            ) && key.kind == KeyEventKind::Press
             {
                 if let Some(entered) = state.canvas_textarea_entered(*focus_index) {
                     *entered = false;
@@ -1184,9 +1171,7 @@ where
                 TextAreaEventOutcome::Handled if pending => {
                     hook_pending_outcome(TuiPagesStatus::Waiting(Vec::new()))
                 }
-                TextAreaEventOutcome::Handled => {
-                    hook_status_outcome(TuiPagesStatus::TextHandled)
-                }
+                TextAreaEventOutcome::Handled => hook_status_outcome(TuiPagesStatus::TextHandled),
                 TextAreaEventOutcome::Ignored => None,
             }
         }
@@ -1223,7 +1208,10 @@ where
             }
 
             // Ctrl+C is never owned by the input — let the global keymap quit.
-            if matches!((key.code, key.modifiers), (KeyCode::Char('c'), KeyModifiers::CONTROL)) {
+            if matches!(
+                (key.code, key.modifiers),
+                (KeyCode::Char('c'), KeyModifiers::CONTROL)
+            ) {
                 return None;
             }
 
@@ -1250,9 +1238,13 @@ where
             // Tab accepts the inline ghost suffix when one is present; otherwise
             // it falls through to the form engine, which treats it as field
             // navigation and exits the single-row input.
-            if matches!((key.code, key.modifiers), (KeyCode::Tab, KeyModifiers::NONE))
-                && key.kind == KeyEventKind::Press
-                && state.canvas_textinput(*focus_index)?.accept_suggestion_suffix()
+            if matches!(
+                (key.code, key.modifiers),
+                (KeyCode::Tab, KeyModifiers::NONE)
+            ) && key.kind == KeyEventKind::Press
+                && state
+                    .canvas_textinput(*focus_index)?
+                    .accept_suggestion_suffix()
             {
                 refresh_textinput_suggestion_suffix(state, *focus_index);
                 return hook_status_outcome(TuiPagesStatus::TextHandled);
@@ -1496,8 +1488,7 @@ fn bind_key_with_modifiers<A>(
     code: KeyCode,
     modifiers: KeyModifiers,
     action: CanvasAction,
-)
-where
+) where
     A: From<CanvasAction>,
 {
     map.bind(vec![KeyChord::new(code, modifiers)], A::from(action));
@@ -1628,9 +1619,7 @@ fn key_strokes_to_chords(sequence: &[KeyStroke]) -> Vec<KeyChord> {
 ///
 /// The suggestion-dropdown defaults installed by [`canvas_keybindings`] are
 /// reported separately — see [`canvas_suggestion_default_bindings`].
-pub fn canvas_default_binding_catalog<A>(
-    preset: BuiltinCanvasKeybindingPreset,
-) -> BindingCatalog<A>
+pub fn canvas_default_binding_catalog<A>(preset: BuiltinCanvasKeybindingPreset) -> BindingCatalog<A>
 where
     A: From<CanvasAction>,
 {
@@ -1757,9 +1746,11 @@ mod report_tests {
     #[test]
     fn bindable_actions_have_names() {
         let actions: Vec<BindableActionInfo<AppAction>> = canvas_bindable_actions();
-        assert!(actions
-            .iter()
-            .any(|a| a.name == "suggestion_down" && a.modes == CANVAS_SUGGESTION_MODES));
+        assert!(
+            actions
+                .iter()
+                .any(|a| a.name == "suggestion_down" && a.modes == CANVAS_SUGGESTION_MODES)
+        );
         assert!(actions.iter().all(|a| !a.name.is_empty()));
     }
 
@@ -1767,10 +1758,10 @@ mod report_tests {
     fn overlap_routing_depends_on_context() {
         let mut registry = InputRegistry::<AppAction>::empty();
         // Bind `u` in `nor` in the keymap; canvas vim also binds `u` -> undo.
-        registry
-            .map_mut("nor")
-            .bind(vec![KeyChord::new(KeyCode::Char('u'), KeyModifiers::empty())],
-                AppAction::Canvas(CanvasAction::Undo));
+        registry.map_mut("nor").bind(
+            vec![KeyChord::new(KeyCode::Char('u'), KeyModifiers::empty())],
+            AppAction::Canvas(CanvasAction::Undo),
+        );
         let keymap_catalog = BindingCatalog::from_registry(&registry, BindingSource::Config);
         let canvas_catalog: BindingCatalog<CanvasAction> =
             canvas_default_binding_catalog(BuiltinCanvasKeybindingPreset::Vim);

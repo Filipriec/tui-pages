@@ -13,8 +13,8 @@ use crate::canvas::{
     TextInputEventOutcome, TextInputState,
 };
 use nucleo::{
-    pattern::{CaseMatching, Normalization, Pattern},
     Config as NucleoConfig, Matcher, Utf32String,
+    pattern::{CaseMatching, Normalization, Pattern},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -346,11 +346,7 @@ impl DataProvider for PickerInputProvider {
     }
 
     fn field_value(&self, index: usize) -> &str {
-        if index == 0 {
-            &self.value
-        } else {
-            ""
-        }
+        if index == 0 { &self.value } else { "" }
     }
 
     fn set_field_value(&mut self, index: usize, value: String) {
@@ -409,7 +405,9 @@ impl DataProvider for PickerInputProvider {
         }
 
         let replacement = suggestion.value_to_store.as_str();
-        let (start, end) = query.replace_range.unwrap_or((0, self.value.chars().count()));
+        let (start, end) = query
+            .replace_range
+            .unwrap_or((0, self.value.chars().count()));
         let chars = self.value.chars().collect::<Vec<_>>();
         let start = start.min(chars.len());
         let end = end.min(chars.len()).max(start);
@@ -555,9 +553,7 @@ impl<M> PickerData<M> {
     }
 
     pub fn set_suggestion_scopes(&mut self, scopes: Option<Vec<PickerScope>>) {
-        self.input
-            .data_provider_mut()
-            .set_suggestion_scopes(scopes);
+        self.input.data_provider_mut().set_suggestion_scopes(scopes);
         self.input.check_suggestion_trigger();
     }
 
@@ -820,9 +816,7 @@ impl<M: Clone> Clone for PickerData<M> {
     fn clone(&self) -> Self {
         let mut input = TextInputState::<PickerInputProvider>::default();
         input.set_text(self.input.text());
-        input
-            .data_provider_mut()
-            .set_scopes(self.scopes.clone());
+        input.data_provider_mut().set_scopes(self.scopes.clone());
         input.enter_edit_mode();
         let mut picker = Self {
             title: self.title.clone(),
@@ -1079,9 +1073,10 @@ impl<'a> ParsedQuery<'a> {
         let Some(segment) = self.trailing_active_segment(cursor_chars) else {
             if cursor_chars == self.query_char_len
                 && self.ends_with_whitespace
-                && self.segments.iter().any(|segment| {
-                    matches!(segment.kind, QuerySegmentKind::Scoped { .. })
-                })
+                && self
+                    .segments
+                    .iter()
+                    .any(|segment| matches!(segment.kind, QuerySegmentKind::Scoped { .. }))
                 && !entry.label.is_empty()
             {
                 return Some(entry.label.clone());
@@ -1644,16 +1639,16 @@ mod tests {
 
     #[test]
     fn suppressed_scope_value_hides_inline_suffix() {
-        let entries = vec![PickerEntry::new("customer:1", vec![])
-            .with_fields(vec![PickerField::new("target", "customer_id")])];
+        let entries = vec![
+            PickerEntry::new("customer:1", vec![])
+                .with_fields(vec![PickerField::new("target", "customer_id")]),
+        ];
         let mut picker = PickerData::<()>::with_entries(entries);
-        picker.set_scopes(vec![PickerScope::new(
-            "target",
-            "Target",
-            vec!["target".to_string()],
-        )
-        .with_completion_key("target")
-        .with_suppressed_value_completion()]);
+        picker.set_scopes(vec![
+            PickerScope::new("target", "Target", vec!["target".to_string()])
+                .with_completion_key("target")
+                .with_suppressed_value_completion(),
+        ]);
 
         // Typing a value for the suppressed scope must not surface a suffix.
         picker.input.set_text("%target cust".to_string());

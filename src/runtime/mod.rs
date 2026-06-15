@@ -1,9 +1,9 @@
 use crate::command::{CommandHint, CommandRegistry, CommandResolver, CommandResponse};
 use crate::focus::{FocusController, FocusIntent, FocusManager, FocusTarget, FocusWrap};
-use crate::input::{parse_binding, InputHint, InputPipeline, InputRegistry, KeyChord, KeyMap};
+use crate::input::{InputHint, InputPipeline, InputRegistry, KeyChord, KeyMap, parse_binding};
 use crate::keybindings::{
-    BindingStore, KeybindingConfig, KeybindingConfigError, KeybindingInheritance,
-    KeybindingReport, NavigationAction,
+    BindingStore, KeybindingConfig, KeybindingConfigError, KeybindingInheritance, KeybindingReport,
+    NavigationAction,
 };
 use crate::navigation::{BufferState, PaneSplit};
 use crossterm::event::KeyEvent;
@@ -715,20 +715,20 @@ where
         A: Clone + PartialEq,
     {
         let mode = mode.into();
-        let sequence = crate::input::try_parse_binding(sequence)
-            .map_err(KeybindingConfigError::KeyBinding)?;
-        let mut store = self
-            .keybinding_store
-            .clone()
-            .unwrap_or_else(|| {
-                let mut store = BindingStore::default();
-                store.builtin_keymap =
-                    crate::input::BindingCatalog::from_registry(&self.input.registry, crate::input::BindingSource::Builtin);
-                store
-            });
-        store.runtime_keymap.bindings.retain(|binding| {
-            !(binding.mode == mode && binding.action == action)
+        let sequence =
+            crate::input::try_parse_binding(sequence).map_err(KeybindingConfigError::KeyBinding)?;
+        let mut store = self.keybinding_store.clone().unwrap_or_else(|| {
+            let mut store = BindingStore::default();
+            store.builtin_keymap = crate::input::BindingCatalog::from_registry(
+                &self.input.registry,
+                crate::input::BindingSource::Builtin,
+            );
+            store
         });
+        store
+            .runtime_keymap
+            .bindings
+            .retain(|binding| !(binding.mode == mode && binding.action == action));
         store.runtime_keymap.push(crate::input::BindingInfo {
             layer: crate::input::BindingLayer::Keymap,
             mode,
@@ -754,11 +754,9 @@ where
                 store.runtime_canvas.bindings.clear();
                 if let Some(first) = store.builtin_canvas.bindings.first() {
                     let preset = match first.source {
-                        crate::input::BindingSource::CanvasBuiltin => self
-                            .canvas_keybinding_profile
-                            .borrow()
-                            .profile
-                            .preset(),
+                        crate::input::BindingSource::CanvasBuiltin => {
+                            self.canvas_keybinding_profile.borrow().profile.preset()
+                        }
                         _ => crate::canvas::BuiltinCanvasKeybindingPreset::Vim,
                     };
                     self.canvas_keybinding_profile
@@ -805,18 +803,17 @@ where
             profile.bump();
         }
 
-        let mut store = self
-            .keybinding_store
-            .clone()
-            .unwrap_or_else(|| {
-                let mut store = BindingStore::default();
-                store.builtin_keymap =
-                    crate::input::BindingCatalog::from_registry(&self.input.registry, crate::input::BindingSource::Builtin);
-                store.builtin_canvas = crate::canvas::canvas_default_binding_catalog(
-                    self.canvas_keybinding_profile.borrow().profile.preset(),
-                );
-                store
-            });
+        let mut store = self.keybinding_store.clone().unwrap_or_else(|| {
+            let mut store = BindingStore::default();
+            store.builtin_keymap = crate::input::BindingCatalog::from_registry(
+                &self.input.registry,
+                crate::input::BindingSource::Builtin,
+            );
+            store.builtin_canvas = crate::canvas::canvas_default_binding_catalog(
+                self.canvas_keybinding_profile.borrow().profile.preset(),
+            );
+            store
+        });
         store.runtime_canvas.bindings.retain(|binding| {
             !(binding.mode == crate::canvas::mode_for_app_mode(mode).as_str()
                 && crate::canvas::canvas_action_name(&binding.action) == Some(action_name))
@@ -872,10 +869,8 @@ where
             has_overlay: self.focus.has_overlay(),
         };
         let focused_hook = self.focused_hook_context(&ctx, state);
-        let focused_canvas_accepts_text = matches!(
-            focused_hook,
-            Some((_, InputLayerContext::Text))
-        );
+        let focused_canvas_accepts_text =
+            matches!(focused_hook, Some((_, InputLayerContext::Text)));
         let accepts_text_input = page_accepts_text_input || focused_canvas_accepts_text;
         let focus_accepts_mapped_text = focused_canvas_accepts_text
             || (page_accepts_text_input
@@ -942,7 +937,10 @@ where
         // No layer claimed the key: it is plain text for the focused widget.
         let chord = text_chord.unwrap_or_else(|| KeyChord::from_event(&key));
         let quit_requested = self.dispatch_text(chord, state)?;
-        Ok(TuiPagesOutput::new(TuiPagesStatus::TextHandled, quit_requested))
+        Ok(TuiPagesOutput::new(
+            TuiPagesStatus::TextHandled,
+            quit_requested,
+        ))
     }
 
     fn focused_hook_context(
@@ -950,12 +948,9 @@ where
         ctx: &ActionContext<V, O>,
         state: &S,
     ) -> Option<(usize, InputLayerContext)> {
-        self.key_hooks
-            .iter()
-            .enumerate()
-            .find_map(|(index, hook)| {
-                (hook.context)(&hook.kind, ctx, state).map(|context| (index, context))
-            })
+        self.key_hooks.iter().enumerate().find_map(|(index, hook)| {
+            (hook.context)(&hook.kind, ctx, state).map(|context| (index, context))
+        })
     }
 
     fn layer_order(
@@ -1020,7 +1015,10 @@ where
                         if matches!(routing, KeyHookRouting::Pending) {
                             Ok(LayerResult::Pending(status))
                         } else {
-                            Ok(LayerResult::Handled(TuiPagesOutput::new(status, quit_requested)))
+                            Ok(LayerResult::Handled(TuiPagesOutput::new(
+                                status,
+                                quit_requested,
+                            )))
                         }
                     }
                 }
@@ -1298,10 +1296,7 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
     /// crate defaults to [`ActionRegistry::navigation`](crate::keybindings::ActionRegistry::navigation).
     /// Build one from `navigation_bindable_actions()` /
     /// `canvas_bindable_actions()` plus the app's own bindable actions.
-    pub fn action_registry(
-        mut self,
-        registry: crate::keybindings::ActionRegistry<A>,
-    ) -> Self {
+    pub fn action_registry(mut self, registry: crate::keybindings::ActionRegistry<A>) -> Self {
         self.action_registry = Some(registry);
         self
     }
@@ -1454,12 +1449,13 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
         source_mode: impl Into<ModeId>,
         source_action: A,
     ) -> Self {
-        self.keybinding_inheritances.push(KeybindingInheritance::new(
-            target_mode,
-            target_action,
-            source_mode,
-            source_action,
-        ));
+        self.keybinding_inheritances
+            .push(KeybindingInheritance::new(
+                target_mode,
+                target_action,
+                source_mode,
+                source_action,
+            ));
         self
     }
 
@@ -1604,21 +1600,29 @@ mod tests {
             .unwrap();
         assert!(report.notices.is_empty());
         let global = app.input.registry.maps.get("global").unwrap();
-        assert!(global
-            .bindings
-            .contains_key(&crate::input::try_parse_binding("ctrl+q").unwrap()));
-        assert!(!global
-            .bindings
-            .contains_key(&crate::input::try_parse_binding("ctrl+c").unwrap()));
+        assert!(
+            global
+                .bindings
+                .contains_key(&crate::input::try_parse_binding("ctrl+q").unwrap())
+        );
+        assert!(
+            !global
+                .bindings
+                .contains_key(&crate::input::try_parse_binding("ctrl+c").unwrap())
+        );
 
         app.reset_keybindings_to_defaults();
         let global = app.input.registry.maps.get("global").unwrap();
-        assert!(global
-            .bindings
-            .contains_key(&crate::input::try_parse_binding("ctrl+c").unwrap()));
-        assert!(!global
-            .bindings
-            .contains_key(&crate::input::try_parse_binding("ctrl+q").unwrap()));
+        assert!(
+            global
+                .bindings
+                .contains_key(&crate::input::try_parse_binding("ctrl+c").unwrap())
+        );
+        assert!(
+            !global
+                .bindings
+                .contains_key(&crate::input::try_parse_binding("ctrl+q").unwrap())
+        );
     }
 
     #[test]
@@ -1646,13 +1650,17 @@ mod tests {
             .build();
 
         let general = reloaded.input.registry.maps.get("general").unwrap();
-        assert!(general
-            .bindings
-            .contains_key(&crate::input::try_parse_binding("j").unwrap()));
+        assert!(
+            general
+                .bindings
+                .contains_key(&crate::input::try_parse_binding("j").unwrap())
+        );
         let global = reloaded.input.registry.maps.get("global").unwrap();
-        assert!(global
-            .bindings
-            .contains_key(&crate::input::try_parse_binding("ctrl+q").unwrap()));
+        assert!(
+            global
+                .bindings
+                .contains_key(&crate::input::try_parse_binding("ctrl+q").unwrap())
+        );
 
         // Re-exporting the reloaded state yields the identical document.
         assert_eq!(reloaded.export_keybindings_toml().unwrap(), exported);

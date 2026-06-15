@@ -7,13 +7,13 @@ mod response;
 mod sequence;
 
 pub use key_chord::KeyChord;
-pub use key_sequence::{parse_binding, parse_key, try_parse_binding, try_parse_key, ParseKeyError};
+pub use key_sequence::{ParseKeyError, parse_binding, parse_key, try_parse_binding, try_parse_key};
 pub use pipeline::InputPipeline;
 pub use registry::{InputRegistry, KeyMap};
 pub use report::{
-    analyze_keymap_bindings, navigation_bindable_actions, BindableActionInfo, BindingAnalysis,
-    BindingCatalog, BindingConflict, BindingInfo, BindingLayer, BindingSource,
-    CanvasRoutingPrecedence,
+    BindableActionInfo, BindingAnalysis, BindingCatalog, BindingConflict, BindingInfo,
+    BindingLayer, BindingSource, CanvasRoutingPrecedence, analyze_keymap_bindings,
+    navigation_bindable_actions,
 };
 pub use response::{InputHint, PipelineResponse};
 pub use sequence::ChordSequenceTracker;

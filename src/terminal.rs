@@ -23,7 +23,7 @@ use std::io;
 use crossterm::{
     event::{DisableBracketedPaste, EnableBracketedPaste},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 
 /// Enable raw mode, switch `stderr` to the alternate screen, and turn on

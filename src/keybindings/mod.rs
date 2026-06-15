@@ -22,24 +22,24 @@ pub use action_registry::ActionRegistry;
 pub(crate) use config::export_to_toml;
 
 pub use action::{
-    navigation_action_infos, navigation_action_outcome, try_standard_navigation_action,
-    NavigationAction, NavigationActionInfo, ParseNavigationActionError,
+    NavigationAction, NavigationActionInfo, ParseNavigationActionError, navigation_action_infos,
+    navigation_action_outcome, try_standard_navigation_action,
 };
 pub use builtin::{
-    bind_builtin_general_defaults, bind_builtin_global_defaults,
-    bind_builtin_navigation_defaults, bind_emacs_general_defaults, bind_emacs_global_defaults,
-    bind_emacs_navigation_defaults, bind_helix_general_defaults, bind_helix_global_defaults,
-    bind_helix_navigation_defaults, bind_vim_general_defaults, bind_vim_global_defaults,
-    bind_vim_navigation_defaults, emacs_preset_toml, helix_preset_toml,
-    try_standard_vim_action, vim_action_outcome, vim_preset_toml, BuiltinNavigationPreset,
-    ParseBuiltinNavigationPresetError, VimAction,
+    BuiltinNavigationPreset, ParseBuiltinNavigationPresetError, VimAction,
+    bind_builtin_general_defaults, bind_builtin_global_defaults, bind_builtin_navigation_defaults,
+    bind_emacs_general_defaults, bind_emacs_global_defaults, bind_emacs_navigation_defaults,
+    bind_helix_general_defaults, bind_helix_global_defaults, bind_helix_navigation_defaults,
+    bind_vim_general_defaults, bind_vim_global_defaults, bind_vim_navigation_defaults,
+    emacs_preset_toml, helix_preset_toml, try_standard_vim_action, vim_action_outcome,
+    vim_preset_toml,
 };
 pub use config::{
     BindingNotice, BindingStore, KeybindingConfig, KeybindingConfigError, KeybindingInheritance,
     KeybindingReport,
 };
 pub use preset::{
-    apply_navigation_preset_toml, remap_navigation_preset_toml, NavigationPreset,
-    NavigationConflictPolicy, NavigationPresetBinding, NavigationPresetError,
-    NavigationPresetIssue, NavigationPresetSection,
+    NavigationConflictPolicy, NavigationPreset, NavigationPresetBinding, NavigationPresetError,
+    NavigationPresetIssue, NavigationPresetSection, apply_navigation_preset_toml,
+    remap_navigation_preset_toml,
 };

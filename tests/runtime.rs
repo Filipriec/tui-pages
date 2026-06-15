@@ -1,7 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use tui_pages::{
-    modes, navigation_action_outcome, ActionContext, ActionOutcome, FocusIntent, FocusTarget,
-    KeyChord, NavigationAction, PageSpec, TuiActionHandler, TuiEffect, TuiPages, TuiPagesStatus,
+    ActionContext, ActionOutcome, FocusIntent, FocusTarget, KeyChord, NavigationAction, PageSpec,
+    TuiActionHandler, TuiEffect, TuiPages, TuiPagesStatus, modes, navigation_action_outcome,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -92,7 +92,10 @@ next_buffer = ["n"]
 
     let output = tui.handle_key(key(KeyCode::Char('n')), &mut state).unwrap();
     assert_eq!(output.status, TuiPagesStatus::ActionHandled);
-    assert_eq!(state.handled, vec![Action::Nav(NavigationAction::NextBuffer)]);
+    assert_eq!(
+        state.handled,
+        vec![Action::Nav(NavigationAction::NextBuffer)]
+    );
 }
 
 fn key(code: KeyCode) -> KeyEvent {

@@ -4,12 +4,10 @@ use std::fmt;
 use std::str::FromStr;
 
 use crate::input::KeyMap;
-use crate::runtime::{modes, TuiPagesBuilder};
+use crate::runtime::{TuiPagesBuilder, modes};
 
-use super::action::{
-    navigation_action_outcome, try_standard_navigation_action, NavigationAction,
-};
-use super::preset::{builtin_preset, NavigationPreset};
+use super::action::{NavigationAction, navigation_action_outcome, try_standard_navigation_action};
+use super::preset::{NavigationPreset, builtin_preset};
 
 /// Alias for [`NavigationAction`] when using the Vim preset.
 pub type VimAction = NavigationAction;
@@ -95,7 +93,9 @@ impl fmt::Display for BuiltinNavigationPreset {
     }
 }
 
-pub fn try_standard_vim_action<A, V, O, M>(action: &A) -> Option<crate::runtime::ActionOutcome<V, O, M>>
+pub fn try_standard_vim_action<A, V, O, M>(
+    action: &A,
+) -> Option<crate::runtime::ActionOutcome<V, O, M>>
 where
     A: PartialEq + From<VimAction>,
 {
@@ -132,14 +132,14 @@ where
     preset.preset().bind_section_to_map("global", map).unwrap();
 }
 
-pub fn bind_builtin_navigation_defaults<A>(
-    preset: BuiltinNavigationPreset,
-    map: &mut KeyMap<A>,
-)
+pub fn bind_builtin_navigation_defaults<A>(preset: BuiltinNavigationPreset, map: &mut KeyMap<A>)
 where
     A: From<NavigationAction>,
 {
-    preset.preset().bind_section_to_map("navigation", map).unwrap();
+    preset
+        .preset()
+        .bind_section_to_map("navigation", map)
+        .unwrap();
 }
 
 pub fn bind_vim_general_defaults<A>(map: &mut KeyMap<A>)
@@ -210,14 +210,8 @@ where
     A: From<NavigationAction>,
 {
     pub fn builtin_navigation_defaults(mut self, preset: BuiltinNavigationPreset) -> Self {
-        bind_builtin_general_defaults(
-            preset,
-            self.input_registry.map_mut(modes::GENERAL.as_str()),
-        );
-        bind_builtin_global_defaults(
-            preset,
-            self.input_registry.map_mut(modes::GLOBAL.as_str()),
-        );
+        bind_builtin_general_defaults(preset, self.input_registry.map_mut(modes::GENERAL.as_str()));
+        bind_builtin_global_defaults(preset, self.input_registry.map_mut(modes::GLOBAL.as_str()));
         self
     }
 
@@ -325,7 +319,9 @@ mod tests {
 
         let j = KeyEvent::new(KeyCode::Char('j'), KeyModifiers::empty());
         match pipeline.process(j, &[modes::GENERAL], false) {
-            crate::input::PipelineResponse::Execute(TestAction::Nav(NavigationAction::FocusNext)) => {}
+            crate::input::PipelineResponse::Execute(TestAction::Nav(
+                NavigationAction::FocusNext,
+            )) => {}
             other => panic!("expected FocusNext, got {other:?}"),
         }
 
@@ -345,7 +341,9 @@ mod tests {
 
         let ctrl_n = KeyEvent::new(KeyCode::Char('n'), KeyModifiers::CONTROL);
         match pipeline.process(ctrl_n, &[modes::GENERAL], false) {
-            crate::input::PipelineResponse::Execute(TestAction::Nav(NavigationAction::FocusNext)) => {}
+            crate::input::PipelineResponse::Execute(TestAction::Nav(
+                NavigationAction::FocusNext,
+            )) => {}
             other => panic!("expected FocusNext, got {other:?}"),
         }
 
@@ -367,7 +365,9 @@ mod tests {
 
         let j = KeyEvent::new(KeyCode::Char('j'), KeyModifiers::empty());
         match pipeline.process(j, &[modes::GENERAL], false) {
-            crate::input::PipelineResponse::Execute(TestAction::Nav(NavigationAction::FocusNext)) => {}
+            crate::input::PipelineResponse::Execute(TestAction::Nav(
+                NavigationAction::FocusNext,
+            )) => {}
             other => panic!("expected FocusNext, got {other:?}"),
         }
 
@@ -375,7 +375,9 @@ mod tests {
         let _ = pipeline.process(g, &[modes::GENERAL], false);
         let n = KeyEvent::new(KeyCode::Char('n'), KeyModifiers::empty());
         match pipeline.process(n, &[modes::GENERAL], false) {
-            crate::input::PipelineResponse::Execute(TestAction::Nav(NavigationAction::NextBuffer)) => {}
+            crate::input::PipelineResponse::Execute(TestAction::Nav(
+                NavigationAction::NextBuffer,
+            )) => {}
             other => panic!("expected NextBuffer for g n, got {other:?}"),
         }
     }

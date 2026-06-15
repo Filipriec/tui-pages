@@ -24,22 +24,19 @@ pub mod runtime;
 pub mod terminal;
 
 #[cfg(feature = "tui")]
-pub use dialog::{render_dialog, DialogData, DialogKey, DialogResult, DialogTheme};
+pub use dialog::{DialogData, DialogKey, DialogResult, DialogTheme, render_dialog};
 
 #[cfg(feature = "tui")]
 pub use picker::{
-    centered_picker_area, render_picker, render_picker_with_custom_preview, PickerData,
-    PickerEntry, PickerField, PickerFieldWeights, PickerHead, PickerHeadColumn, PickerLayout,
-    PickerScope, PickerTheme,
+    PickerData, PickerEntry, PickerField, PickerFieldWeights, PickerHead, PickerHeadColumn,
+    PickerLayout, PickerScope, PickerTheme, centered_picker_area, render_picker,
+    render_picker_with_custom_preview,
 };
 
 #[cfg(feature = "canvas")]
 pub use crate::canvas::{
-    analyze_canvas_overlaps, canvas_action_name, canvas_bindable_actions,
-    canvas_default_binding_catalog, canvas_suggestion_default_bindings,
-};
-#[cfg(feature = "canvas")]
-pub use crate::canvas::{
+    BoundaryExit as CanvasBoundaryExit, CanvasAction, CanvasDispatchOutcome,
+    CanvasKeyDispatchOutcome, CanvasTextWidgetOutcome,
     accepts_text_input as canvas_accepts_text_input, dispatch_action as dispatch_canvas_action,
     dispatch_key_event as dispatch_canvas_key_event,
     dispatch_text_area_key as dispatch_canvas_text_area_key,
@@ -50,8 +47,11 @@ pub use crate::canvas::{
     render_canvas_with_suggestions_default_options, render_canvas_with_suggestions_with_options,
     text_chord_to_action as canvas_text_chord_to_action, text_chord_to_canvas_action,
     update_cursor_style_for_editor, update_cursor_style_for_mode,
-    BoundaryExit as CanvasBoundaryExit, CanvasAction, CanvasDispatchOutcome,
-    CanvasKeyDispatchOutcome, CanvasTextWidgetOutcome,
+};
+#[cfg(feature = "canvas")]
+pub use crate::canvas::{
+    analyze_canvas_overlaps, canvas_action_name, canvas_bindable_actions,
+    canvas_default_binding_catalog, canvas_suggestion_default_bindings,
 };
 pub use command::{CommandHint, CommandRegistry, CommandResolver, CommandResponse};
 pub use focus::{
@@ -59,25 +59,25 @@ pub use focus::{
     OverlayFocus, PageFocusBuilder,
 };
 pub use input::{
+    BindableActionInfo, BindingAnalysis, BindingCatalog, BindingConflict, BindingInfo,
+    BindingLayer, BindingSource, CanvasRoutingPrecedence, ChordSequenceTracker, InputHint,
+    InputPipeline, InputRegistry, KeyChord, KeyMap, ParseKeyError, PipelineResponse,
     analyze_keymap_bindings, navigation_bindable_actions, parse_binding, parse_key,
-    try_parse_binding, try_parse_key, BindableActionInfo, BindingAnalysis, BindingCatalog,
-    BindingConflict, BindingInfo, BindingLayer, BindingSource, CanvasRoutingPrecedence,
-    ChordSequenceTracker, InputHint, InputPipeline, InputRegistry, KeyChord, KeyMap, ParseKeyError,
-    PipelineResponse,
+    try_parse_binding, try_parse_key,
 };
 pub use keybindings::{
-    ActionRegistry, apply_navigation_preset_toml, bind_builtin_general_defaults,
-    bind_builtin_global_defaults,
-    bind_builtin_navigation_defaults, bind_emacs_general_defaults, bind_emacs_global_defaults,
-    bind_emacs_navigation_defaults, bind_helix_general_defaults, bind_helix_global_defaults,
-    bind_helix_navigation_defaults, bind_vim_general_defaults, bind_vim_global_defaults,
-    bind_vim_navigation_defaults, emacs_preset_toml, helix_preset_toml, navigation_action_infos,
-    navigation_action_outcome, remap_navigation_preset_toml, try_standard_navigation_action,
-    try_standard_vim_action, vim_action_outcome, vim_preset_toml, BuiltinNavigationPreset,
-    ParseBuiltinNavigationPresetError, BindingNotice, BindingStore, KeybindingConfig,
+    ActionRegistry, BindingNotice, BindingStore, BuiltinNavigationPreset, KeybindingConfig,
     KeybindingConfigError, KeybindingReport, NavigationAction, NavigationActionInfo,
     NavigationConflictPolicy, NavigationPreset, NavigationPresetBinding, NavigationPresetError,
-    NavigationPresetIssue, NavigationPresetSection, ParseNavigationActionError, VimAction,
+    NavigationPresetIssue, NavigationPresetSection, ParseBuiltinNavigationPresetError,
+    ParseNavigationActionError, VimAction, apply_navigation_preset_toml,
+    bind_builtin_general_defaults, bind_builtin_global_defaults, bind_builtin_navigation_defaults,
+    bind_emacs_general_defaults, bind_emacs_global_defaults, bind_emacs_navigation_defaults,
+    bind_helix_general_defaults, bind_helix_global_defaults, bind_helix_navigation_defaults,
+    bind_vim_general_defaults, bind_vim_global_defaults, bind_vim_navigation_defaults,
+    emacs_preset_toml, helix_preset_toml, navigation_action_infos, navigation_action_outcome,
+    remap_navigation_preset_toml, try_standard_navigation_action, try_standard_vim_action,
+    vim_action_outcome, vim_preset_toml,
 };
 pub use navigation::{
     BufferState, NavigationCoordinator, NavigationEvent, NavigationResult, NavigationRouter,
@@ -86,11 +86,11 @@ pub use navigation::{
 #[cfg(feature = "command-line")]
 pub use runtime::CommandLineAreas;
 pub use runtime::{
-    modes, ActionContext, ActionOutcome, InputLayerContext, ModeId, PageFn, PageProvider, PageSpec,
+    ActionContext, ActionOutcome, InputLayerContext, ModeId, PageFn, PageProvider, PageSpec,
     TuiActionHandler, TuiApp, TuiEffect, TuiPages, TuiPagesBuilder, TuiPagesError, TuiPagesOutput,
-    TuiPagesResult, TuiPagesStatus,
+    TuiPagesResult, TuiPagesStatus, modes,
 };
-pub use terminal::{enter as enter_terminal, TerminalGuard};
+pub use terminal::{TerminalGuard, enter as enter_terminal};
 
 /// Everything a typical application needs in one glob import.
 ///
@@ -106,29 +106,28 @@ pub use terminal::{enter as enter_terminal, TerminalGuard};
 pub mod prelude {
     pub use crate::terminal;
     pub use crate::{
+        ActionContext, ActionOutcome, ActionRegistry, BindableActionInfo, BindingNotice,
+        BindingStore, BuiltinNavigationPreset, FocusController, FocusIntent, FocusManager,
+        FocusQuery, FocusTarget, FocusWrap, KeyChord, KeybindingConfig, KeybindingConfigError,
+        KeybindingReport, ModeId, NavigationAction, NavigationActionInfo, NavigationConflictPolicy,
+        NavigationPreset, NavigationPresetError, NavigationPresetIssue, PageFn, PageFocusBuilder,
+        PageProvider, PageSpec, ParseBuiltinNavigationPresetError, ParseKeyError, TerminalGuard,
+        TuiActionHandler, TuiApp, TuiEffect, TuiPages, TuiPagesOutput, TuiPagesStatus, VimAction,
+        modes, parse_binding, try_parse_binding,
+    };
+    pub use crate::{
         apply_navigation_preset_toml, emacs_preset_toml, helix_preset_toml,
         navigation_action_infos, navigation_action_outcome, remap_navigation_preset_toml,
         try_standard_navigation_action, try_standard_vim_action, vim_action_outcome,
         vim_preset_toml,
     };
-    pub use crate::{
-        modes, parse_binding, try_parse_binding, ActionContext, ActionOutcome, ActionRegistry,
-        BindableActionInfo, BindingNotice,
-        BindingStore, BuiltinNavigationPreset, ParseBuiltinNavigationPresetError,
-        FocusController, FocusIntent, FocusManager,
-        FocusQuery, FocusTarget, FocusWrap, KeybindingConfig, KeybindingConfigError,
-        KeybindingReport, KeyChord, ModeId, NavigationAction, NavigationActionInfo,
-        NavigationConflictPolicy, NavigationPreset, NavigationPresetError, NavigationPresetIssue,
-        PageFn, PageFocusBuilder, PageProvider, PageSpec, ParseKeyError, TerminalGuard,
-        TuiActionHandler, TuiApp, TuiEffect, TuiPages, TuiPagesOutput, TuiPagesStatus, VimAction,
-    };
 
     #[cfg(feature = "canvas")]
     pub use crate::canvas::{
+        CanvasAction, CanvasDispatchOutcome, CanvasKeyDispatchOutcome, CanvasTextWidgetOutcome,
         dispatch_action as dispatch_canvas_action, dispatch_key_event as dispatch_canvas_key_event,
         dispatch_text_area_key as dispatch_canvas_text_area_key,
-        dispatch_text_input_key as dispatch_canvas_text_input_key, CanvasAction,
-        CanvasDispatchOutcome, CanvasKeyDispatchOutcome, CanvasTextWidgetOutcome,
+        dispatch_text_input_key as dispatch_canvas_text_input_key,
     };
     #[cfg(feature = "tui")]
     pub use crate::dialog::{
@@ -139,8 +138,8 @@ pub mod prelude {
 
     #[cfg(feature = "tui")]
     pub use crate::picker::{
-        centered_picker_area, render_picker, render_picker_with_custom_preview, PickerData,
-        PickerEntry, PickerField, PickerFieldWeights, PickerHead, PickerHeadColumn, PickerLayout,
-        PickerScope, PickerTheme,
+        PickerData, PickerEntry, PickerField, PickerFieldWeights, PickerHead, PickerHeadColumn,
+        PickerLayout, PickerScope, PickerTheme, centered_picker_area, render_picker,
+        render_picker_with_custom_preview,
     };
 }

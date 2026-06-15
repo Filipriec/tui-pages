@@ -293,9 +293,7 @@ pub fn navigation_action_outcome<V, O, M>(action: NavigationAction) -> ActionOut
 }
 
 /// Dispatch when `action` encodes a [`NavigationAction`] via a one-to-one [`From`] impl.
-pub fn try_standard_navigation_action<A, V, O, M>(
-    action: &A,
-) -> Option<ActionOutcome<V, O, M>>
+pub fn try_standard_navigation_action<A, V, O, M>(action: &A) -> Option<ActionOutcome<V, O, M>>
 where
     A: PartialEq + From<NavigationAction>,
 {
@@ -376,10 +374,7 @@ mod tests {
         let action = TestAction::Nav(NavigationAction::FocusNext);
         let outcome: ActionOutcome<(), (), ()> =
             try_standard_navigation_action(&action).expect("nav action");
-        assert_eq!(
-            outcome.effects,
-            vec![TuiEffect::Focus(FocusIntent::Next)]
-        );
+        assert_eq!(outcome.effects, vec![TuiEffect::Focus(FocusIntent::Next)]);
         assert!(
             try_standard_navigation_action::<TestAction, (), (), ()>(&TestAction::Custom).is_none()
         );

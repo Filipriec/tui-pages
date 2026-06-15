@@ -32,6 +32,4 @@ pub use state::{
     PickerData, PickerEntry, PickerField, PickerFieldWeights, PickerHead, PickerHeadColumn,
     PickerHeadColumnBuilder, PickerInputProvider, PickerLayout, PickerScope,
 };
-pub use ui::{
-    centered_picker_area, render_picker, render_picker_with_custom_preview, PickerTheme,
-};
+pub use ui::{PickerTheme, centered_picker_area, render_picker, render_picker_with_custom_preview};

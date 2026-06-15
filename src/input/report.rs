@@ -7,8 +7,8 @@
 //! registry (or from canvas defaults), suitable for help screens, `:bindings`
 //! panels, and conflict diagnostics. None of this is on the hot input path.
 
-use crate::input::KeyChord;
 use crate::input::InputRegistry;
+use crate::input::KeyChord;
 
 #[cfg(feature = "canvas")]
 use crate::canvas::CanvasAction;
@@ -152,11 +152,7 @@ impl<A> BindingCatalog<A> {
             .collect()
     }
 
-    pub fn bindings_for_sequence(
-        &self,
-        mode: &str,
-        sequence: &[KeyChord],
-    ) -> Vec<&BindingInfo<A>> {
+    pub fn bindings_for_sequence(&self, mode: &str, sequence: &[KeyChord]) -> Vec<&BindingInfo<A>> {
         self.bindings
             .iter()
             .filter(|info| info.mode == mode && info.sequence == sequence)
@@ -262,9 +258,10 @@ where
         if info.layer != BindingLayer::Keymap {
             continue;
         }
-        if let Some((_, _, existing)) = seen.iter().find(|(mode, seq, _)| {
-            *mode == info.mode.as_str() && *seq == info.sequence.as_slice()
-        }) {
+        if let Some((_, _, existing)) = seen
+            .iter()
+            .find(|(mode, seq, _)| *mode == info.mode.as_str() && *seq == info.sequence.as_slice())
+        {
             if **existing != info.action {
                 conflicts.push(BindingConflict::SameModeDuplicate {
                     mode: info.mode.clone(),
@@ -332,7 +329,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::input::{try_parse_binding, InputRegistry, KeyMap};
+    use crate::input::{InputRegistry, KeyMap, try_parse_binding};
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum TestAction {
@@ -359,13 +356,20 @@ mod tests {
     fn catalog_records_layer_and_source() {
         let catalog = BindingCatalog::from_registry(&registry(), BindingSource::Config);
         assert_eq!(catalog.bindings.len(), 2);
-        assert!(catalog
-            .bindings
-            .iter()
-            .all(|b| b.layer == BindingLayer::Keymap && b.source == BindingSource::Config));
+        assert!(
+            catalog
+                .bindings
+                .iter()
+                .all(|b| b.layer == BindingLayer::Keymap && b.source == BindingSource::Config)
+        );
         assert_eq!(catalog.bindings_for_mode("general").len(), 1);
         assert_eq!(catalog.bindings_for_action(&TestAction::A).len(), 1);
-        assert_eq!(catalog.bindings_for_sequence("global", &seq("ctrl+a")).len(), 1);
+        assert_eq!(
+            catalog
+                .bindings_for_sequence("global", &seq("ctrl+a"))
+                .len(),
+            1
+        );
     }
 
     #[test]
@@ -403,10 +407,12 @@ mod tests {
 
         let catalog = BindingCatalog::from_registry(&reg, BindingSource::Builtin);
         let analysis = analyze_keymap_bindings(&catalog, &["general", "global"]);
-        assert!(!analysis
-            .conflicts
-            .iter()
-            .any(|c| matches!(c, BindingConflict::SameModeDuplicate { .. })));
+        assert!(
+            !analysis
+                .conflicts
+                .iter()
+                .any(|c| matches!(c, BindingConflict::SameModeDuplicate { .. }))
+        );
     }
 
     #[test]
@@ -428,9 +434,11 @@ mod tests {
             source: BindingSource::Config,
         });
         let analysis = analyze_keymap_bindings(&catalog, &["nor"]);
-        assert!(analysis
-            .conflicts
-            .iter()
-            .any(|c| matches!(c, BindingConflict::SameModeDuplicate { .. })));
+        assert!(
+            analysis
+                .conflicts
+                .iter()
+                .any(|c| matches!(c, BindingConflict::SameModeDuplicate { .. }))
+        );
     }
 }

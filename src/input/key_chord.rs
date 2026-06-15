@@ -23,10 +23,7 @@ impl KeyChord {
         if event.code == KeyCode::BackTab {
             modifiers -= KeyModifiers::SHIFT;
         }
-        Self {
-            code,
-            modifiers,
-        }
+        Self { code, modifiers }
     }
 
     pub fn display_string(&self) -> String {

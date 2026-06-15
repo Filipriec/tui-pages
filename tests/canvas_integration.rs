@@ -10,9 +10,9 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use tui_pages::{
-    canvas::{self, AppMode, DataProvider, FormEditor},
     ActionContext, ActionOutcome, CanvasAction, CanvasDispatchOutcome, FocusIntent, FocusTarget,
     PageFocusBuilder, PageSpec, TuiActionHandler, TuiEffect, TuiPages, TuiPagesStatus,
+    canvas::{self, AppMode, DataProvider, FormEditor},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -357,23 +357,27 @@ fn dispatch_key_event_maps_named_canvas_undo_redo_actions() {
 
     let undo: canvas::CanvasKeyDispatchOutcome<(), ()> =
         canvas::dispatch_key_event(&mut editor, key(KeyCode::Char('u')));
-    assert!(matches!(undo, canvas::CanvasKeyDispatchOutcome::Consumed(_)));
+    assert!(matches!(
+        undo,
+        canvas::CanvasKeyDispatchOutcome::Consumed(_)
+    ));
     assert_eq!(editor.data_provider().field_value(0), "");
 
     let redo: canvas::CanvasKeyDispatchOutcome<(), ()> = canvas::dispatch_key_event(
         &mut editor,
         KeyEvent::new(KeyCode::Char('r'), KeyModifiers::CONTROL),
     );
-    assert!(matches!(redo, canvas::CanvasKeyDispatchOutcome::Consumed(_)));
+    assert!(matches!(
+        redo,
+        canvas::CanvasKeyDispatchOutcome::Consumed(_)
+    ));
     assert_eq!(editor.data_provider().field_value(0), "a");
 }
 
 #[test]
 fn boundary_helper_maps_exits_to_intents() {
-    let fwd: FocusIntent =
-        canvas::focus_intent_for_boundary(canvas::BoundaryExit::Bottom);
-    let back: FocusIntent =
-        canvas::focus_intent_for_boundary(canvas::BoundaryExit::Top);
+    let fwd: FocusIntent = canvas::focus_intent_for_boundary(canvas::BoundaryExit::Bottom);
+    let back: FocusIntent = canvas::focus_intent_for_boundary(canvas::BoundaryExit::Top);
     assert_eq!(fwd, FocusIntent::ExitCanvasForward);
     assert_eq!(back, FocusIntent::ExitCanvasBackward);
 }
@@ -393,10 +397,7 @@ fn canvas_focus_coexists_with_buttons_sections_modal_and_internal_targets() {
     app.refresh_page(&state);
 
     assert_eq!(app.focus.current(), Some(FocusTarget::CanvasField(0)));
-    app.apply_effect(
-        TuiEffect::Focus(FocusIntent::ExitCanvasForward),
-        &state,
-    );
+    app.apply_effect(TuiEffect::Focus(FocusIntent::ExitCanvasForward), &state);
     assert_eq!(app.focus.current(), Some(FocusTarget::Button(0)));
     app.handle_key(key(KeyCode::Tab), &mut state).unwrap();
     assert_eq!(app.focus.current(), Some(FocusTarget::Section(7)));
@@ -431,9 +432,15 @@ fn canvas_focus_coexists_with_buttons_sections_modal_and_internal_targets() {
     app.apply_effect(TuiEffect::Navigate(View::Second), &state);
     app.apply_effect(TuiEffect::PreviousBuffer, &state);
     app.apply_effect(TuiEffect::NextBuffer, &state);
-    app.apply_effect(TuiEffect::SplitPane(tui_pages::PaneSplit::Horizontal), &state);
+    app.apply_effect(
+        TuiEffect::SplitPane(tui_pages::PaneSplit::Horizontal),
+        &state,
+    );
     app.apply_effect(TuiEffect::NextPane, &state);
-    assert!(matches!(app.focus.current(), Some(FocusTarget::CanvasField(_))));
+    assert!(matches!(
+        app.focus.current(),
+        Some(FocusTarget::CanvasField(_))
+    ));
 
     assert!(
         app.focus
@@ -585,12 +592,12 @@ fn validation_display_masks_and_character_filters_are_reachable() {
     let mask = canvas::DisplayMask::new("(###) ###-####", '#');
     let config = canvas::ValidationConfigBuilder::new()
         .with_display_mask(mask)
-        .with_pattern_filters(
-            canvas::PatternFilters::new().add_filter(canvas::PositionFilter::new(
+        .with_pattern_filters(canvas::PatternFilters::new().add_filter(
+            canvas::PositionFilter::new(
                 canvas::PositionRange::From(0),
                 canvas::CharacterFilter::Numeric,
-            )),
-        )
+            ),
+        ))
         .build();
     let mut editor = FormEditor::new(Provider::new(&[""]));
     editor.set_field_validation(0, config);
@@ -794,20 +801,14 @@ impl canvas::CanvasWidgetState for WidgetState {
         }
     }
 
-    fn canvas_form_editor(
-        &mut self,
-        id: usize,
-    ) -> Option<&mut dyn canvas::CanvasFormEditorHost> {
+    fn canvas_form_editor(&mut self, id: usize) -> Option<&mut dyn canvas::CanvasFormEditorHost> {
         match id {
             0 => Some(&mut self.editor),
             _ => None,
         }
     }
 
-    fn canvas_textarea_ref(
-        &self,
-        focus_index: usize,
-    ) -> Option<&dyn canvas::CanvasTextAreaHost> {
+    fn canvas_textarea_ref(&self, focus_index: usize) -> Option<&dyn canvas::CanvasTextAreaHost> {
         match focus_index {
             0 => Some(&self.textarea),
             _ => None,
@@ -838,10 +839,7 @@ impl canvas::CanvasWidgetState for WidgetState {
         }
     }
 
-    fn canvas_textinput_ref(
-        &self,
-        focus_index: usize,
-    ) -> Option<&dyn canvas::CanvasTextInputHost> {
+    fn canvas_textinput_ref(&self, focus_index: usize) -> Option<&dyn canvas::CanvasTextInputHost> {
         match focus_index {
             0 => Some(&self.textinput),
             _ => None,
@@ -1067,8 +1065,11 @@ fn canvas_textarea_widget_builder_owns_enter_edit_and_exit_flow() {
     )
     .unwrap();
     app.handle_key(key(KeyCode::Esc), &mut state).unwrap();
-    app.handle_key(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::CONTROL), &mut state)
-        .unwrap();
+    app.handle_key(
+        KeyEvent::new(KeyCode::Char('g'), KeyModifiers::CONTROL),
+        &mut state,
+    )
+    .unwrap();
 
     assert_eq!(state.textarea.text(), "A");
     assert!(!state.textarea_entered);
@@ -1316,7 +1317,7 @@ fn every_canvas_surface_is_reachable_through_tui_pages() {
 
 #[test]
 fn canvas_suggestions_renderer_honors_per_row_input_width_options() {
-    use ratatui::{backend::TestBackend, layout::Rect, Terminal};
+    use ratatui::{Terminal, backend::TestBackend, layout::Rect};
 
     fn row_width(row: usize, available: u16) -> u16 {
         match row {

@@ -2,11 +2,11 @@
 
 use crate::dialog::DialogData;
 use ratatui::{
+    Frame,
     layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
     style::{Color, Modifier, Style},
     text::Text,
     widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap},
-    Frame,
 };
 
 /// Colors used by [`render_dialog`]. `Default` uses terminal-neutral colors so

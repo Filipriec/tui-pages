@@ -1,13 +1,13 @@
 //! Ratatui renderer for [`PickerData`].
 
-use crate::canvas::{render_suggestions_dropdown, DefaultCanvasTheme, TextInput};
+use crate::canvas::{DefaultCanvasTheme, TextInput, render_suggestions_dropdown};
 use crate::picker::state::{PickerData, PickerEntry, PickerHead, PickerHeadColumn, PickerLayout};
 use ratatui::{
+    Frame,
     layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
     widgets::{Block, Borders, Clear, List, ListItem, ListState, Padding, Paragraph, Wrap},
-    Frame,
 };
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
@@ -317,12 +317,7 @@ fn render_results_list<M>(f: &mut Frame, area: Rect, theme: &PickerTheme, picker
 fn picker_head_spans(head: &PickerHead, widths: &[usize], style: Style) -> Vec<Span<'static>> {
     let mut spans = vec![Span::styled("  ".to_string(), style)];
     let header_style = style.add_modifier(Modifier::UNDERLINED);
-    for (index, (column, width)) in head
-        .columns
-        .iter()
-        .zip(widths.iter().copied())
-        .enumerate()
-    {
+    for (index, (column, width)) in head.columns.iter().zip(widths.iter().copied()).enumerate() {
         spans.push(Span::styled(
             truncate_right_with_ellipsis(&column.label, width),
             header_style,
@@ -349,12 +344,7 @@ fn picker_head_entry_spans(
     style: Style,
 ) -> Vec<Span<'static>> {
     let mut spans = vec![Span::styled(marker.to_string(), style)];
-    for (index, (column, width)) in head
-        .columns
-        .iter()
-        .zip(widths.iter().copied())
-        .enumerate()
-    {
+    for (index, (column, width)) in head.columns.iter().zip(widths.iter().copied()).enumerate() {
         spans.push(Span::styled(
             format_head_cell(entry_head_value(entry, column), width),
             style,

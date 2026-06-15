@@ -1,4 +1,4 @@
-use crate::input::{try_parse_binding, InputRegistry, KeyMap, ParseKeyError};
+use crate::input::{InputRegistry, KeyMap, ParseKeyError, try_parse_binding};
 use crate::runtime::{TuiPages, TuiPagesBuilder};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -29,9 +29,7 @@ pub struct NavigationPresetBinding {
 pub enum NavigationPresetError {
     Toml(toml::de::Error),
     Issues(Vec<NavigationPresetIssue>),
-    UnknownSection {
-        section: String,
-    },
+    UnknownSection { section: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -104,7 +102,9 @@ impl fmt::Display for NavigationPresetError {
 impl fmt::Display for NavigationPresetIssue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            NavigationPresetIssue::RootNotTable => write!(f, "keybinding preset must be a TOML table"),
+            NavigationPresetIssue::RootNotTable => {
+                write!(f, "keybinding preset must be a TOML table")
+            }
             NavigationPresetIssue::SectionNotTable { section } => {
                 write!(f, "keybinding section {section:?} must be a table")
             }
@@ -112,7 +112,10 @@ impl fmt::Display for NavigationPresetIssue {
                 write!(f, "keybinding section {section:?} has a non-string mode")
             }
             NavigationPresetIssue::UnknownAction { section, action } => {
-                write!(f, "unknown navigation action {action:?} in section {section:?}")
+                write!(
+                    f,
+                    "unknown navigation action {action:?} in section {section:?}"
+                )
             }
             NavigationPresetIssue::BindingsNotStringList { section, action } => {
                 write!(
@@ -121,7 +124,10 @@ impl fmt::Display for NavigationPresetIssue {
                 )
             }
             NavigationPresetIssue::EmptyBindings { section, action } => {
-                write!(f, "action {action:?} in section {section:?} has no bindings")
+                write!(
+                    f,
+                    "action {action:?} in section {section:?} has no bindings"
+                )
             }
             NavigationPresetIssue::InvalidBinding {
                 section,
@@ -218,15 +224,12 @@ impl NavigationPreset {
                 continue;
             };
             let mode = match section.get("mode") {
-                Some(value) => value
-                    .as_str()
-                    .map(ToString::to_string)
-                    .unwrap_or_else(|| {
-                        issues.push(NavigationPresetIssue::ModeNotString {
-                            section: section_name.clone(),
-                        });
-                        section_name.clone()
-                    }),
+                Some(value) => value.as_str().map(ToString::to_string).unwrap_or_else(|| {
+                    issues.push(NavigationPresetIssue::ModeNotString {
+                        section: section_name.clone(),
+                    });
+                    section_name.clone()
+                }),
                 None => section_name.clone(),
             };
 
@@ -555,10 +558,7 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
 where
     A: From<NavigationAction> + PartialEq,
 {
-    pub fn navigation_preset_toml(
-        mut self,
-        source: &str,
-    ) -> Result<Self, NavigationPresetError> {
+    pub fn navigation_preset_toml(mut self, source: &str) -> Result<Self, NavigationPresetError> {
         apply_navigation_preset_toml(&mut self.input_registry, source)?;
         Ok(self)
     }
@@ -697,7 +697,9 @@ quit = "ctrl+c"
 
         let j = KeyEvent::new(KeyCode::Char('j'), KeyModifiers::empty());
         match pipeline.process(j, &[modes::GENERAL], false) {
-            crate::input::PipelineResponse::Execute(TestAction::Nav(NavigationAction::FocusNext)) => {}
+            crate::input::PipelineResponse::Execute(TestAction::Nav(
+                NavigationAction::FocusNext,
+            )) => {}
             other => panic!("expected FocusNext, got {other:?}"),
         }
 
@@ -718,9 +720,11 @@ does_not_exist = ["j"]
         let NavigationPresetError::Issues(issues) = err else {
             panic!("expected validation issues");
         };
-        assert!(issues
-            .iter()
-            .any(|issue| matches!(issue, NavigationPresetIssue::UnknownAction { .. })));
+        assert!(
+            issues
+                .iter()
+                .any(|issue| matches!(issue, NavigationPresetIssue::UnknownAction { .. }))
+        );
     }
 
     #[test]
@@ -737,15 +741,21 @@ focus_prev = []
             panic!("expected validation issues");
         };
         assert_eq!(issues.len(), 3);
-        assert!(issues
-            .iter()
-            .any(|issue| matches!(issue, NavigationPresetIssue::UnknownAction { .. })));
-        assert!(issues
-            .iter()
-            .any(|issue| matches!(issue, NavigationPresetIssue::InvalidBinding { .. })));
-        assert!(issues
-            .iter()
-            .any(|issue| matches!(issue, NavigationPresetIssue::EmptyBindings { .. })));
+        assert!(
+            issues
+                .iter()
+                .any(|issue| matches!(issue, NavigationPresetIssue::UnknownAction { .. }))
+        );
+        assert!(
+            issues
+                .iter()
+                .any(|issue| matches!(issue, NavigationPresetIssue::InvalidBinding { .. }))
+        );
+        assert!(
+            issues
+                .iter()
+                .any(|issue| matches!(issue, NavigationPresetIssue::EmptyBindings { .. }))
+        );
     }
 
     #[test]
@@ -759,9 +769,11 @@ focus_prev = ["j"]
         let NavigationPresetError::Issues(issues) = err else {
             panic!("expected validation issues");
         };
-        assert!(issues
-            .iter()
-            .any(|issue| matches!(issue, NavigationPresetIssue::DuplicateBinding { .. })));
+        assert!(
+            issues
+                .iter()
+                .any(|issue| matches!(issue, NavigationPresetIssue::DuplicateBinding { .. }))
+        );
     }
 
     #[test]
@@ -775,17 +787,20 @@ focus_prev = ["backtab"]
         let NavigationPresetError::Issues(issues) = err else {
             panic!("expected validation issues");
         };
-        assert!(issues
-            .iter()
-            .any(|issue| matches!(issue, NavigationPresetIssue::DuplicateBinding { .. })));
+        assert!(
+            issues
+                .iter()
+                .any(|issue| matches!(issue, NavigationPresetIssue::DuplicateBinding { .. }))
+        );
     }
 
     #[test]
     fn toml_remap_replaces_actions_it_mentions() {
         let mut registry = InputRegistry::empty();
-        registry
-            .map_mut(modes::GENERAL.as_str())
-            .bind(try_parse_binding("j").unwrap(), TestAction::Nav(NavigationAction::FocusNext));
+        registry.map_mut(modes::GENERAL.as_str()).bind(
+            try_parse_binding("j").unwrap(),
+            TestAction::Nav(NavigationAction::FocusNext),
+        );
 
         let preset = r#"
 [general]
@@ -803,7 +818,9 @@ focus_next = ["ctrl+n"]
 
         let ctrl_n = KeyEvent::new(KeyCode::Char('n'), KeyModifiers::CONTROL);
         match pipeline.process(ctrl_n, &[modes::GENERAL], false) {
-            crate::input::PipelineResponse::Execute(TestAction::Nav(NavigationAction::FocusNext)) => {}
+            crate::input::PipelineResponse::Execute(TestAction::Nav(
+                NavigationAction::FocusNext,
+            )) => {}
             other => panic!("expected FocusNext, got {other:?}"),
         }
     }
@@ -811,9 +828,10 @@ focus_next = ["ctrl+n"]
     #[test]
     fn toml_remap_rejects_conflicts_with_remaining_defaults() {
         let mut registry = InputRegistry::empty();
-        registry
-            .map_mut(modes::GENERAL.as_str())
-            .bind(try_parse_binding("ctrl+n").unwrap(), TestAction::Nav(NavigationAction::NextPane));
+        registry.map_mut(modes::GENERAL.as_str()).bind(
+            try_parse_binding("ctrl+n").unwrap(),
+            TestAction::Nav(NavigationAction::NextPane),
+        );
 
         let preset = r#"
 [general]
@@ -824,14 +842,19 @@ focus_next = ["ctrl+n"]
         let NavigationPresetError::Issues(issues) = err else {
             panic!("expected validation issues");
         };
-        assert!(issues
-            .iter()
-            .any(|issue| matches!(issue, NavigationPresetIssue::ExistingBindingConflict { .. })));
+        assert!(
+            issues.iter().any(|issue| matches!(
+                issue,
+                NavigationPresetIssue::ExistingBindingConflict { .. }
+            ))
+        );
 
         let mut pipeline = InputPipeline::new(registry, 1000);
         let ctrl_n = KeyEvent::new(KeyCode::Char('n'), KeyModifiers::CONTROL);
         match pipeline.process(ctrl_n, &[modes::GENERAL], false) {
-            crate::input::PipelineResponse::Execute(TestAction::Nav(NavigationAction::NextPane)) => {}
+            crate::input::PipelineResponse::Execute(TestAction::Nav(
+                NavigationAction::NextPane,
+            )) => {}
             other => panic!("expected existing NextPane binding to remain, got {other:?}"),
         }
     }

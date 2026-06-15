@@ -9,7 +9,7 @@
 //! crate uses it to resolve names → `A` when loading config and `A` → names when
 //! exporting it.
 
-use crate::input::{navigation_bindable_actions, BindableActionInfo};
+use crate::input::{BindableActionInfo, navigation_bindable_actions};
 use crate::keybindings::NavigationAction;
 
 /// A name ↔ action table used to load and save `[keymap.*]` bindings.

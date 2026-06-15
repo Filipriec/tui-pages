@@ -1,22 +1,22 @@
 use std::fmt;
 
-use toml::{map::Map, Value};
+use toml::{Value, map::Map};
 
 use crate::input::{
-    analyze_keymap_bindings, try_parse_binding, BindingCatalog, BindingConflict, BindingInfo,
-    BindingLayer, BindingSource, InputRegistry, KeyChord, ParseKeyError,
+    BindingCatalog, BindingConflict, BindingInfo, BindingLayer, BindingSource, InputRegistry,
+    KeyChord, ParseKeyError, analyze_keymap_bindings, try_parse_binding,
 };
-use crate::runtime::ModeId;
 #[cfg(feature = "canvas")]
 use crate::runtime::InputLayerContext;
+use crate::runtime::ModeId;
 
 use super::preset::parse_string_list;
 use super::{ActionRegistry, NavigationPresetError, NavigationPresetIssue};
 
 #[cfg(feature = "canvas")]
 use crate::canvas::{
-    analyze_canvas_overlaps, canvas_default_binding_catalog, BuiltinCanvasKeybindingPreset,
-    CanvasAction, CanvasKeybindingPresetError, CanvasKeybindingProfile,
+    BuiltinCanvasKeybindingPreset, CanvasAction, CanvasKeybindingPresetError,
+    CanvasKeybindingProfile, analyze_canvas_overlaps, canvas_default_binding_catalog,
 };
 
 #[derive(Debug)]
@@ -25,8 +25,12 @@ pub enum KeybindingConfigError {
     Serialize(toml::ser::Error),
     Navigation(NavigationPresetError),
     KeyBinding(ParseKeyError),
-    CanvasPreset { preset: String },
-    CanvasAction { action: String },
+    CanvasPreset {
+        preset: String,
+    },
+    CanvasAction {
+        action: String,
+    },
     #[cfg(feature = "canvas")]
     Canvas(CanvasKeybindingPresetError),
 }
@@ -38,8 +42,12 @@ impl fmt::Display for KeybindingConfigError {
             Self::Serialize(err) => write!(f, "failed to serialize keybinding TOML section: {err}"),
             Self::Navigation(err) => write!(f, "invalid navigation keybindings: {err}"),
             Self::KeyBinding(err) => write!(f, "invalid keybinding: {err}"),
-            Self::CanvasPreset { preset } => write!(f, "unknown canvas keybinding preset {preset:?}"),
-            Self::CanvasAction { action } => write!(f, "unknown canvas keybinding action {action:?}"),
+            Self::CanvasPreset { preset } => {
+                write!(f, "unknown canvas keybinding preset {preset:?}")
+            }
+            Self::CanvasAction { action } => {
+                write!(f, "unknown canvas keybinding action {action:?}")
+            }
             #[cfg(feature = "canvas")]
             Self::Canvas(err) => write!(f, "invalid canvas keybindings: {err}"),
         }
@@ -152,8 +160,7 @@ impl RawKeymap {
             if action_name == "mode" {
                 continue;
             }
-            let Some(keys) =
-                parse_string_list(section_name, action_name, bindings_value, issues)
+            let Some(keys) = parse_string_list(section_name, action_name, bindings_value, issues)
             else {
                 continue;
             };
@@ -195,10 +202,7 @@ impl KeybindingConfig {
         } else {
             toml::from_str::<Value>(source).map_err(KeybindingConfigError::Toml)?
         };
-        let root = value
-            .as_table()
-            .cloned()
-            .unwrap_or_else(Map::new);
+        let root = value.as_table().cloned().unwrap_or_else(Map::new);
 
         #[cfg_attr(not(feature = "canvas"), allow(unused_mut))]
         let (mut keymap, keymap_issues) = RawKeymap::from_root(&root);
@@ -372,7 +376,9 @@ impl<A: fmt::Debug> fmt::Display for BindingNotice<A> {
                 "runtime binding {sequence:?} in mode {mode:?} overrides {previous_source:?} {previous_action:?} with {runtime_action:?}"
             ),
             Self::SameLayerConflict(conflict) => write!(f, "keybinding conflict: {conflict:?}"),
-            Self::CrossLayerOverlap(conflict) => write!(f, "cross-layer keybinding overlap: {conflict:?}"),
+            Self::CrossLayerOverlap(conflict) => {
+                write!(f, "cross-layer keybinding overlap: {conflict:?}")
+            }
             Self::InvalidEntry(issue) => write!(f, "invalid keybinding entry skipped: {issue}"),
         }
     }
@@ -480,10 +486,8 @@ where
             &self.runtime_keymap,
         ));
 
-        let effective = BindingCatalog::from_registry(
-            &self.effective_registry(),
-            BindingSource::Unknown,
-        );
+        let effective =
+            BindingCatalog::from_registry(&self.effective_registry(), BindingSource::Unknown);
         notices.extend(
             analyze_keymap_bindings(&effective, active_modes)
                 .conflicts
@@ -568,7 +572,10 @@ where
     }
 }
 
-fn apply_catalog_to_registry<A: Clone>(registry: &mut InputRegistry<A>, catalog: &BindingCatalog<A>) {
+fn apply_catalog_to_registry<A: Clone>(
+    registry: &mut InputRegistry<A>,
+    catalog: &BindingCatalog<A>,
+) {
     for binding in &catalog.bindings {
         registry
             .map_mut(binding.mode.as_str())
@@ -596,7 +603,11 @@ where
     apply_catalog_to_registry(registry, catalog);
 }
 
-fn catalog_has_action<A: PartialEq>(catalog: &BindingCatalog<A>, mode: &ModeId, action: &A) -> bool {
+fn catalog_has_action<A: PartialEq>(
+    catalog: &BindingCatalog<A>,
+    mode: &ModeId,
+    action: &A,
+) -> bool {
     catalog
         .bindings
         .iter()
@@ -642,13 +653,15 @@ fn apply_keymap_inheritances<A: Clone + PartialEq>(
             continue;
         }
 
-        if catalog_has_action(user_keymap, &inheritance.target_mode, &inheritance.target_action)
-            || catalog_has_action(
-                runtime_keymap,
-                &inheritance.target_mode,
-                &inheritance.target_action,
-            )
-        {
+        if catalog_has_action(
+            user_keymap,
+            &inheritance.target_mode,
+            &inheritance.target_action,
+        ) || catalog_has_action(
+            runtime_keymap,
+            &inheritance.target_mode,
+            &inheritance.target_action,
+        ) {
             continue;
         }
 
@@ -709,7 +722,9 @@ where
     let mut notices = Vec::new();
     for user_binding in &user.bindings {
         let mut emitted = false;
-        for default_binding in builtin.bindings_for_sequence(&user_binding.mode, &user_binding.sequence) {
+        for default_binding in
+            builtin.bindings_for_sequence(&user_binding.mode, &user_binding.sequence)
+        {
             if default_binding.action != user_binding.action {
                 notices.push(BindingNotice::UserOverridesDefault {
                     mode: user_binding.mode.clone(),
@@ -770,7 +785,9 @@ where
 }
 
 #[cfg(feature = "canvas")]
-fn canvas_profile_overrides_catalog(profile: &CanvasKeybindingProfile) -> BindingCatalog<CanvasAction> {
+fn canvas_profile_overrides_catalog(
+    profile: &CanvasKeybindingProfile,
+) -> BindingCatalog<CanvasAction> {
     let mut catalog = BindingCatalog::new();
     let default_entries = profile.defaults().entries();
     for entry in profile.current().entries() {
@@ -787,7 +804,9 @@ fn canvas_profile_overrides_catalog(profile: &CanvasKeybindingProfile) -> Bindin
         }
         catalog.push(BindingInfo {
             layer: BindingLayer::Canvas,
-            mode: crate::canvas::mode_for_app_mode(entry.mode).as_str().to_string(),
+            mode: crate::canvas::mode_for_app_mode(entry.mode)
+                .as_str()
+                .to_string(),
             sequence: entry
                 .sequence
                 .iter()
@@ -841,7 +860,10 @@ where
 
     for binding in &store.runtime_keymap.bindings {
         if actions.name_of(&binding.action).is_some() {
-            runtime_owned.insert((binding.mode.clone(), actions.name_of(&binding.action).unwrap()));
+            runtime_owned.insert((
+                binding.mode.clone(),
+                actions.name_of(&binding.action).unwrap(),
+            ));
         }
         record(binding);
     }
@@ -856,9 +878,7 @@ where
 
     let mut root = Map::new();
     for (mode, actions_map) in keymap {
-        let section = root
-            .entry(mode)
-            .or_insert_with(|| Value::Table(Map::new()));
+        let section = root.entry(mode).or_insert_with(|| Value::Table(Map::new()));
         if let Value::Table(section) = section {
             for (name, keys) in actions_map {
                 section.insert(
@@ -964,10 +984,12 @@ do_the_thing = "ctrl+t"
                 .get(&seq("ctrl+t")),
             Some(&App::DoTheThing)
         );
-        assert!(report
-            .notices
-            .iter()
-            .all(|notice| !matches!(notice, BindingNotice::InvalidEntry(_))));
+        assert!(
+            report
+                .notices
+                .iter()
+                .all(|notice| !matches!(notice, BindingNotice::InvalidEntry(_)))
+        );
     }
 
     #[test]
@@ -1029,13 +1051,12 @@ quit = "ctrl+q"
         )
         .unwrap();
 
-        let (store, registry, report) =
-            BindingStore::<TestAction>::with_user_config(
-                &builtin,
-                &config,
-                &ActionRegistry::navigation(),
-            )
-            .unwrap();
+        let (store, registry, report) = BindingStore::<TestAction>::with_user_config(
+            &builtin,
+            &config,
+            &ActionRegistry::navigation(),
+        )
+        .unwrap();
 
         assert_eq!(
             registry
@@ -1046,12 +1067,14 @@ quit = "ctrl+q"
                 .get(&seq("ctrl+q")),
             Some(&TestAction::Nav(NavigationAction::Quit))
         );
-        assert!(!registry
-            .maps
-            .get("global")
-            .unwrap()
-            .bindings
-            .contains_key(&seq("ctrl+c")));
+        assert!(
+            !registry
+                .maps
+                .get("global")
+                .unwrap()
+                .bindings
+                .contains_key(&seq("ctrl+c"))
+        );
         assert!(report.notices.iter().any(|notice| matches!(
             notice,
             BindingNotice::UserOverridesDefault {
@@ -1097,19 +1120,18 @@ nav_select = "ctrl+j"
         )
         .unwrap();
 
-        let (_store, registry, _report) =
-            BindingStore::with_user_config_and_inheritances(
-                &builtin,
-                &config,
-                &actions,
-                [KeybindingInheritance::new(
-                    crate::runtime::modes::COMMAND,
-                    App::Execute,
-                    crate::runtime::modes::GENERAL,
-                    App::Select,
-                )],
-            )
-            .unwrap();
+        let (_store, registry, _report) = BindingStore::with_user_config_and_inheritances(
+            &builtin,
+            &config,
+            &actions,
+            [KeybindingInheritance::new(
+                crate::runtime::modes::COMMAND,
+                App::Execute,
+                crate::runtime::modes::GENERAL,
+                App::Select,
+            )],
+        )
+        .unwrap();
 
         let command = registry.maps.get("command").unwrap();
         assert_eq!(command.bindings.get(&seq("ctrl+j")), Some(&App::Execute));
@@ -1152,19 +1174,18 @@ command_execute = "-"
         )
         .unwrap();
 
-        let (_store, registry, _report) =
-            BindingStore::with_user_config_and_inheritances(
-                &builtin,
-                &config,
-                &actions,
-                [KeybindingInheritance::new(
-                    crate::runtime::modes::COMMAND,
-                    App::Execute,
-                    crate::runtime::modes::GENERAL,
-                    App::Select,
-                )],
-            )
-            .unwrap();
+        let (_store, registry, _report) = BindingStore::with_user_config_and_inheritances(
+            &builtin,
+            &config,
+            &actions,
+            [KeybindingInheritance::new(
+                crate::runtime::modes::COMMAND,
+                App::Execute,
+                crate::runtime::modes::GENERAL,
+                App::Select,
+            )],
+        )
+        .unwrap();
 
         let command = registry.maps.get("command").unwrap();
         assert_eq!(command.bindings.get(&seq("-")), Some(&App::Execute));
@@ -1191,13 +1212,12 @@ focus_next = "not+a+key"
         )
         .unwrap();
 
-        let (_store, registry, report) =
-            BindingStore::<TestAction>::with_user_config(
-                &builtin,
-                &config,
-                &ActionRegistry::navigation(),
-            )
-            .unwrap();
+        let (_store, registry, report) = BindingStore::<TestAction>::with_user_config(
+            &builtin,
+            &config,
+            &ActionRegistry::navigation(),
+        )
+        .unwrap();
 
         assert_eq!(
             registry
@@ -1208,10 +1228,12 @@ focus_next = "not+a+key"
                 .get(&seq("ctrl+q")),
             Some(&TestAction::Nav(NavigationAction::Quit))
         );
-        assert!(report
-            .notices
-            .iter()
-            .any(|notice| matches!(notice, BindingNotice::InvalidEntry(_))));
+        assert!(
+            report
+                .notices
+                .iter()
+                .any(|notice| matches!(notice, BindingNotice::InvalidEntry(_)))
+        );
     }
 
     /// Canvas-action names written in a modal keymap section are routed to the
@@ -1281,20 +1303,20 @@ my_app_action = ["x"]
             BindingStore::with_user_config(&builtin, &config, &actions).unwrap();
 
         assert_eq!(
-            registry
-                .maps
-                .get("nor")
-                .unwrap()
-                .bindings
-                .get(&seq("x")),
+            registry.maps.get("nor").unwrap().bindings.get(&seq("x")),
             Some(&App::MyAppAction)
         );
-        assert!(report
-            .notices
-            .iter()
-            .all(|notice| !matches!(notice, BindingNotice::InvalidEntry(_))));
+        assert!(
+            report
+                .notices
+                .iter()
+                .all(|notice| !matches!(notice, BindingNotice::InvalidEntry(_)))
+        );
 
         let overrides = config.canvas_profile().unwrap().overrides_toml();
-        assert!(overrides.contains("undo = [\"Ctrl+z\"]"), "overrides: {overrides}");
+        assert!(
+            overrides.contains("undo = [\"Ctrl+z\"]"),
+            "overrides: {overrides}"
+        );
     }
 }

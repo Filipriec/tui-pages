@@ -1,7 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use tui_pages::{
-    parse_binding, try_parse_binding, InputPipeline, InputRegistry, KeyChord, KeyMap,
-    ParseKeyError, PipelineResponse,
+    InputPipeline, InputRegistry, KeyChord, KeyMap, ParseKeyError, PipelineResponse, parse_binding,
+    try_parse_binding,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
