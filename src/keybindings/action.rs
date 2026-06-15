@@ -107,10 +107,8 @@ impl NavigationAction {
         since = "0.8.5",
         note = "use str::parse::<NavigationAction>(); this compatibility shim will be removed in 1.0.0"
     )]
-    pub fn from_name(_name: &str) -> Option<Self> {
-        panic!(
-            "NavigationAction::from_name() is deprecated; use str::parse::<NavigationAction>() instead. It will be removed in 1.0.0."
-        )
+    pub fn from_name(name: &str) -> Option<Self> {
+        name.parse().ok()
     }
 
     pub fn to_effect<V, O, M>(self) -> TuiEffect<V, O, M> {
