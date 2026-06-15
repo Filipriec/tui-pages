@@ -2,18 +2,24 @@ use crate::focus::FocusWrap;
 use crate::navigation::{PaneId, PaneSession, PaneSplit, WorkspaceState};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BufferState<V> {
+pub struct BufferState<V, S = ()> {
     pub history: Vec<V>,
     pub active_index: usize,
-    pub workspace: WorkspaceState<V>,
+    pub workspace: WorkspaceState<V, S>,
 }
 
 impl<V: Clone + PartialEq> BufferState<V> {
     pub fn new(initial_view: V) -> Self {
+        Self::new_with_pane_state(initial_view, ())
+    }
+}
+
+impl<V: Clone + PartialEq, S> BufferState<V, S> {
+    pub fn new_with_pane_state(initial_view: V, initial_state: S) -> Self {
         Self {
             history: vec![initial_view.clone()],
             active_index: 0,
-            workspace: WorkspaceState::new(initial_view),
+            workspace: WorkspaceState::new_with_pane_state(initial_view, initial_state),
         }
     }
 
@@ -44,10 +50,12 @@ impl<V: Clone + PartialEq> BufferState<V> {
         self.workspace.active_pane
     }
 
-    pub fn panes(&self) -> &[PaneSession<V>] {
+    pub fn panes(&self) -> &[PaneSession<V, S>] {
         &self.workspace.panes
     }
+}
 
+impl<V: Clone + PartialEq, S: Default> BufferState<V, S> {
     pub fn split_active_pane(&mut self, split: PaneSplit) -> bool {
         let Some(active_pane) = self.workspace.panes.get(self.workspace.active_pane) else {
             return false;
@@ -61,6 +69,7 @@ impl<V: Clone + PartialEq> BufferState<V> {
             PaneSession {
                 pane_id,
                 view: view.clone(),
+                state: S::default(),
             },
         );
         self.workspace.active_pane = insert_at;
@@ -68,7 +77,9 @@ impl<V: Clone + PartialEq> BufferState<V> {
         self.update_history(view);
         true
     }
+}
 
+impl<V: Clone + PartialEq, S> BufferState<V, S> {
     pub fn close_active_pane(&mut self) -> bool {
         if self.workspace.panes.len() <= 1 {
             return false;
