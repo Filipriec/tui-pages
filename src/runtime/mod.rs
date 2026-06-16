@@ -221,8 +221,7 @@ pub type PageFn<V, S, O = ()> = fn(&V, &S, Option<&FocusTarget<O>>) -> PageSpec<
 /// neither writes `TuiApp<View, Action, State, Handler>`. Build it with
 /// [`TuiPages::builder`] + [`page_fn`](TuiPagesBuilder::page_fn); the resulting
 /// type *is* a `TuiApp`, so `fn build() -> App` lines up with no extra effort.
-pub type TuiApp<V, A, S, Handler, O = (), M = ()> =
-    TuiPages<V, A, PageFn<V, S, O>, Handler, O, M>;
+pub type TuiApp<V, A, S, Handler, O = (), M = ()> = TuiPages<V, A, PageFn<V, S, O>, Handler, O, M>;
 
 pub trait PageProvider<V, S: ?Sized, O = ()> {
     fn page_spec(&self, view: &V, state: &S, focus: Option<&FocusTarget<O>>) -> PageSpec<O>;
