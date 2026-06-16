@@ -37,6 +37,7 @@ impl TuiActionHandler<View, Action, State> for Handler {
         action: Action,
         ctx: ActionContext<View>,
         state: &mut State,
+        _runtime: RuntimeContext<'_, Action>,
     ) -> Result<ActionOutcome<View>, Self::Error> {
         Ok(match action {
             // Enter on a button activates it. Enter on the input is handled by the

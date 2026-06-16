@@ -1,8 +1,8 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use tui_pages::{
-    ActionContext, ActionOutcome, CommandResolver, FocusIntent, FocusManager, FocusTarget,
-    KeyChord, NavigationAction, PageSpec, TuiActionHandler, TuiEffect, TuiPages, TuiPagesStatus,
-    modes, navigation_action_outcome,
+    ActionContext, ActionOutcome, FocusIntent, FocusTarget, KeyChord, NavigationAction, PageSpec,
+    RuntimeContext, TuiActionHandler, TuiEffect, TuiPages, TuiPagesStatus, modes,
+    navigation_action_outcome,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -31,6 +31,9 @@ struct State {
     typed: Vec<KeyChord>,
 }
 
+#[cfg(feature = "canvas")]
+impl tui_pages::canvas::CanvasWidgetState for State {}
+
 #[derive(Clone, Copy)]
 struct Handler;
 
@@ -42,8 +45,7 @@ impl TuiActionHandler<View, Action, State> for Handler {
         action: Action,
         _ctx: ActionContext<View>,
         state: &mut State,
-        _focus: &mut FocusManager,
-        _commands: &mut CommandResolver<Action>,
+        _runtime: RuntimeContext<'_, Action>,
     ) -> Result<ActionOutcome<View>, Self::Error> {
         state.handled.push(action.clone());
         Ok(match action {
@@ -59,8 +61,7 @@ impl TuiActionHandler<View, Action, State> for Handler {
         chord: KeyChord,
         _ctx: ActionContext<View>,
         state: &mut State,
-        _focus: &mut FocusManager,
-        _commands: &mut CommandResolver<Action>,
+        _runtime: RuntimeContext<'_, Action>,
     ) -> Result<ActionOutcome<View>, Self::Error> {
         state.typed.push(chord);
         Ok(ActionOutcome::none())
@@ -75,7 +76,7 @@ fn runtime_remap_navigation_preset_toml_changes_live_keymap_and_resets_sequence(
             .modes(vec![modes::GENERAL, modes::GLOBAL])
     };
 
-    let mut tui = TuiPages::<View, Action, State>::builder(View::Home)
+    let mut tui = TuiPages::<View, Action>::builder(View::Home)
         .pages(pages)
         .handler(Handler)
         .helix_navigation_defaults()
@@ -122,7 +123,7 @@ fn runtime_maps_user_actions_to_library_effects() {
             .modes(vec![modes::GENERAL, modes::GLOBAL]),
     };
 
-    let mut tui = TuiPages::<View, Action, State>::builder(View::Home)
+    let mut tui = TuiPages::<View, Action>::builder(View::Home)
         .pages(pages)
         .handler(Handler)
         .bind(modes::GENERAL, "tab", Action::Next)
@@ -159,7 +160,7 @@ fn text_mapper_does_not_hijack_non_canvas_text_targets() {
             .accepts_text_input(true)
     };
 
-    let mut tui = TuiPages::<View, Action, State>::builder(View::Home)
+    let mut tui = TuiPages::<View, Action>::builder(View::Home)
         .pages(pages)
         .handler(Handler)
         .text_input_mapper(map_text_to_next)
@@ -189,7 +190,7 @@ fn command_line_reservation_splits_bottom_row_from_page_area() {
 
     let pages = |_view: &View, _state: &State, _focus: Option<&FocusTarget>| PageSpec::new();
 
-    let tui = TuiPages::<View, Action, State>::builder(View::Home)
+    let tui = TuiPages::<View, Action>::builder(View::Home)
         .pages(pages)
         .handler(Handler)
         .reserve_command_line(true)
@@ -208,7 +209,7 @@ fn command_line_reservation_gives_command_line_priority_on_tiny_area() {
 
     let pages = |_view: &View, _state: &State, _focus: Option<&FocusTarget>| PageSpec::new();
 
-    let tui = TuiPages::<View, Action, State>::builder(View::Home)
+    let tui = TuiPages::<View, Action>::builder(View::Home)
         .pages(pages)
         .handler(Handler)
         .reserve_command_line(true)
@@ -227,7 +228,7 @@ fn command_line_area_is_absent_when_not_reserved() {
 
     let pages = |_view: &View, _state: &State, _focus: Option<&FocusTarget>| PageSpec::new();
 
-    let tui = TuiPages::<View, Action, State>::builder(View::Home)
+    let tui = TuiPages::<View, Action>::builder(View::Home)
         .pages(pages)
         .handler(Handler)
         .reserve_command_line(false)

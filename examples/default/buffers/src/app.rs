@@ -56,6 +56,7 @@ impl TuiActionHandler<View, Action, ()> for Handler {
         action: Action,
         _ctx: ActionContext<View>,
         _state: &mut (),
+        _runtime: RuntimeContext<'_, Action>,
     ) -> Result<ActionOutcome<View>, Self::Error> {
         let effect = match action {
             Action::Open(view) => TuiEffect::Navigate(view),

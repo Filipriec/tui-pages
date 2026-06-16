@@ -87,8 +87,8 @@ pub use navigation::{
 pub use runtime::CommandLineAreas;
 pub use runtime::{
     ActionContext, ActionOutcome, InputLayerContext, ModeId, PageFn, PageProvider, PageSpec,
-    TuiActionHandler, TuiApp, TuiEffect, TuiPages, TuiPagesBuilder, TuiPagesError, TuiPagesOutput,
-    TuiPagesResult, TuiPagesStatus, modes,
+    RuntimeContext, TuiActionHandler, TuiApp, TuiEffect, TuiPages, TuiPagesBuilder, TuiPagesError,
+    TuiPagesOutput, TuiPagesResult, TuiPagesStatus, modes,
 };
 pub use terminal::{TerminalGuard, enter as enter_terminal};
 
@@ -111,9 +111,9 @@ pub mod prelude {
         FocusQuery, FocusTarget, FocusWrap, KeyChord, KeybindingConfig, KeybindingConfigError,
         KeybindingReport, ModeId, NavigationAction, NavigationActionInfo, NavigationConflictPolicy,
         NavigationPreset, NavigationPresetError, NavigationPresetIssue, PageFn, PageFocusBuilder,
-        PageProvider, PageSpec, ParseBuiltinNavigationPresetError, ParseKeyError, TerminalGuard,
-        TuiActionHandler, TuiApp, TuiEffect, TuiPages, TuiPagesOutput, TuiPagesStatus, VimAction,
-        modes, parse_binding, try_parse_binding,
+        PageProvider, PageSpec, ParseBuiltinNavigationPresetError, ParseKeyError, RuntimeContext,
+        TerminalGuard, TuiActionHandler, TuiApp, TuiEffect, TuiPages, TuiPagesOutput,
+        TuiPagesStatus, VimAction, modes, parse_binding, try_parse_binding,
     };
     pub use crate::{
         apply_navigation_preset_toml, emacs_preset_toml, helix_preset_toml,

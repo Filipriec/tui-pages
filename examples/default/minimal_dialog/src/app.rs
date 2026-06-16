@@ -61,6 +61,7 @@ impl TuiActionHandler<View, Action, AppState, (), DialogData<Purpose>> for Handl
         action: Action,
         ctx: ActionContext<View>,
         state: &mut AppState,
+        _runtime: RuntimeContext<'_, Action, (), DialogData<Purpose>>,
     ) -> Result<ActionOutcome<View, (), DialogData<Purpose>>, Self::Error> {
         Ok(match action {
             Action::Nav(NavigationAction::Activate) => match ctx.focus {

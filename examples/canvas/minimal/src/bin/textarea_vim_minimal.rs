@@ -74,6 +74,7 @@ impl TuiActionHandler<View, Action, State> for Handler {
         action: Action,
         _ctx: ActionContext<View>,
         _state: &mut State,
+        _runtime: RuntimeContext<'_, Action>,
     ) -> Result<ActionOutcome<View>, Self::Error> {
         Ok(match action {
             Action::Nav(nav) => ActionOutcome::effect(nav.to_effect()),

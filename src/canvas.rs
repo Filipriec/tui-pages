@@ -1352,7 +1352,7 @@ impl<O> PageSpec<O> {
     }
 }
 
-impl<V, A, S: ?Sized, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handler>
+impl<V, A, O, M, Pages, Handler> TuiPagesBuilder<V, A, O, M, Pages, Handler>
 where
     A: From<CanvasAction>,
 {
@@ -1373,7 +1373,7 @@ where
     }
 }
 
-impl<V, A, S: ?Sized, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handler> {
+impl<V, A, O, M, Pages, Handler> TuiPagesBuilder<V, A, O, M, Pages, Handler> {
     pub fn canvas_form_editor(self, id: usize) -> Self {
         self.canvas_form_editor_with_preset(id, BuiltinCanvasKeybindingPreset::Vim)
     }

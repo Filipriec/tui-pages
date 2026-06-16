@@ -11,7 +11,8 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use tui_pages::{
     ActionContext, ActionOutcome, CanvasAction, CanvasDispatchOutcome, FocusIntent, FocusTarget,
-    PageFocusBuilder, PageSpec, TuiActionHandler, TuiEffect, TuiPages, TuiPagesStatus,
+    PageFocusBuilder, PageSpec, RuntimeContext, TuiActionHandler, TuiEffect, TuiPages,
+    TuiPagesStatus,
     canvas::{self, AppMode, DataProvider, FormEditor},
 };
 
@@ -42,6 +43,8 @@ struct State {
     actions: Vec<Action>,
 }
 
+impl canvas::CanvasWidgetState for State {}
+
 struct Handler;
 
 impl TuiActionHandler<View, Action, State> for Handler {
@@ -52,6 +55,7 @@ impl TuiActionHandler<View, Action, State> for Handler {
         action: Action,
         _ctx: ActionContext<View>,
         state: &mut State,
+        _runtime: RuntimeContext<'_, Action>,
     ) -> Result<ActionOutcome<View>, Self::Error> {
         state.actions.push(action.clone());
         Ok(match action {
@@ -134,7 +138,7 @@ fn mixed_focus_page(_v: &View, _s: &State, _f: Option<&FocusTarget>) -> PageSpec
 
 #[test]
 fn canvas_defaults_route_typed_chars_to_canvas_actions() {
-    let mut app = TuiPages::<View, Action, State>::builder(View::Form)
+    let mut app = TuiPages::<View, Action>::builder(View::Form)
         .page_fn(edit_page)
         .handler(Handler)
         .canvas_defaults()
@@ -153,7 +157,7 @@ fn canvas_defaults_route_typed_chars_to_canvas_actions() {
 
 #[test]
 fn shifted_chars_route_as_text_but_modified_chars_do_not() {
-    let mut app = TuiPages::<View, Action, State>::builder(View::Form)
+    let mut app = TuiPages::<View, Action>::builder(View::Form)
         .page_fn(edit_page)
         .handler(Handler)
         .canvas_defaults()
@@ -199,7 +203,7 @@ fn typed_text_chord_helper_maps_plain_chars_only() {
 
 #[test]
 fn normal_mode_keybindings_drive_canvas_movement_actions() {
-    let mut app = TuiPages::<View, Action, State>::builder(View::Form)
+    let mut app = TuiPages::<View, Action>::builder(View::Form)
         .page_fn(read_only_page)
         .handler(Handler)
         .canvas_defaults()
@@ -232,7 +236,7 @@ fn normal_mode_keybindings_drive_canvas_movement_actions() {
 
 #[test]
 fn suggestion_default_keybindings_route_to_canvas_actions() {
-    let mut app = TuiPages::<View, Action, State>::builder(View::Form)
+    let mut app = TuiPages::<View, Action>::builder(View::Form)
         .page_fn(edit_page)
         .handler(Handler)
         .canvas_defaults()
@@ -384,7 +388,7 @@ fn boundary_helper_maps_exits_to_intents() {
 
 #[test]
 fn canvas_focus_coexists_with_buttons_sections_modal_and_internal_targets() {
-    let mut app = TuiPages::<View, Action, State>::builder(View::Form)
+    let mut app = TuiPages::<View, Action>::builder(View::Form)
         .page_fn(mixed_focus_page)
         .handler(Handler)
         .bind(tui_pages::modes::NORMAL, "tab", Action::FocusNext)
@@ -892,6 +896,7 @@ impl TuiActionHandler<View, WidgetAction, WidgetState> for WidgetHandler {
         action: WidgetAction,
         _ctx: ActionContext<View>,
         _state: &mut WidgetState,
+        _runtime: RuntimeContext<'_, WidgetAction>,
     ) -> Result<ActionOutcome<View>, Self::Error> {
         Ok(match action {
             WidgetAction::Quit => ActionOutcome::effect(TuiEffect::Quit),
@@ -905,7 +910,7 @@ fn widget_page(_v: &View, _s: &WidgetState, _f: Option<&FocusTarget>) -> PageSpe
 
 #[test]
 fn canvas_form_editor_builder_dispatches_without_canvas_actions_in_app_action() {
-    let mut app = TuiPages::<View, WidgetAction, WidgetState>::builder(View::Form)
+    let mut app = TuiPages::<View, WidgetAction>::builder(View::Form)
         .page_fn(widget_page)
         .handler(WidgetHandler)
         .canvas_form_editor(0)
@@ -926,7 +931,7 @@ fn canvas_form_editor_builder_dispatches_without_canvas_actions_in_app_action() 
 
 #[test]
 fn canvas_insert_mode_owns_text_even_without_page_mode_sync() {
-    let mut app = TuiPages::<View, WidgetAction, WidgetState>::builder(View::Form)
+    let mut app = TuiPages::<View, WidgetAction>::builder(View::Form)
         .page_fn(widget_page)
         .handler(WidgetHandler)
         .canvas_form_editor(0)
@@ -944,7 +949,7 @@ fn canvas_insert_mode_owns_text_even_without_page_mode_sync() {
 
 #[test]
 fn canvas_form_editor_receives_bracketed_paste() {
-    let mut app = TuiPages::<View, WidgetAction, WidgetState>::builder(View::Form)
+    let mut app = TuiPages::<View, WidgetAction>::builder(View::Form)
         .page_fn(widget_page)
         .handler(WidgetHandler)
         .canvas_form_editor(0)
@@ -962,7 +967,7 @@ fn canvas_form_editor_receives_bracketed_paste() {
 
 #[test]
 fn runtime_rebind_canvas_reinstalls_existing_form_editor_bindings() {
-    let mut app = TuiPages::<View, WidgetAction, WidgetState>::builder(View::Form)
+    let mut app = TuiPages::<View, WidgetAction>::builder(View::Form)
         .page_fn(widget_page)
         .handler(WidgetHandler)
         .canvas_form_editor(0)
@@ -1018,7 +1023,7 @@ fn canvas_config_profile_preserves_exit_suggestions_binding() {
 #[test]
 fn handle_paste_is_a_noop_without_a_focused_canvas_widget() {
     // No canvas hook registered, so there is nothing to receive the paste.
-    let mut app = TuiPages::<View, WidgetAction, WidgetState>::builder(View::Form)
+    let mut app = TuiPages::<View, WidgetAction>::builder(View::Form)
         .page_fn(widget_page)
         .handler(WidgetHandler)
         .build();
@@ -1033,7 +1038,7 @@ fn handle_paste_is_a_noop_without_a_focused_canvas_widget() {
 
 #[test]
 fn canvas_form_editor_builder_hands_off_focus_at_boundaries() {
-    let mut app = TuiPages::<View, WidgetAction, WidgetState>::builder(View::Form)
+    let mut app = TuiPages::<View, WidgetAction>::builder(View::Form)
         .page_fn(widget_page)
         .handler(WidgetHandler)
         .canvas_form_editor(0)
@@ -1049,7 +1054,7 @@ fn canvas_form_editor_builder_hands_off_focus_at_boundaries() {
 
 #[test]
 fn canvas_textarea_widget_builder_owns_enter_edit_and_exit_flow() {
-    let mut app = TuiPages::<View, WidgetAction, WidgetState>::builder(View::Form)
+    let mut app = TuiPages::<View, WidgetAction>::builder(View::Form)
         .page_fn(widget_page)
         .handler(WidgetHandler)
         .canvas_textarea_widget(0)
@@ -1078,7 +1083,7 @@ fn canvas_textarea_widget_builder_owns_enter_edit_and_exit_flow() {
 
 #[test]
 fn canvas_textarea_widget_builder_uses_default_commandline() {
-    let mut app = TuiPages::<View, WidgetAction, WidgetState>::builder(View::Form)
+    let mut app = TuiPages::<View, WidgetAction>::builder(View::Form)
         .page_fn(widget_page)
         .handler(WidgetHandler)
         .canvas_textarea_widget(0)
@@ -1103,7 +1108,7 @@ fn canvas_textarea_widget_builder_uses_default_commandline() {
 
 #[test]
 fn helix_textarea_widget_uses_keybinding_engine_without_commandline() {
-    let mut app = TuiPages::<View, WidgetAction, WidgetState>::builder(View::Form)
+    let mut app = TuiPages::<View, WidgetAction>::builder(View::Form)
         .page_fn(widget_page)
         .handler(WidgetHandler)
         .canvas_textarea_widget_with_preset(0, canvas::BuiltinCanvasKeybindingPreset::Helix)
@@ -1130,7 +1135,7 @@ fn helix_textarea_widget_uses_keybinding_engine_without_commandline() {
 
 #[test]
 fn canvas_textarea_widget_builder_treats_unentered_widget_as_one_focus_stop() {
-    let mut app = TuiPages::<View, WidgetAction, WidgetState>::builder(View::Form)
+    let mut app = TuiPages::<View, WidgetAction>::builder(View::Form)
         .page_fn(widget_page)
         .handler(WidgetHandler)
         .canvas_textarea_widget(0)
@@ -1146,7 +1151,7 @@ fn canvas_textarea_widget_builder_treats_unentered_widget_as_one_focus_stop() {
 
 #[test]
 fn canvas_textinput_widget_builder_dispatches_raw_text_and_submit_focus() {
-    let mut app = TuiPages::<View, WidgetAction, WidgetState>::builder(View::Form)
+    let mut app = TuiPages::<View, WidgetAction>::builder(View::Form)
         .page_fn(widget_page)
         .handler(WidgetHandler)
         .canvas_textinput_widget(0)
@@ -1170,7 +1175,7 @@ fn canvas_textinput_widget_builder_dispatches_raw_text_and_submit_focus() {
 
 #[test]
 fn canvas_textinput_widget_builder_updates_inline_suggestion_suffix() {
-    let mut app = TuiPages::<View, WidgetAction, WidgetState>::builder(View::Form)
+    let mut app = TuiPages::<View, WidgetAction>::builder(View::Form)
         .page_fn(widget_page)
         .handler(WidgetHandler)
         .canvas_textinput_widget(0)

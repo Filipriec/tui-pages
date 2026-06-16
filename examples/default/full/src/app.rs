@@ -55,6 +55,7 @@ impl TuiActionHandler<View, Action, AppState, Overlay> for Handler {
         action: Action,
         ctx: ActionContext<View, Overlay>,
         state: &mut AppState,
+        _runtime: RuntimeContext<'_, Action, Overlay>,
     ) -> Result<ActionOutcome<View, Overlay>, Self::Error> {
         // Actions that mean the same thing everywhere are handled once; the
         // rest are routed to whatever page we're on.

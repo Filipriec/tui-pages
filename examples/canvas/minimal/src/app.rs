@@ -32,6 +32,7 @@ impl TuiActionHandler<View, Action, State> for Handler {
         action: Action,
         ctx: ActionContext<View>,
         state: &mut State,
+        _runtime: RuntimeContext<'_, Action>,
     ) -> Result<ActionOutcome<View>, Self::Error> {
         Ok(match action {
             Action::Nav(NavigationAction::Activate) => match ctx.focus {

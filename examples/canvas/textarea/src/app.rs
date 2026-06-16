@@ -40,6 +40,7 @@ impl TuiActionHandler<View, Action, State> for Handler {
         action: Action,
         ctx: ActionContext<View>,
         state: &mut State,
+        _runtime: RuntimeContext<'_, Action>,
     ) -> Result<ActionOutcome<View>, Self::Error> {
         Ok(match action {
             // Enter: activate the focused button. The textarea widget builder

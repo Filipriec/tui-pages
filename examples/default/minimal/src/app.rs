@@ -32,6 +32,7 @@ impl TuiActionHandler<View, Action, ()> for Handler {
         action: Action,
         ctx: ActionContext<View>,
         _state: &mut (),
+        _runtime: RuntimeContext<'_, Action>,
     ) -> Result<ActionOutcome<View>, Self::Error> {
         match action {
             // Activate is per-page — let the page decide what "enter" means

@@ -7,7 +7,7 @@
 //!
 //! Usage with [`TuiPages`](crate::TuiPages) (with the dialog content as the
 //! runtime's modal payload `M`, e.g.
-//! `TuiPages<View, Action, State, Pages, Handler, (), DialogData<MyPurpose>>`):
+//! `TuiPages<View, Action, Pages, Handler, (), DialogData<MyPurpose>>`):
 //!
 //! - **Show** — return `TuiEffect::Focus(data.show_intent())` from your handler.
 //! - **Navigate** — `FocusIntent::Next` / `Prev` move between buttons (handled
