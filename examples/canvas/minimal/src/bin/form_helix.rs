@@ -103,7 +103,7 @@ fn page_spec(_view: &View, _state: &State, _focus: Option<&FocusTarget>) -> Page
     PageSpec::new().focus(PageFocusBuilder::new().canvas_fields(3))
 }
 
-fn build() -> TuiApp<View, Action, State, Handler> {
+fn build() -> TuiApp<View, Action, State, Handler, (), (), CanvasHooks> {
     TuiPages::builder(View::Form)
         .page_fn(page_spec)
         .handler(Handler)

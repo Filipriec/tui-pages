@@ -69,7 +69,7 @@ fn page_spec(_view: &View, _state: &State, _focus: Option<&FocusTarget>) -> Page
     )
 }
 
-pub fn build() -> TuiApp<View, Action, State, Handler> {
+pub fn build() -> TuiApp<View, Action, State, Handler, (), (), CanvasHooks> {
     TuiPages::builder(View::Editor)
         .page_fn(page_spec)
         .handler(Handler)

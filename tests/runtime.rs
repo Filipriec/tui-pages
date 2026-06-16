@@ -185,7 +185,9 @@ fn text_mapper_does_not_hijack_non_canvas_text_targets() {
 fn command_line_reservation_splits_bottom_row_from_page_area() {
     use ratatui::layout::Rect;
 
-    let pages = |_view: &View, _state: &State, _focus: Option<&FocusTarget>| PageSpec::new();
+    let pages = |_view: &View, _state: &State, _focus: Option<&FocusTarget>| -> PageSpec {
+        PageSpec::new()
+    };
 
     let tui = TuiPages::<View, Action>::builder(View::Home)
         .pages(pages)
@@ -204,7 +206,9 @@ fn command_line_reservation_splits_bottom_row_from_page_area() {
 fn command_line_reservation_gives_command_line_priority_on_tiny_area() {
     use ratatui::layout::Rect;
 
-    let pages = |_view: &View, _state: &State, _focus: Option<&FocusTarget>| PageSpec::new();
+    let pages = |_view: &View, _state: &State, _focus: Option<&FocusTarget>| -> PageSpec {
+        PageSpec::new()
+    };
 
     let tui = TuiPages::<View, Action>::builder(View::Home)
         .pages(pages)
@@ -223,7 +227,9 @@ fn command_line_reservation_gives_command_line_priority_on_tiny_area() {
 fn command_line_area_is_absent_when_not_reserved() {
     use ratatui::layout::Rect;
 
-    let pages = |_view: &View, _state: &State, _focus: Option<&FocusTarget>| PageSpec::new();
+    let pages = |_view: &View, _state: &State, _focus: Option<&FocusTarget>| -> PageSpec {
+        PageSpec::new()
+    };
 
     let tui = TuiPages::<View, Action>::builder(View::Home)
         .pages(pages)

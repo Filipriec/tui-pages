@@ -209,7 +209,7 @@ impl canvas::CanvasWidgetState for AppState {
 
 // The runtime's modal payload `M` is `DialogData<Purpose>`, so the focus manager
 // owns the login dialog's content and tracks its active button.
-pub type App = TuiApp<View, Action, AppState, Handler, Overlay, DialogData<Purpose>>;
+pub type App = TuiApp<View, Action, AppState, Handler, Overlay, DialogData<Purpose>, CanvasHooks>;
 
 pub struct Handler;
 
