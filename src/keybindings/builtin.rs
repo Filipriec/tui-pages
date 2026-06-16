@@ -205,7 +205,7 @@ where
     bind_builtin_navigation_defaults(BuiltinNavigationPreset::Helix, map);
 }
 
-impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handler>
+impl<V, A, S: ?Sized, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handler>
 where
     A: From<NavigationAction>,
 {

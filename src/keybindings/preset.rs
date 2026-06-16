@@ -554,7 +554,7 @@ where
     Ok(())
 }
 
-impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handler>
+impl<V, A, S: ?Sized, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handler>
 where
     A: From<NavigationAction> + PartialEq,
 {
@@ -564,7 +564,7 @@ where
     }
 }
 
-impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handler>
+impl<V, A, S: ?Sized, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handler>
 where
     A: From<NavigationAction> + PartialEq,
 {
@@ -577,7 +577,7 @@ where
     }
 }
 
-impl<V, A, S, Pages, Handler, O, M> TuiPages<V, A, S, Pages, Handler, O, M>
+impl<V, A, S: ?Sized, Pages, Handler, O, M> TuiPages<V, A, S, Pages, Handler, O, M>
 where
     A: From<NavigationAction> + PartialEq,
 {
@@ -592,7 +592,7 @@ where
     }
 }
 
-impl<V, A, S, Pages, Handler, O, M> TuiPages<V, A, S, Pages, Handler, O, M>
+impl<V, A, S: ?Sized, Pages, Handler, O, M> TuiPages<V, A, S, Pages, Handler, O, M>
 where
     A: From<NavigationAction> + PartialEq,
 {

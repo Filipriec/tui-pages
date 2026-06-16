@@ -1,7 +1,8 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use tui_pages::{
-    ActionContext, ActionOutcome, FocusIntent, FocusTarget, KeyChord, NavigationAction, PageSpec,
-    TuiActionHandler, TuiEffect, TuiPages, TuiPagesStatus, modes, navigation_action_outcome,
+    ActionContext, ActionOutcome, CommandResolver, FocusIntent, FocusManager, FocusTarget,
+    KeyChord, NavigationAction, PageSpec, TuiActionHandler, TuiEffect, TuiPages, TuiPagesStatus,
+    modes, navigation_action_outcome,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -41,6 +42,8 @@ impl TuiActionHandler<View, Action, State> for Handler {
         action: Action,
         _ctx: ActionContext<View>,
         state: &mut State,
+        _focus: &mut FocusManager,
+        _commands: &mut CommandResolver<Action>,
     ) -> Result<ActionOutcome<View>, Self::Error> {
         state.handled.push(action.clone());
         Ok(match action {
@@ -56,6 +59,8 @@ impl TuiActionHandler<View, Action, State> for Handler {
         chord: KeyChord,
         _ctx: ActionContext<View>,
         state: &mut State,
+        _focus: &mut FocusManager,
+        _commands: &mut CommandResolver<Action>,
     ) -> Result<ActionOutcome<View>, Self::Error> {
         state.typed.push(chord);
         Ok(ActionOutcome::none())

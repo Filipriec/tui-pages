@@ -927,7 +927,7 @@ fn hook_pending_outcome<V, A, O, M>(
 
 fn refresh_textinput_suggestion_suffix<S>(state: &mut S, focus_index: usize)
 where
-    S: CanvasWidgetState,
+    S: CanvasWidgetState + ?Sized,
 {
     let Some(text) = state
         .canvas_textinput(focus_index)
@@ -952,7 +952,7 @@ pub(crate) fn canvas_hook_context<V, S, O>(
     state: &S,
 ) -> Option<InputLayerContext>
 where
-    S: CanvasWidgetState,
+    S: CanvasWidgetState + ?Sized,
 {
     match kind {
         KeyHookKind::CanvasFormEditor { id, .. } => {
@@ -1044,7 +1044,7 @@ pub(crate) fn dispatch_canvas_key_hook<V, A, S, O, M>(
     state: &mut S,
 ) -> Option<KeyHookOutcome<V, A, O, M>>
 where
-    S: CanvasWidgetState,
+    S: CanvasWidgetState + ?Sized,
 {
     match kind {
         KeyHookKind::CanvasFormEditor {
@@ -1299,7 +1299,7 @@ pub(crate) fn dispatch_canvas_paste_hook<V, A, S, O, M>(
     state: &mut S,
 ) -> Option<KeyHookOutcome<V, A, O, M>>
 where
-    S: CanvasWidgetState,
+    S: CanvasWidgetState + ?Sized,
 {
     let handled = match kind {
         KeyHookKind::CanvasFormEditor { id, .. } => {
@@ -1352,7 +1352,7 @@ impl<O> PageSpec<O> {
     }
 }
 
-impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handler>
+impl<V, A, S: ?Sized, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handler>
 where
     A: From<CanvasAction>,
 {
@@ -1373,10 +1373,7 @@ where
     }
 }
 
-impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handler>
-where
-    S: CanvasWidgetState,
-{
+impl<V, A, S: ?Sized, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handler> {
     pub fn canvas_form_editor(self, id: usize) -> Self {
         self.canvas_form_editor_with_preset(id, BuiltinCanvasKeybindingPreset::Vim)
     }
@@ -1393,9 +1390,6 @@ where
                 profile: self.canvas_keybinding_profile.clone(),
                 installed_generation: None,
             },
-            context: canvas_hook_context::<V, S, O>,
-            dispatch: dispatch_canvas_key_hook::<V, A, S, O, M>,
-            paste: dispatch_canvas_paste_hook::<V, A, S, O, M>,
         });
         self
     }
@@ -1416,9 +1410,6 @@ where
                 profile: self.canvas_keybinding_profile.clone(),
                 installed_generation: None,
             },
-            context: canvas_hook_context::<V, S, O>,
-            dispatch: dispatch_canvas_key_hook::<V, A, S, O, M>,
-            paste: dispatch_canvas_paste_hook::<V, A, S, O, M>,
         });
         self
     }
@@ -1439,9 +1430,6 @@ where
                 profile: self.canvas_keybinding_profile.clone(),
                 installed_generation: None,
             },
-            context: canvas_hook_context::<V, S, O>,
-            dispatch: dispatch_canvas_key_hook::<V, A, S, O, M>,
-            paste: dispatch_canvas_paste_hook::<V, A, S, O, M>,
         });
         self
     }

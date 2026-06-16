@@ -224,11 +224,11 @@ pub type PageFn<V, S, O = ()> = fn(&V, &S, Option<&FocusTarget<O>>) -> PageSpec<
 pub type TuiApp<V, A, S, Handler, O = (), M = ()> =
     TuiPages<V, A, S, PageFn<V, S, O>, Handler, O, M>;
 
-pub trait PageProvider<V, S, O = ()> {
+pub trait PageProvider<V, S: ?Sized, O = ()> {
     fn page_spec(&self, view: &V, state: &S, focus: Option<&FocusTarget<O>>) -> PageSpec<O>;
 }
 
-impl<V, S, O, F> PageProvider<V, S, O> for F
+impl<V, S: ?Sized, O, F> PageProvider<V, S, O> for F
 where
     F: Fn(&V, &S, Option<&FocusTarget<O>>) -> PageSpec<O>,
 {
@@ -295,7 +295,7 @@ pub struct ActionContext<V, O = ()> {
     pub has_overlay: bool,
 }
 
-pub trait TuiActionHandler<V, A, S, O = (), M = ()> {
+pub trait TuiActionHandler<V, A, S: ?Sized, O = (), M = ()> {
     type Error;
 
     fn handle_action(
@@ -303,6 +303,8 @@ pub trait TuiActionHandler<V, A, S, O = (), M = ()> {
         action: A,
         ctx: ActionContext<V, O>,
         state: &mut S,
+        focus: &mut FocusManager<O, M>,
+        commands: &mut CommandResolver<A>,
     ) -> Result<ActionOutcome<V, O, M>, Self::Error>;
 
     fn handle_text(
@@ -310,6 +312,8 @@ pub trait TuiActionHandler<V, A, S, O = (), M = ()> {
         _chord: KeyChord,
         _ctx: ActionContext<V, O>,
         _state: &mut S,
+        _focus: &mut FocusManager<O, M>,
+        _commands: &mut CommandResolver<A>,
     ) -> Result<ActionOutcome<V, O, M>, Self::Error> {
         Ok(ActionOutcome::none())
     }
@@ -442,24 +446,19 @@ pub(crate) enum KeyHookKind {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct KeyHook<V, A, S, O, M> {
+pub(crate) struct KeyHook {
     pub kind: KeyHookKind,
-    pub context: fn(&KeyHookKind, &ActionContext<V, O>, &S) -> Option<InputLayerContext>,
-    pub dispatch: fn(
-        &mut KeyHookKind,
-        KeyEvent,
-        ActionContext<V, O>,
-        &mut S,
-    ) -> Option<KeyHookOutcome<V, A, O, M>>,
-    /// Forwards a bracketed-paste payload to the hook's widget. Parallels
-    /// `dispatch` but receives the pasted string instead of a key event.
-    pub paste: fn(
-        &mut KeyHookKind,
-        &str,
-        ActionContext<V, O>,
-        &mut S,
-    ) -> Option<KeyHookOutcome<V, A, O, M>>,
 }
+
+#[cfg(feature = "canvas")]
+pub trait RuntimeState: crate::canvas::CanvasWidgetState {}
+#[cfg(feature = "canvas")]
+impl<T: crate::canvas::CanvasWidgetState + ?Sized> RuntimeState for T {}
+
+#[cfg(not(feature = "canvas"))]
+pub trait RuntimeState {}
+#[cfg(not(feature = "canvas"))]
+impl<T: ?Sized> RuntimeState for T {}
 
 /// Identifies which input layer the orchestrator is talking to. The global
 /// keymap (`self.input`) and each registered canvas [`KeyHook`] are layers; the
@@ -488,7 +487,7 @@ pub(crate) enum LayerResult<A> {
 }
 
 #[derive(Debug, Clone)]
-pub struct TuiPages<V, A, S, Pages = (), Handler = (), O = (), M = ()> {
+pub struct TuiPages<V, A, S: ?Sized, Pages = (), Handler = (), O = (), M = ()> {
     pub input: InputPipeline<A>,
     pub commands: CommandResolver<A>,
     pub focus: FocusManager<O, M>,
@@ -498,7 +497,7 @@ pub struct TuiPages<V, A, S, Pages = (), Handler = (), O = (), M = ()> {
     fallback_view: V,
     reserve_command_line: bool,
     pub(crate) text_input_mapper: Option<fn(KeyChord) -> Option<A>>,
-    pub(crate) key_hooks: Vec<KeyHook<V, A, S, O, M>>,
+    pub(crate) key_hooks: Vec<KeyHook>,
     /// The layer that owns the in-flight multi-key sequence, if any. Set when a
     /// layer returns [`LayerResult::Pending`]; subsequent keys route straight to
     /// it until it resolves. `None` means the next key is freshly arbitrated.
@@ -512,7 +511,7 @@ pub struct TuiPages<V, A, S, Pages = (), Handler = (), O = (), M = ()> {
     _state: PhantomData<S>,
 }
 
-impl<V, A, S, O, M> TuiPages<V, A, S, (), (), O, M>
+impl<V, A, S: ?Sized, O, M> TuiPages<V, A, S, (), (), O, M>
 where
     V: Clone + PartialEq,
 {
@@ -521,13 +520,11 @@ where
     }
 }
 
-impl<V, A, S, Pages, Handler, O, M> TuiPages<V, A, S, Pages, Handler, O, M>
+impl<V, A, S: ?Sized, Pages, Handler, O, M> TuiPages<V, A, S, Pages, Handler, O, M>
 where
     V: Clone + PartialEq,
     A: Clone,
     O: Clone + PartialEq,
-    Pages: PageProvider<V, S, O>,
-    Handler: TuiActionHandler<V, A, S, O, M>,
 {
     pub fn current_view(&self) -> &V {
         self.buffer
@@ -560,7 +557,10 @@ where
         CommandLineAreas::split(area, self.reserve_command_line)
     }
 
-    pub fn refresh_page(&mut self, state: &S) {
+    pub fn refresh_page<T: RuntimeState + ?Sized>(&mut self, state: &T)
+    where
+        Pages: PageProvider<V, T, O>,
+    {
         let spec = self.current_page_spec(state);
         self.sync_focus_to_spec(spec);
     }
@@ -857,7 +857,24 @@ where
         &mut self,
         key: KeyEvent,
         state: &mut S,
-    ) -> TuiPagesResult<TuiPagesOutput<A>, Handler::Error> {
+    ) -> TuiPagesResult<TuiPagesOutput<A>, Handler::Error>
+    where
+        S: RuntimeState,
+        Pages: PageProvider<V, S, O>,
+        Handler: TuiActionHandler<V, A, S, O, M>,
+    {
+        self.handle_key_with_state(key, state)
+    }
+
+    pub fn handle_key_with_state<T: RuntimeState + ?Sized>(
+        &mut self,
+        key: KeyEvent,
+        state: &mut T,
+    ) -> TuiPagesResult<TuiPagesOutput<A>, Handler::Error>
+    where
+        Pages: PageProvider<V, T, O>,
+        Handler: TuiActionHandler<V, A, T, O, M>,
+    {
         let spec = self.current_page_spec(state);
         let modes = spec.modes.clone();
         let page_accepts_text_input = spec.accepts_text_input;
@@ -943,13 +960,22 @@ where
         ))
     }
 
-    fn focused_hook_context(
+    fn focused_hook_context<T: RuntimeState + ?Sized>(
         &self,
         ctx: &ActionContext<V, O>,
-        state: &S,
+        state: &T,
     ) -> Option<(usize, InputLayerContext)> {
         self.key_hooks.iter().enumerate().find_map(|(index, hook)| {
-            (hook.context)(&hook.kind, ctx, state).map(|context| (index, context))
+            #[cfg(feature = "canvas")]
+            {
+                crate::canvas::canvas_hook_context(&hook.kind, ctx, state)
+                    .map(|context| (index, context))
+            }
+            #[cfg(not(feature = "canvas"))]
+            {
+                let _ = (index, hook, ctx, state);
+                None
+            }
         })
     }
 
@@ -988,7 +1014,7 @@ where
     /// Offer a key to a single input layer and normalise its outcome into a
     /// [`LayerResult`] the orchestrator can act on uniformly.
     #[allow(clippy::too_many_arguments)]
-    fn run_layer(
+    fn run_layer<T: RuntimeState + ?Sized>(
         &mut self,
         owner: LayerOwner,
         key: KeyEvent,
@@ -996,13 +1022,29 @@ where
         modes: &[ModeId],
         accepts_text_input: bool,
         focus_accepts_mapped_text: bool,
-        state: &mut S,
-    ) -> TuiPagesResult<LayerResult<A>, Handler::Error> {
+        state: &mut T,
+    ) -> TuiPagesResult<LayerResult<A>, Handler::Error>
+    where
+        Handler: TuiActionHandler<V, A, T, O, M>,
+        Pages: PageProvider<V, T, O>,
+    {
         match owner {
             LayerOwner::Hook(index) => {
+                #[cfg(feature = "canvas")]
                 let response = {
                     let hook = &mut self.key_hooks[index];
-                    (hook.dispatch)(&mut hook.kind, key, ctx.clone(), state)
+                    crate::canvas::dispatch_canvas_key_hook::<V, A, T, O, M>(
+                        &mut hook.kind,
+                        key,
+                        ctx.clone(),
+                        state,
+                    )
+                };
+                #[cfg(not(feature = "canvas"))]
+                let response = {
+                    let _ = (index, key, ctx);
+                    let _ = &state;
+                    None
                 };
                 match response {
                     None => Ok(LayerResult::Ignored(None)),
@@ -1066,7 +1108,24 @@ where
         &mut self,
         text: &str,
         state: &mut S,
-    ) -> TuiPagesResult<TuiPagesOutput<A>, Handler::Error> {
+    ) -> TuiPagesResult<TuiPagesOutput<A>, Handler::Error>
+    where
+        S: RuntimeState,
+        Pages: PageProvider<V, S, O>,
+        Handler: TuiActionHandler<V, A, S, O, M>,
+    {
+        self.handle_paste_with_state(text, state)
+    }
+
+    pub fn handle_paste_with_state<T: RuntimeState + ?Sized>(
+        &mut self,
+        text: &str,
+        state: &mut T,
+    ) -> TuiPagesResult<TuiPagesOutput<A>, Handler::Error>
+    where
+        Pages: PageProvider<V, T, O>,
+        Handler: TuiActionHandler<V, A, T, O, M>,
+    {
         let spec = self.current_page_spec(state);
         self.sync_focus_to_spec(spec);
 
@@ -1076,9 +1135,22 @@ where
             has_overlay: self.focus.has_overlay(),
         };
 
-        let mut paste_response = None;
+        let mut paste_response: Option<KeyHookOutcome<V, A, O, M>> = None;
         for hook in &mut self.key_hooks {
-            if let Some(response) = (hook.paste)(&mut hook.kind, text, ctx.clone(), state) {
+            #[cfg(feature = "canvas")]
+            let response = crate::canvas::dispatch_canvas_paste_hook::<V, A, T, O, M>(
+                &mut hook.kind,
+                text,
+                ctx.clone(),
+                state,
+            );
+            #[cfg(not(feature = "canvas"))]
+            let response = {
+                let _ = (&mut hook.kind, text, &ctx);
+                let _ = &state;
+                None
+            };
+            if let Some(response) = response {
                 paste_response = Some(response);
                 break;
             }
@@ -1096,7 +1168,24 @@ where
         &mut self,
         input: &str,
         state: &mut S,
-    ) -> TuiPagesResult<TuiPagesOutput<A>, Handler::Error> {
+    ) -> TuiPagesResult<TuiPagesOutput<A>, Handler::Error>
+    where
+        S: RuntimeState,
+        Pages: PageProvider<V, S, O>,
+        Handler: TuiActionHandler<V, A, S, O, M>,
+    {
+        self.submit_command_with_state(input, state)
+    }
+
+    pub fn submit_command_with_state<T: RuntimeState + ?Sized>(
+        &mut self,
+        input: &str,
+        state: &mut T,
+    ) -> TuiPagesResult<TuiPagesOutput<A>, Handler::Error>
+    where
+        Pages: PageProvider<V, T, O>,
+        Handler: TuiActionHandler<V, A, T, O, M>,
+    {
         match self.commands.process(input) {
             CommandResponse::Execute(action) => {
                 let quit_requested = self.dispatch_action(action, state)?;
@@ -1116,7 +1205,14 @@ where
         }
     }
 
-    pub fn apply_effect(&mut self, effect: TuiEffect<V, O, M>, state: &S) -> bool {
+    pub fn apply_effect<T: RuntimeState + ?Sized>(
+        &mut self,
+        effect: TuiEffect<V, O, M>,
+        state: &T,
+    ) -> bool
+    where
+        Pages: PageProvider<V, T, O>,
+    {
         match effect {
             TuiEffect::None => false,
             TuiEffect::Focus(intent) => {
@@ -1172,17 +1268,24 @@ where
         }
     }
 
-    fn current_page_spec(&self, state: &S) -> PageSpec<O> {
+    fn current_page_spec<T: RuntimeState + ?Sized>(&self, state: &T) -> PageSpec<O>
+    where
+        Pages: PageProvider<V, T, O>,
+    {
         let view = self.current_view();
         let focus = self.focus.current();
         self.pages.page_spec(view, state, focus.as_ref())
     }
 
-    fn dispatch_action(
+    fn dispatch_action<T: RuntimeState + ?Sized>(
         &mut self,
         action: A,
-        state: &mut S,
-    ) -> TuiPagesResult<bool, Handler::Error> {
+        state: &mut T,
+    ) -> TuiPagesResult<bool, Handler::Error>
+    where
+        Pages: PageProvider<V, T, O>,
+        Handler: TuiActionHandler<V, A, T, O, M>,
+    {
         let ctx = ActionContext {
             current_view: self.current_view().clone(),
             focus: self.focus.current(),
@@ -1190,16 +1293,20 @@ where
         };
         let outcome = self
             .handler
-            .handle_action(action, ctx, state)
+            .handle_action(action, ctx, state, &mut self.focus, &mut self.commands)
             .map_err(TuiPagesError::Handler)?;
         Ok(self.apply_outcome(outcome, state))
     }
 
-    fn dispatch_text(
+    fn dispatch_text<T: RuntimeState + ?Sized>(
         &mut self,
         chord: KeyChord,
-        state: &mut S,
-    ) -> TuiPagesResult<bool, Handler::Error> {
+        state: &mut T,
+    ) -> TuiPagesResult<bool, Handler::Error>
+    where
+        Pages: PageProvider<V, T, O>,
+        Handler: TuiActionHandler<V, A, T, O, M>,
+    {
         let ctx = ActionContext {
             current_view: self.current_view().clone(),
             focus: self.focus.current(),
@@ -1207,12 +1314,19 @@ where
         };
         let outcome = self
             .handler
-            .handle_text(chord, ctx, state)
+            .handle_text(chord, ctx, state, &mut self.focus, &mut self.commands)
             .map_err(TuiPagesError::Handler)?;
         Ok(self.apply_outcome(outcome, state))
     }
 
-    fn apply_outcome(&mut self, outcome: ActionOutcome<V, O, M>, state: &S) -> bool {
+    fn apply_outcome<T: RuntimeState + ?Sized>(
+        &mut self,
+        outcome: ActionOutcome<V, O, M>,
+        state: &T,
+    ) -> bool
+    where
+        Pages: PageProvider<V, T, O>,
+    {
         let mut quit_requested = false;
         for effect in outcome.effects {
             quit_requested |= self.apply_effect(effect, state);
@@ -1220,7 +1334,10 @@ where
         quit_requested
     }
 
-    fn switch_buffer(&mut self, forward: bool, state: &S) {
+    fn switch_buffer<T: RuntimeState + ?Sized>(&mut self, forward: bool, state: &T)
+    where
+        Pages: PageProvider<V, T, O>,
+    {
         if self.buffer.history.len() <= 1 {
             return;
         }
@@ -1236,7 +1353,7 @@ where
 }
 
 #[derive(Debug, Clone)]
-pub struct TuiPagesBuilder<V, A, S, O = (), M = (), Pages = (), Handler = ()> {
+pub struct TuiPagesBuilder<V, A, S: ?Sized, O = (), M = (), Pages = (), Handler = ()> {
     initial_view: V,
     fallback_view: Option<V>,
     pub(crate) input_registry: InputRegistry<A>,
@@ -1246,7 +1363,7 @@ pub struct TuiPagesBuilder<V, A, S, O = (), M = (), Pages = (), Handler = ()> {
     focus_wrap: FocusWrap,
     reserve_command_line: bool,
     pub(crate) text_input_mapper: Option<fn(KeyChord) -> Option<A>>,
-    pub(crate) key_hooks: Vec<KeyHook<V, A, S, O, M>>,
+    pub(crate) key_hooks: Vec<KeyHook>,
     keybinding_store: Option<BindingStore<A>>,
     keybinding_report: Option<KeybindingReport<A>>,
     keybinding_inheritances: Vec<KeybindingInheritance<A>>,
@@ -1260,7 +1377,7 @@ pub struct TuiPagesBuilder<V, A, S, O = (), M = (), Pages = (), Handler = ()> {
     _modal: PhantomData<M>,
 }
 
-impl<V, A, S, O, M> TuiPagesBuilder<V, A, S, O, M, (), ()> {
+impl<V, A, S: ?Sized, O, M> TuiPagesBuilder<V, A, S, O, M, (), ()> {
     pub fn new(initial_view: V) -> Self {
         Self {
             initial_view,
@@ -1290,7 +1407,7 @@ impl<V, A, S, O, M> TuiPagesBuilder<V, A, S, O, M, (), ()> {
     }
 }
 
-impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handler> {
+impl<V, A, S: ?Sized, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handler> {
     /// Supply the table that maps `[keymap.*]` action *names* to the app's
     /// action type `A`, used to load and export keybindings. When unset, the
     /// crate defaults to [`ActionRegistry::navigation`](crate::keybindings::ActionRegistry::navigation).
@@ -1478,8 +1595,6 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
     pub fn build(self) -> TuiPages<V, A, S, Pages, Handler, O, M>
     where
         V: Clone + PartialEq,
-        Pages: PageProvider<V, S, O>,
-        Handler: TuiActionHandler<V, A, S, O, M>,
     {
         let fallback_view = self
             .fallback_view
@@ -1511,7 +1626,7 @@ impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handle
     }
 }
 
-impl<V, A, S, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handler>
+impl<V, A, S: ?Sized, O, M, Pages, Handler> TuiPagesBuilder<V, A, S, O, M, Pages, Handler>
 where
     A: Clone + PartialEq + From<NavigationAction>,
 {
@@ -1578,6 +1693,8 @@ mod tests {
             _action: Action,
             _ctx: ActionContext<View>,
             _state: &mut (),
+            _focus: &mut FocusManager,
+            _commands: &mut CommandResolver<Action>,
         ) -> Result<ActionOutcome<View>, Self::Error> {
             Ok(ActionOutcome::none())
         }
@@ -1589,7 +1706,7 @@ mod tests {
 
     #[test]
     fn runtime_rebind_keymap_and_reset_restore_defaults() {
-        let mut app = TuiPages::builder(View::Main)
+        let mut app = TuiPages::<View, Action, ()>::builder(View::Main)
             .page_fn(page_spec)
             .handler(Handler)
             .bind(modes::GLOBAL, "ctrl+c", Action::Nav(NavigationAction::Quit))
@@ -1629,7 +1746,7 @@ mod tests {
     fn export_keybindings_toml_round_trips_and_is_idempotent() {
         // Config override (`focus_next = j` in general) + a runtime rebind
         // (`quit = ctrl+q` in global), exported and reloaded into a fresh app.
-        let mut app = TuiPages::builder(View::Main)
+        let mut app = TuiPages::<View, Action, ()>::builder(View::Main)
             .page_fn(page_spec)
             .handler(Handler)
             .bind(modes::GLOBAL, "ctrl+c", Action::Nav(NavigationAction::Quit))
@@ -1641,7 +1758,7 @@ mod tests {
 
         let exported = app.export_keybindings_toml().unwrap();
 
-        let reloaded = TuiPages::builder(View::Main)
+        let reloaded = TuiPages::<View, Action, ()>::builder(View::Main)
             .page_fn(page_spec)
             .handler(Handler)
             .bind(modes::GLOBAL, "ctrl+c", Action::Nav(NavigationAction::Quit))
