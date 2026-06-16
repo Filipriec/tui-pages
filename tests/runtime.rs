@@ -31,9 +31,6 @@ struct State {
     typed: Vec<KeyChord>,
 }
 
-#[cfg(feature = "canvas")]
-impl tui_pages::canvas::CanvasWidgetState for State {}
-
 #[derive(Clone, Copy)]
 struct Handler;
 

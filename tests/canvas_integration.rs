@@ -43,8 +43,6 @@ struct State {
     actions: Vec<Action>,
 }
 
-impl canvas::CanvasWidgetState for State {}
-
 struct Handler;
 
 impl TuiActionHandler<View, Action, State> for Handler {

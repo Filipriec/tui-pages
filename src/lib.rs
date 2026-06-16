@@ -86,10 +86,12 @@ pub use navigation::{
 #[cfg(feature = "command-line")]
 pub use runtime::CommandLineAreas;
 pub use runtime::{
-    ActionContext, ActionOutcome, InputLayerContext, ModeId, PageFn, PageProvider, PageSpec,
-    RuntimeContext, TuiActionHandler, TuiApp, TuiEffect, TuiPages, TuiPagesBuilder, TuiPagesError,
-    TuiPagesOutput, TuiPagesResult, TuiPagesStatus, modes,
+    ActionContext, ActionOutcome, InputLayerContext, ModeId, NoCanvasHooks, PageFn, PageProvider,
+    PageSpec, RuntimeContext, TuiActionHandler, TuiApp, TuiEffect, TuiPages, TuiPagesBuilder,
+    TuiPagesError, TuiPagesOutput, TuiPagesResult, TuiPagesStatus, modes,
 };
+#[cfg(feature = "canvas")]
+pub use runtime::CanvasHooks;
 pub use terminal::{TerminalGuard, enter as enter_terminal};
 
 /// Everything a typical application needs in one glob import.
@@ -111,10 +113,12 @@ pub mod prelude {
         FocusQuery, FocusTarget, FocusWrap, KeyChord, KeybindingConfig, KeybindingConfigError,
         KeybindingReport, ModeId, NavigationAction, NavigationActionInfo, NavigationConflictPolicy,
         NavigationPreset, NavigationPresetError, NavigationPresetIssue, PageFn, PageFocusBuilder,
-        PageProvider, PageSpec, ParseBuiltinNavigationPresetError, ParseKeyError, RuntimeContext,
-        TerminalGuard, TuiActionHandler, TuiApp, TuiEffect, TuiPages, TuiPagesOutput,
-        TuiPagesStatus, VimAction, modes, parse_binding, try_parse_binding,
+        NoCanvasHooks, PageProvider, PageSpec, ParseBuiltinNavigationPresetError, ParseKeyError,
+        RuntimeContext, TerminalGuard, TuiActionHandler, TuiApp, TuiEffect, TuiPages,
+        TuiPagesOutput, TuiPagesStatus, VimAction, modes, parse_binding, try_parse_binding,
     };
+    #[cfg(feature = "canvas")]
+    pub use crate::CanvasHooks;
     pub use crate::{
         apply_navigation_preset_toml, emacs_preset_toml, helix_preset_toml,
         navigation_action_infos, navigation_action_outcome, remap_navigation_preset_toml,

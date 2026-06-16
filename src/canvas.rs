@@ -12,11 +12,13 @@ use crate::input::{
     CanvasRoutingPrecedence, KeyChord, KeyMap,
 };
 use crate::runtime::{
-    ActionContext, ActionOutcome, InputLayerContext, KeyHook, KeyHookKind, KeyHookOutcome,
-    KeyHookRouting, ModeId, PageSpec, TuiEffect, TuiPagesBuilder, TuiPagesStatus, modes,
+    ActionContext, ActionOutcome, CanvasHooks, InputLayerContext, KeyHook, KeyHookKind,
+    KeyHookOutcome, KeyHookRouting, ModeId, PageSpec, TuiEffect, TuiPagesBuilder, TuiPagesStatus,
+    modes,
 };
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::{Frame, layout::Rect};
+use std::marker::PhantomData;
 
 // The `canvas` feature enables full canvas support — every surface below is
 // available unconditionally. We do not split canvas into sub-features.
@@ -1373,8 +1375,11 @@ where
     }
 }
 
-impl<V, A, O, M, Pages, Handler> TuiPagesBuilder<V, A, O, M, Pages, Handler> {
-    pub fn canvas_form_editor(self, id: usize) -> Self {
+impl<V, A, O, M, Pages, Handler, Hooks> TuiPagesBuilder<V, A, O, M, Pages, Handler, Hooks> {
+    pub fn canvas_form_editor(
+        self,
+        id: usize,
+    ) -> TuiPagesBuilder<V, A, O, M, Pages, Handler, CanvasHooks> {
         self.canvas_form_editor_with_preset(id, BuiltinCanvasKeybindingPreset::Vim)
     }
 
@@ -1382,7 +1387,7 @@ impl<V, A, O, M, Pages, Handler> TuiPagesBuilder<V, A, O, M, Pages, Handler> {
         mut self,
         id: usize,
         preset: BuiltinCanvasKeybindingPreset,
-    ) -> Self {
+    ) -> TuiPagesBuilder<V, A, O, M, Pages, Handler, CanvasHooks> {
         seed_canvas_profile_if_unconfigured(&self.canvas_keybinding_profile, preset);
         self.key_hooks.push(KeyHook {
             kind: KeyHookKind::CanvasFormEditor {
@@ -1391,10 +1396,13 @@ impl<V, A, O, M, Pages, Handler> TuiPagesBuilder<V, A, O, M, Pages, Handler> {
                 installed_generation: None,
             },
         });
-        self
+        self.into_canvas_hooks()
     }
 
-    pub fn canvas_textarea_widget(self, focus_index: usize) -> Self {
+    pub fn canvas_textarea_widget(
+        self,
+        focus_index: usize,
+    ) -> TuiPagesBuilder<V, A, O, M, Pages, Handler, CanvasHooks> {
         self.canvas_textarea_widget_with_preset(focus_index, BuiltinCanvasKeybindingPreset::Vim)
     }
 
@@ -1402,7 +1410,7 @@ impl<V, A, O, M, Pages, Handler> TuiPagesBuilder<V, A, O, M, Pages, Handler> {
         mut self,
         focus_index: usize,
         preset: BuiltinCanvasKeybindingPreset,
-    ) -> Self {
+    ) -> TuiPagesBuilder<V, A, O, M, Pages, Handler, CanvasHooks> {
         seed_canvas_profile_if_unconfigured(&self.canvas_keybinding_profile, preset);
         self.key_hooks.push(KeyHook {
             kind: KeyHookKind::CanvasTextArea {
@@ -1411,10 +1419,13 @@ impl<V, A, O, M, Pages, Handler> TuiPagesBuilder<V, A, O, M, Pages, Handler> {
                 installed_generation: None,
             },
         });
-        self
+        self.into_canvas_hooks()
     }
 
-    pub fn canvas_textinput_widget(self, focus_index: usize) -> Self {
+    pub fn canvas_textinput_widget(
+        self,
+        focus_index: usize,
+    ) -> TuiPagesBuilder<V, A, O, M, Pages, Handler, CanvasHooks> {
         self.canvas_textinput_widget_with_preset(focus_index, BuiltinCanvasKeybindingPreset::Vim)
     }
 
@@ -1422,7 +1433,7 @@ impl<V, A, O, M, Pages, Handler> TuiPagesBuilder<V, A, O, M, Pages, Handler> {
         mut self,
         focus_index: usize,
         preset: BuiltinCanvasKeybindingPreset,
-    ) -> Self {
+    ) -> TuiPagesBuilder<V, A, O, M, Pages, Handler, CanvasHooks> {
         seed_canvas_profile_if_unconfigured(&self.canvas_keybinding_profile, preset);
         self.key_hooks.push(KeyHook {
             kind: KeyHookKind::CanvasTextInput {
@@ -1431,7 +1442,32 @@ impl<V, A, O, M, Pages, Handler> TuiPagesBuilder<V, A, O, M, Pages, Handler> {
                 installed_generation: None,
             },
         });
-        self
+        self.into_canvas_hooks()
+    }
+
+    fn into_canvas_hooks(self) -> TuiPagesBuilder<V, A, O, M, Pages, Handler, CanvasHooks> {
+        TuiPagesBuilder {
+            initial_view: self.initial_view,
+            fallback_view: self.fallback_view,
+            input_registry: self.input_registry,
+            command_registry: self.command_registry,
+            input_timeout_ms: self.input_timeout_ms,
+            command_timeout_ms: self.command_timeout_ms,
+            focus_wrap: self.focus_wrap,
+            reserve_command_line: self.reserve_command_line,
+            text_input_mapper: self.text_input_mapper,
+            key_hooks: self.key_hooks,
+            keybinding_store: self.keybinding_store,
+            keybinding_report: self.keybinding_report,
+            keybinding_inheritances: self.keybinding_inheritances,
+            action_registry: self.action_registry,
+            canvas_keybinding_profile: self.canvas_keybinding_profile,
+            pages: self.pages,
+            handler: self.handler,
+            _overlay: PhantomData,
+            _modal: PhantomData,
+            _hooks: PhantomData,
+        }
     }
 }
 
