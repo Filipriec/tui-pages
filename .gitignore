@@ -9,3 +9,4 @@ plans/
 *.md
 !src/keybindings/README.md
 !CHANGELOG.md
+!theme.md
