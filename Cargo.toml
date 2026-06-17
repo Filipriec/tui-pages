@@ -9,7 +9,7 @@ repository = "https://gitlab.com/filipriec/tui-pages"
 readme = "README.md"
 keywords = ["tui", "terminal", "ratatui", "keyboard", "ui"]
 categories = ["command-line-interface"]
-exclude = ["examples/", ".claude/", ".forge/"]
+exclude = ["mdbook/", "book.toml", "examples/", ".claude/", ".forge/"]
 
 [package.metadata.docs.rs]
 all-features = true
