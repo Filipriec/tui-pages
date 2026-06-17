@@ -419,6 +419,21 @@ fn canvas_focus_coexists_with_buttons_sections_modal_and_internal_targets() {
             item: 1
         })
     );
+    // Next at the last section item clamps (stays inside the section).
+    app.handle_key(key(KeyCode::Tab), &mut state).unwrap();
+    assert_eq!(
+        app.focus.current(),
+        Some(FocusTarget::SectionItem {
+            section: 7,
+            item: 1
+        })
+    );
+    // Leave the section explicitly, then Tab advances to the next target.
+    app.apply_effect(
+        TuiEffect::Focus(FocusIntent::LeaveSection),
+        &state,
+    );
+    assert_eq!(app.focus.current(), Some(FocusTarget::Section(7)));
     app.handle_key(key(KeyCode::Tab), &mut state).unwrap();
     assert_eq!(app.focus.current(), Some(FocusTarget::CanvasField(1)));
 
