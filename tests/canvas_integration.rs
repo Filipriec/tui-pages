@@ -1270,6 +1270,7 @@ fn every_canvas_surface_is_reachable_through_tui_pages() {
     // `render_canvas_default` draws into a ratatui `Frame`; we only prove the
     // path resolves (rendering needs a live terminal/frame to call).
     let _render = canvas::render_canvas_default::<Provider>;
+    let _render_unmanaged_cursor = canvas::render_canvas_default_unmanaged_cursor::<Provider>;
     let _render_with_suggestions = canvas::render_canvas_with_suggestions_default::<Provider>;
     let _render_with_suggestions_options =
         canvas::render_canvas_with_suggestions_default_options::<Provider>;
@@ -1352,6 +1353,7 @@ fn every_canvas_surface_is_reachable_through_tui_pages() {
         _helix_bindings,
         _emacs_bindings,
         _render,
+        _render_unmanaged_cursor,
         _render_with_suggestions,
         _render_with_suggestions_options,
         _cursor_mode,

@@ -537,6 +537,19 @@ where
     active_rect
 }
 
+pub fn render_canvas_unmanaged_cursor<T, D>(
+    frame: &mut Frame,
+    area: Rect,
+    editor: &FormEditor<D>,
+    theme: &T,
+) -> Option<Rect>
+where
+    T: CanvasTheme,
+    D: DataProvider,
+{
+    ::canvas::render_canvas(frame, area, editor, theme)
+}
+
 pub fn render_canvas_with_options<T, D>(
     frame: &mut Frame,
     area: Rect,
@@ -553,6 +566,20 @@ where
     active_rect
 }
 
+pub fn render_canvas_with_options_unmanaged_cursor<T, D>(
+    frame: &mut Frame,
+    area: Rect,
+    editor: &FormEditor<D>,
+    theme: &T,
+    opts: CanvasDisplayOptions,
+) -> Option<Rect>
+where
+    T: CanvasTheme,
+    D: DataProvider,
+{
+    ::canvas::render_canvas_with_options(frame, area, editor, theme, opts)
+}
+
 pub fn render_canvas_default<D>(
     frame: &mut Frame,
     area: Rect,
@@ -563,6 +590,18 @@ where
 {
     let theme = DefaultCanvasTheme;
     render_canvas(frame, area, editor, &theme)
+}
+
+pub fn render_canvas_default_unmanaged_cursor<D>(
+    frame: &mut Frame,
+    area: Rect,
+    editor: &FormEditor<D>,
+) -> Option<Rect>
+where
+    D: DataProvider,
+{
+    let theme = DefaultCanvasTheme;
+    render_canvas_unmanaged_cursor(frame, area, editor, &theme)
 }
 
 pub fn render_canvas_with_suggestions<T, D>(
