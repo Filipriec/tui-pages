@@ -907,6 +907,54 @@ fn widget_page(_v: &View, _s: &WidgetState, _f: Option<&FocusTarget>) -> PageSpe
 }
 
 #[test]
+fn default_cursor_behavior_is_hidden_without_canvas_cursor_widgets() {
+    let mut app = TuiPages::<View, WidgetAction>::builder(View::Form)
+        .page_fn(widget_page)
+        .handler(WidgetHandler)
+        .build();
+    let state = WidgetState::default();
+
+    assert_eq!(
+        app.default_cursor_behavior(&state),
+        canvas::DefaultCursorBehavior::Hidden
+    );
+}
+
+#[test]
+fn default_cursor_behavior_uses_focused_form_editor_mode() {
+    let mut app = TuiPages::<View, WidgetAction>::builder(View::Form)
+        .page_fn(widget_page)
+        .handler(WidgetHandler)
+        .canvas_form_editor(0)
+        .build();
+    let state = WidgetState::default();
+
+    assert_eq!(
+        app.default_cursor_behavior(&state),
+        canvas::DefaultCursorBehavior::Active {
+            mode: canvas::AppMode::Nor
+        }
+    );
+}
+
+#[test]
+fn default_cursor_behavior_keeps_inactive_underscore_when_focus_leaves_canvas() {
+    let mut app = TuiPages::<View, WidgetAction>::builder(View::Form)
+        .page_fn(widget_page)
+        .handler(WidgetHandler)
+        .canvas_form_editor(0)
+        .build();
+    let state = WidgetState::default();
+    app.refresh_page(&state);
+    app.focus.set_focus(FocusTarget::Button(0));
+
+    assert_eq!(
+        app.default_cursor_behavior(&state),
+        canvas::DefaultCursorBehavior::InactiveUnderscore
+    );
+}
+
+#[test]
 fn canvas_form_editor_builder_dispatches_without_canvas_actions_in_app_action() {
     let mut app = TuiPages::<View, WidgetAction>::builder(View::Form)
         .page_fn(widget_page)
@@ -1229,6 +1277,8 @@ fn every_canvas_surface_is_reachable_through_tui_pages() {
     // Cursor style.
     let _cursor: Option<canvas::CursorManager> = None;
     let _cursor_mode = canvas::update_cursor_style_for_mode;
+    let _default_cursor_mode = canvas::update_default_cursor_style;
+    let _default_cursor_behavior = canvas::DefaultCursorBehavior::Hidden;
 
     // Suggestions.
     let _trigger = canvas::SuggestionTrigger::WhenFieldStarts;
@@ -1305,6 +1355,8 @@ fn every_canvas_surface_is_reachable_through_tui_pages() {
         _render_with_suggestions,
         _render_with_suggestions_options,
         _cursor_mode,
+        _default_cursor_mode,
+        _default_cursor_behavior,
         _commandline,
         _commandline_widget,
         _commandline_mode,

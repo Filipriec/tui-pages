@@ -468,6 +468,13 @@ pub(crate) trait HookDispatch<S: ?Sized, V, A, O, M> {
         state: &S,
     ) -> Option<(usize, InputLayerContext)>;
 
+    #[cfg(feature = "canvas")]
+    fn cursor_behavior(
+        hooks: &[KeyHook],
+        ctx: &ActionContext<V, O>,
+        state: &S,
+    ) -> crate::canvas::DefaultCursorBehavior;
+
     fn dispatch_hook(
         hook: &mut KeyHook,
         key: KeyEvent,
@@ -490,6 +497,15 @@ impl<S: ?Sized, V, A, O, M> HookDispatch<S, V, A, O, M> for NoCanvasHooks {
         _state: &S,
     ) -> Option<(usize, InputLayerContext)> {
         None
+    }
+
+    #[cfg(feature = "canvas")]
+    fn cursor_behavior(
+        _hooks: &[KeyHook],
+        _ctx: &ActionContext<V, O>,
+        _state: &S,
+    ) -> crate::canvas::DefaultCursorBehavior {
+        crate::canvas::DefaultCursorBehavior::Hidden
     }
 
     fn dispatch_hook(
@@ -525,6 +541,17 @@ where
             crate::canvas::canvas_hook_context(&hook.kind, ctx, state)
                 .map(|context| (index, context))
         })
+    }
+
+    fn cursor_behavior(
+        hooks: &[KeyHook],
+        ctx: &ActionContext<V, O>,
+        state: &S,
+    ) -> crate::canvas::DefaultCursorBehavior {
+        hooks
+            .iter()
+            .find_map(|hook| crate::canvas::canvas_hook_cursor_behavior(&hook.kind, ctx, state))
+            .unwrap_or(crate::canvas::DefaultCursorBehavior::Hidden)
     }
 
     fn dispatch_hook(
@@ -1385,6 +1412,19 @@ where
     A: Clone,
     O: Clone + PartialEq,
 {
+    #[cfg(feature = "canvas")]
+    pub fn default_cursor_behavior<S: ?Sized>(
+        &mut self,
+        state: &S,
+    ) -> crate::canvas::DefaultCursorBehavior
+    where
+        Pages: PageProvider<V, S, O>,
+    {
+        let spec = self.current_page_spec(state);
+        self.sync_focus_to_spec(spec);
+        crate::canvas::DefaultCursorBehavior::Hidden
+    }
+
     pub fn handle_key<S: ?Sized>(
         &mut self,
         key: KeyEvent,
@@ -1429,6 +1469,24 @@ where
     A: Clone,
     O: Clone + PartialEq,
 {
+    pub fn default_cursor_behavior<S>(
+        &mut self,
+        state: &S,
+    ) -> crate::canvas::DefaultCursorBehavior
+    where
+        S: crate::canvas::CanvasWidgetState + ?Sized,
+        Pages: PageProvider<V, S, O>,
+    {
+        let spec = self.current_page_spec(state);
+        self.sync_focus_to_spec(spec);
+        let ctx = ActionContext {
+            current_view: self.current_view().clone(),
+            focus: self.focus.current(),
+            has_overlay: self.focus.has_overlay(),
+        };
+        <CanvasHooks as HookDispatch<S, V, A, O, M>>::cursor_behavior(&self.key_hooks, &ctx, state)
+    }
+
     pub fn handle_key<S>(
         &mut self,
         key: KeyEvent,

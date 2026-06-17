@@ -16,8 +16,12 @@ use crate::runtime::{
     KeyHookOutcome, KeyHookRouting, ModeId, PageSpec, TuiEffect, TuiPagesBuilder, TuiPagesStatus,
     modes,
 };
-use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::{
+    event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
+    execute,
+};
 use ratatui::{Frame, layout::Rect};
+use std::io;
 use std::marker::PhantomData;
 
 // The `canvas` feature enables full canvas support — every surface below is
@@ -71,8 +75,7 @@ pub use ::canvas::{ComputedContext, ComputedProvider, ComputedState};
 
 // --- GUI: renderers, themes, display options ---
 pub use ::canvas::{
-    CanvasDisplayOptions, CanvasTheme, DefaultCanvasTheme, OverflowMode, render_canvas,
-    render_canvas_default, render_canvas_with_options,
+    CanvasDisplayOptions, CanvasTheme, DefaultCanvasTheme, OverflowMode,
 };
 
 // Crossterm terminal-input session helpers (raw mode, bracketed paste, mouse
@@ -106,6 +109,13 @@ pub type FormEditor<D> = TextFormState<D>;
 pub type FormInputEventOutcome = TextFormEventOutcome;
 pub type TextAreaEditor<P> = TextAreaState<P>;
 pub type TextInputEditor<P> = TextInputState<P>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DefaultCursorBehavior {
+    Hidden,
+    Active { mode: AppMode },
+    InactiveUnderscore,
+}
 
 #[derive(Debug, Clone)]
 pub enum CanvasDispatchOutcome<O = (), M = ()> {
@@ -512,6 +522,49 @@ where
     }
 }
 
+pub fn render_canvas<T, D>(
+    frame: &mut Frame,
+    area: Rect,
+    editor: &FormEditor<D>,
+    theme: &T,
+) -> Option<Rect>
+where
+    T: CanvasTheme,
+    D: DataProvider,
+{
+    let active_rect = ::canvas::render_canvas(frame, area, editor, theme);
+    frame.set_cursor_position(editor.cursor(area, None));
+    active_rect
+}
+
+pub fn render_canvas_with_options<T, D>(
+    frame: &mut Frame,
+    area: Rect,
+    editor: &FormEditor<D>,
+    theme: &T,
+    opts: CanvasDisplayOptions,
+) -> Option<Rect>
+where
+    T: CanvasTheme,
+    D: DataProvider,
+{
+    let active_rect = ::canvas::render_canvas_with_options(frame, area, editor, theme, opts);
+    frame.set_cursor_position(editor.cursor(area, None));
+    active_rect
+}
+
+pub fn render_canvas_default<D>(
+    frame: &mut Frame,
+    area: Rect,
+    editor: &FormEditor<D>,
+) -> Option<Rect>
+where
+    D: DataProvider,
+{
+    let theme = DefaultCanvasTheme;
+    render_canvas(frame, area, editor, &theme)
+}
+
 pub fn render_canvas_with_suggestions<T, D>(
     frame: &mut Frame,
     frame_area: Rect,
@@ -582,6 +635,20 @@ where
 
 pub fn update_cursor_style_for_mode(mode: AppMode) -> std::io::Result<()> {
     CursorManager::update_for_mode(mode)
+}
+
+pub fn update_default_cursor_style(behavior: DefaultCursorBehavior) -> std::io::Result<()> {
+    match behavior {
+        DefaultCursorBehavior::Hidden => execute!(io::stdout(), crossterm::cursor::Hide),
+        DefaultCursorBehavior::Active { mode } => {
+            execute!(io::stdout(), crossterm::cursor::Show)?;
+            update_cursor_style_for_mode(mode)
+        }
+        DefaultCursorBehavior::InactiveUnderscore => {
+            execute!(io::stdout(), crossterm::cursor::Show)?;
+            update_cursor_style_for_mode(AppMode::Command)
+        }
+    }
 }
 
 pub fn update_cursor_style_for_editor<D>(editor: &FormEditor<D>) -> std::io::Result<()>
@@ -992,6 +1059,54 @@ where
             state
                 .canvas_textinput_ref(*focus_index)
                 .map(|input| input_layer_context_for_mode(input.mode()))
+        }
+    }
+}
+
+pub(crate) fn canvas_hook_cursor_behavior<V, S, O>(
+    kind: &KeyHookKind,
+    ctx: &ActionContext<V, O>,
+    state: &S,
+) -> Option<DefaultCursorBehavior>
+where
+    S: CanvasWidgetState + ?Sized,
+{
+    match kind {
+        KeyHookKind::CanvasFormEditor { id, .. } => {
+            let editor = state.canvas_form_editor_ref(*id)?;
+            if ctx.focus.as_ref().is_some_and(FocusTarget::is_canvas) {
+                Some(DefaultCursorBehavior::Active {
+                    mode: editor.mode(),
+                })
+            } else {
+                Some(DefaultCursorBehavior::InactiveUnderscore)
+            }
+        }
+        KeyHookKind::CanvasTextArea { focus_index, .. } => {
+            let textarea = state.canvas_textarea_ref(*focus_index)?;
+            if focused_canvas_field(ctx, *focus_index)
+                && state
+                    .canvas_textarea_entered_ref(*focus_index)
+                    .is_some_and(|entered| *entered)
+            {
+                Some(DefaultCursorBehavior::Active {
+                    mode: textarea.mode(),
+                })
+            } else {
+                Some(DefaultCursorBehavior::InactiveUnderscore)
+            }
+        }
+        KeyHookKind::CanvasTextInput { focus_index, .. } => {
+            let input = state.canvas_textinput_ref(*focus_index)?;
+            if focused_canvas_field(ctx, *focus_index)
+                && state
+                    .canvas_textinput_entered_ref(*focus_index)
+                    .is_some_and(|entered| *entered)
+            {
+                Some(DefaultCursorBehavior::Active { mode: input.mode() })
+            } else {
+                Some(DefaultCursorBehavior::InactiveUnderscore)
+            }
         }
     }
 }
