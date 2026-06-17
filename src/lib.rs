@@ -22,6 +22,8 @@ pub mod navigation;
 pub mod picker;
 pub mod runtime;
 pub mod terminal;
+#[cfg(feature = "tui")]
+pub mod theme;
 
 #[cfg(feature = "tui")]
 pub use dialog::{DialogData, DialogKey, DialogResult, DialogTheme, render_dialog};
@@ -32,6 +34,9 @@ pub use picker::{
     PickerLayout, PickerScope, PickerTheme, centered_picker_area, render_picker,
     render_picker_with_custom_preview,
 };
+
+#[cfg(feature = "tui")]
+pub use theme::{Theme, ThemeError, ThemeLoader};
 
 #[cfg(feature = "canvas")]
 pub use crate::canvas::{
@@ -147,4 +152,7 @@ pub mod prelude {
         PickerLayout, PickerScope, PickerTheme, centered_picker_area, render_picker,
         render_picker_with_custom_preview,
     };
+
+    #[cfg(feature = "tui")]
+    pub use crate::{Theme, ThemeError, ThemeLoader};
 }
