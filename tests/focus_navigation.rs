@@ -47,7 +47,7 @@ fn focus_manager_moves_between_buttons_without_wrapping() {
 }
 
 #[test]
-fn activate_enters_a_registered_section_and_next_steps_out_at_the_edge() {
+fn activate_enters_a_registered_section_and_next_clamps_at_the_edge() {
     let mut focus: FocusManager = FocusManager::new();
     focus.register_page(vec![FocusTarget::Section(0), FocusTarget::Button(0)]);
     focus.set_section_items(vec![(0, 3)]);
@@ -76,13 +76,22 @@ fn activate_enters_a_registered_section_and_next_steps_out_at_the_edge() {
         })
     );
 
-    // ...and at the last item (Clamp) steps out to the next top-level target.
+    // ...and at the last item stays inside the section.
     focus.apply_focus_intent(FocusIntent::Next);
-    assert_eq!(focus.current(), Some(FocusTarget::Button(0)));
+    assert_eq!(
+        focus.current(),
+        Some(FocusTarget::SectionItem {
+            section: 0,
+            item: 2
+        })
+    );
+
+    focus.apply_focus_intent(FocusIntent::LeaveSection);
+    assert_eq!(focus.current(), Some(FocusTarget::Section(0)));
 }
 
 #[test]
-fn section_edges_step_out_even_when_page_focus_wraps() {
+fn section_edges_clamp_even_when_page_focus_wraps() {
     let mut focus: FocusManager = FocusManager::new();
     focus.set_focus_wrap(FocusWrap::Wrap);
     focus.register_page(vec![
@@ -104,16 +113,34 @@ fn section_edges_step_out_even_when_page_focus_wraps() {
     );
 
     focus.apply_focus_intent(FocusIntent::Next);
-    assert_eq!(focus.current(), Some(FocusTarget::Button(2)));
+    assert_eq!(
+        focus.current(),
+        Some(FocusTarget::SectionItem {
+            section: 1,
+            item: 1
+        })
+    );
 
-    focus.apply_focus_intent(FocusIntent::Prev); // section header
-    focus.apply_focus_intent(FocusIntent::Activate);
     focus.apply_focus_intent(FocusIntent::Prev);
-    assert_eq!(focus.current(), Some(FocusTarget::Button(0)));
+    assert_eq!(
+        focus.current(),
+        Some(FocusTarget::SectionItem {
+            section: 1,
+            item: 0
+        })
+    );
+    focus.apply_focus_intent(FocusIntent::Prev);
+    assert_eq!(
+        focus.current(),
+        Some(FocusTarget::SectionItem {
+            section: 1,
+            item: 0
+        })
+    );
 }
 
 #[test]
-fn prev_leaves_a_section_at_its_first_item() {
+fn prev_clamps_at_a_sections_first_item() {
     let mut focus: FocusManager = FocusManager::new();
     focus.register_page(vec![FocusTarget::Button(0), FocusTarget::Section(1)]);
     focus.set_section_items(vec![(1, 2)]);
@@ -128,9 +155,18 @@ fn prev_leaves_a_section_at_its_first_item() {
         })
     );
 
-    // Prev at the first item leaves the section for the target before it.
+    // Prev at the first item stays inside the section.
     focus.apply_focus_intent(FocusIntent::Prev);
-    assert_eq!(focus.current(), Some(FocusTarget::Button(0)));
+    assert_eq!(
+        focus.current(),
+        Some(FocusTarget::SectionItem {
+            section: 1,
+            item: 0
+        })
+    );
+
+    focus.apply_focus_intent(FocusIntent::LeaveSection);
+    assert_eq!(focus.current(), Some(FocusTarget::Section(1)));
 }
 
 #[test]

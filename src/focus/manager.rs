@@ -175,12 +175,8 @@ impl<O, M> FocusManager<O, M> {
                 if let Some(section) = &mut self.entered_section {
                     section.item_index += 1;
                 }
-                return;
             }
-            // At the section's last item: leave the section and continue to the
-            // adjacent top-level target. `self.index` still points at the
-            // `Section` target, so the scan below steps past it.
-            self.entered_section = None;
+            return;
         }
 
         if self
@@ -229,11 +225,8 @@ impl<O, M> FocusManager<O, M> {
                 if let Some(section) = &mut self.entered_section {
                     section.item_index -= 1;
                 }
-                return;
             }
-            // At the section's first item: leave the section and continue to
-            // the adjacent top-level target before it.
-            self.entered_section = None;
+            return;
         }
 
         if self
