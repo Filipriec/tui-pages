@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Keybinding inheritance: copy keybindings from one action to another across modes (e.g. Command/Enter mirrors General/Select). Uses compile-time constants instead of strings, so typos are caught by the compiler and IDEs can autocomplete.
 - Canvas integration tests (`tests/canvas_integration.rs`)
 - `render_canvas_unmanaged_cursor()`, `render_canvas_with_options_unmanaged_cursor()`, and `render_canvas_default_unmanaged_cursor()` — canvas render functions that skip cursor management, letting callers handle the cursor themselves in exceptional cases
+- `define_buttons!` macro for generating focusable button enums with `COUNT`, `from_index`, and `index` (re-exported in prelude)
 
 ### Changed
 - **Feature rename**: `dialog` feature replaced by `tui` feature, which bundles the modal dialog, the fuzzy picker, and the canvas + nucleo + unicode-width dependencies

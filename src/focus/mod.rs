@@ -1,3 +1,4 @@
+mod button_macro;
 mod builder;
 mod focusable;
 mod intent;

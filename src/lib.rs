@@ -115,7 +115,8 @@ pub mod prelude {
         NavigationPreset, NavigationPresetError, NavigationPresetIssue, PageFn, PageFocusBuilder,
         NoCanvasHooks, PageProvider, PageSpec, ParseBuiltinNavigationPresetError, ParseKeyError,
         RuntimeContext, TerminalGuard, TuiActionHandler, TuiApp, TuiEffect, TuiPages,
-        TuiPagesOutput, TuiPagesStatus, VimAction, modes, parse_binding, try_parse_binding,
+        TuiPagesOutput, TuiPagesStatus, VimAction, define_buttons, modes, parse_binding,
+        try_parse_binding,
     };
     #[cfg(feature = "canvas")]
     pub use crate::CanvasHooks;
