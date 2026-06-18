@@ -5,6 +5,7 @@
 //! dot-delimited scope fallback (`ui.text.focus` → `ui.text` → `ui`).
 
 use std::collections::{HashMap, HashSet};
+use std::env;
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -439,6 +440,280 @@ impl Theme {
     pub fn styles(&self) -> &HashMap<String, Style> {
         &self.styles
     }
+
+    /// Resolve the first usable style for a typed theme role.
+    pub fn role(&self, role: ThemeRole) -> Style {
+        self.style_from_scopes(role.scopes())
+    }
+
+    /// Resolve the first usable style across a fallback list of Helix scopes.
+    ///
+    /// Later scopes patch earlier missing fields only; lookup stops once both
+    /// foreground and background are known.
+    pub fn style_from_scopes(&self, scopes: &[&str]) -> Style {
+        let mut style = Style::default();
+        for scope in scopes {
+            if let Some(found) = self.try_get(scope) {
+                style = style.patch(found);
+                if style.fg.is_some() && style.bg.is_some() {
+                    break;
+                }
+            }
+        }
+        style
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Typed roles and runtime theme state
+// ---------------------------------------------------------------------------
+
+/// Common typed Helix UI roles.
+///
+/// These are intentionally close to Helix's own UI scope names, so callers can
+/// avoid raw string literals while still deciding where each role is used.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ThemeRole {
+    Background,
+    Text,
+    TextFocus,
+    TextInactive,
+    Muted,
+    Selection,
+    Menu,
+    MenuSelected,
+    Window,
+    Popup,
+    Help,
+    Statusline,
+    StatuslineInactive,
+    StatuslineNormal,
+    StatuslineInsert,
+    StatuslineSelect,
+    Cursor,
+    CursorNormal,
+    CursorInsert,
+    CursorSelect,
+    Cursorline,
+    Warning,
+    Error,
+    Info,
+    Hint,
+    Success,
+}
+
+impl ThemeRole {
+    /// Helix scopes used to resolve this role, in fallback order.
+    pub fn scopes(self) -> &'static [&'static str] {
+        match self {
+            Self::Background => &["ui.background"],
+            Self::Text => &["ui.text"],
+            Self::TextFocus => &["ui.text.focus", "ui.text"],
+            Self::TextInactive => &["ui.text.inactive", "ui.virtual", "comment"],
+            Self::Muted => &["ui.linenr", "ui.virtual", "comment"],
+            Self::Selection => &["ui.selection"],
+            Self::Menu => &["ui.menu", "ui.popup"],
+            Self::MenuSelected => &["ui.menu.selected", "ui.selection"],
+            Self::Window => &["ui.window"],
+            Self::Popup => &["ui.popup"],
+            Self::Help => &["ui.help", "ui.popup"],
+            Self::Statusline => &["ui.statusline"],
+            Self::StatuslineInactive => &["ui.statusline.inactive", "ui.statusline"],
+            Self::StatuslineNormal => &["ui.statusline.normal", "ui.statusline"],
+            Self::StatuslineInsert => &["ui.statusline.insert", "ui.statusline"],
+            Self::StatuslineSelect => &["ui.statusline.select", "ui.statusline"],
+            Self::Cursor => &["ui.cursor"],
+            Self::CursorNormal => &["ui.cursor.primary.normal", "ui.cursor.normal", "ui.cursor"],
+            Self::CursorInsert => &["ui.cursor.primary.insert", "ui.cursor.insert", "ui.cursor"],
+            Self::CursorSelect => &["ui.cursor.primary.select", "ui.cursor.select", "ui.cursor"],
+            Self::Cursorline => &["ui.cursorline.primary", "ui.cursorline"],
+            Self::Warning => &["warning", "diagnostic.warning"],
+            Self::Error => &["error", "diagnostic.error"],
+            Self::Info => &["info", "diagnostic.info"],
+            Self::Hint => &["hint", "diagnostic.hint"],
+            Self::Success => &["diagnostic.hint", "info"],
+        }
+    }
+}
+
+/// Cached styles for the common typed Helix UI roles.
+#[derive(Debug, Clone)]
+pub struct ThemeStyles {
+    pub background: Style,
+    pub text: Style,
+    pub text_focus: Style,
+    pub text_inactive: Style,
+    pub muted: Style,
+    pub selection: Style,
+    pub menu: Style,
+    pub menu_selected: Style,
+    pub window: Style,
+    pub popup: Style,
+    pub help: Style,
+    pub statusline: Style,
+    pub statusline_inactive: Style,
+    pub statusline_normal: Style,
+    pub statusline_insert: Style,
+    pub statusline_select: Style,
+    pub cursor: Style,
+    pub cursor_normal: Style,
+    pub cursor_insert: Style,
+    pub cursor_select: Style,
+    pub cursorline: Style,
+    pub warning: Style,
+    pub error: Style,
+    pub info: Style,
+    pub hint: Style,
+    pub success: Style,
+}
+
+impl ThemeStyles {
+    /// Resolve all typed roles from a raw Helix theme.
+    pub fn from_theme(theme: &Theme) -> Self {
+        Self {
+            background: theme.role(ThemeRole::Background),
+            text: theme.role(ThemeRole::Text),
+            text_focus: theme.role(ThemeRole::TextFocus),
+            text_inactive: theme.role(ThemeRole::TextInactive),
+            muted: theme.role(ThemeRole::Muted),
+            selection: theme.role(ThemeRole::Selection),
+            menu: theme.role(ThemeRole::Menu),
+            menu_selected: theme.role(ThemeRole::MenuSelected),
+            window: theme.role(ThemeRole::Window),
+            popup: theme.role(ThemeRole::Popup),
+            help: theme.role(ThemeRole::Help),
+            statusline: theme.role(ThemeRole::Statusline),
+            statusline_inactive: theme.role(ThemeRole::StatuslineInactive),
+            statusline_normal: theme.role(ThemeRole::StatuslineNormal),
+            statusline_insert: theme.role(ThemeRole::StatuslineInsert),
+            statusline_select: theme.role(ThemeRole::StatuslineSelect),
+            cursor: theme.role(ThemeRole::Cursor),
+            cursor_normal: theme.role(ThemeRole::CursorNormal),
+            cursor_insert: theme.role(ThemeRole::CursorInsert),
+            cursor_select: theme.role(ThemeRole::CursorSelect),
+            cursorline: theme.role(ThemeRole::Cursorline),
+            warning: theme.role(ThemeRole::Warning),
+            error: theme.role(ThemeRole::Error),
+            info: theme.role(ThemeRole::Info),
+            hint: theme.role(ThemeRole::Hint),
+            success: theme.role(ThemeRole::Success),
+        }
+    }
+
+    /// Access a role dynamically when field access is not ergonomic.
+    pub fn get(&self, role: ThemeRole) -> Style {
+        match role {
+            ThemeRole::Background => self.background,
+            ThemeRole::Text => self.text,
+            ThemeRole::TextFocus => self.text_focus,
+            ThemeRole::TextInactive => self.text_inactive,
+            ThemeRole::Muted => self.muted,
+            ThemeRole::Selection => self.selection,
+            ThemeRole::Menu => self.menu,
+            ThemeRole::MenuSelected => self.menu_selected,
+            ThemeRole::Window => self.window,
+            ThemeRole::Popup => self.popup,
+            ThemeRole::Help => self.help,
+            ThemeRole::Statusline => self.statusline,
+            ThemeRole::StatuslineInactive => self.statusline_inactive,
+            ThemeRole::StatuslineNormal => self.statusline_normal,
+            ThemeRole::StatuslineInsert => self.statusline_insert,
+            ThemeRole::StatuslineSelect => self.statusline_select,
+            ThemeRole::Cursor => self.cursor,
+            ThemeRole::CursorNormal => self.cursor_normal,
+            ThemeRole::CursorInsert => self.cursor_insert,
+            ThemeRole::CursorSelect => self.cursor_select,
+            ThemeRole::Cursorline => self.cursorline,
+            ThemeRole::Warning => self.warning,
+            ThemeRole::Error => self.error,
+            ThemeRole::Info => self.info,
+            ThemeRole::Hint => self.hint,
+            ThemeRole::Success => self.success,
+        }
+    }
+}
+
+impl Default for ThemeStyles {
+    fn default() -> Self {
+        Self::from_theme(&Theme::empty())
+    }
+}
+
+/// Owns the current Helix theme and cached typed role styles.
+#[derive(Debug, Clone)]
+pub struct ThemeManager {
+    loader: ThemeLoader,
+    current: Theme,
+    styles: ThemeStyles,
+}
+
+impl ThemeManager {
+    /// Create a manager with an empty current theme.
+    pub fn new(loader: ThemeLoader) -> Self {
+        let current = Theme::empty();
+        let styles = ThemeStyles::from_theme(&current);
+        Self {
+            loader,
+            current,
+            styles,
+        }
+    }
+
+    /// Create a manager from a loader and initial theme.
+    pub fn with_theme(loader: ThemeLoader, current: Theme) -> Self {
+        let styles = ThemeStyles::from_theme(&current);
+        Self {
+            loader,
+            current,
+            styles,
+        }
+    }
+
+    /// Create a manager with app-local themes first, then standard Helix user
+    /// config themes.
+    pub fn default_search_paths(app_theme_dir: impl Into<PathBuf>) -> Self {
+        Self::new(ThemeLoader::default_search_paths(app_theme_dir))
+    }
+
+    /// Load a theme name or file path and replace the current theme. Cached
+    /// typed role styles are refreshed atomically after a successful load.
+    pub fn load_ref(&mut self, theme_ref: &str) -> Result<(), ThemeError> {
+        let next = self.loader.load_ref(theme_ref)?;
+        self.styles = ThemeStyles::from_theme(&next);
+        self.current = next;
+        Ok(())
+    }
+
+    /// Load a theme name or file path and return a manager initialized with it.
+    pub fn loaded(mut self, theme_ref: &str) -> Result<Self, ThemeError> {
+        self.load_ref(theme_ref)?;
+        Ok(self)
+    }
+
+    /// Borrow the current raw Helix theme.
+    pub fn current(&self) -> &Theme {
+        &self.current
+    }
+
+    /// Borrow the cached typed role styles for the current theme.
+    pub fn styles(&self) -> &ThemeStyles {
+        &self.styles
+    }
+
+    /// Get a typed role from the refreshed style cache.
+    pub fn get(&self, role: ThemeRole) -> Style {
+        self.styles.get(role)
+    }
+
+    /// Raw scope lookup against the current theme.
+    pub fn scope(&self, scope: &str) -> Style {
+        self.current.get(scope)
+    }
+
+    /// Raw scope lookup with a list of fallbacks against the current theme.
+    pub fn style_from_scopes(&self, scopes: &[&str]) -> Style {
+        self.current.style_from_scopes(scopes)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -472,10 +747,41 @@ impl ThemeLoader {
         }
     }
 
+    /// Create a loader with app-local themes first, then standard Helix user
+    /// config themes (`$XDG_CONFIG_HOME/helix/themes` or
+    /// `$HOME/.config/helix/themes`).
+    pub fn default_search_paths(app_theme_dir: impl Into<PathBuf>) -> Self {
+        let mut theme_dirs = vec![app_theme_dir.into()];
+        if let Ok(config_home) = env::var("XDG_CONFIG_HOME") {
+            theme_dirs.push(PathBuf::from(config_home).join("helix").join("themes"));
+        } else if let Ok(home) = env::var("HOME") {
+            theme_dirs.push(PathBuf::from(home).join(".config").join("helix").join("themes"));
+        }
+        Self { theme_dirs }
+    }
+
     /// Load a theme by name (stem without `.toml` extension).
     pub fn load(&self, name: &str) -> Result<Theme, ThemeError> {
         let path = self.find_theme_path(name)?;
         self.load_path(path)
+    }
+
+    /// Load a theme by name or explicit file path.
+    ///
+    /// Names like `"catppuccin_mocha"` are searched as `<dir>/<name>.toml`.
+    /// Single-component filenames like `"catppuccin_mocha.toml"` are searched
+    /// directly in each configured directory. Absolute paths and relative paths
+    /// with separators are loaded as file paths.
+    pub fn load_ref(&self, theme_ref: &str) -> Result<Theme, ThemeError> {
+        let path = Path::new(theme_ref);
+        if path.is_absolute() || path.components().count() > 1 {
+            return self.load_path(path);
+        }
+        if path.extension().is_some() {
+            let path = self.find_theme_file(theme_ref)?;
+            return self.load_path(path);
+        }
+        self.load(theme_ref)
     }
 
     /// Load a theme from an explicit file path.
@@ -525,6 +831,18 @@ impl ThemeLoader {
             }
         }
         Err(ThemeError::MissingTheme { name: name.into() })
+    }
+
+    fn find_theme_file(&self, file_name: &str) -> Result<PathBuf, ThemeError> {
+        for dir in &self.theme_dirs {
+            let candidate = dir.join(file_name);
+            if candidate.exists() {
+                return Ok(candidate);
+            }
+        }
+        Err(ThemeError::MissingTheme {
+            name: file_name.into(),
+        })
     }
 
     fn theme_from_raw(&self, path: &Path, root: toml::Value) -> Result<Theme, ThemeError> {
@@ -1036,5 +1354,67 @@ fg = "#89b4fa"
             Some(Color::Rgb(0x89, 0xb4, 0xfa))
         );
         assert!(theme.try_get_exact("rainbow").is_none());
+    }
+
+    #[test]
+    fn load_ref_accepts_names_and_filenames() {
+        let (_dir, loader) = test_loader(&[("test.toml", r#""ui.text" = "cyan""#)]);
+
+        assert_eq!(loader.load_ref("test").unwrap().get("ui.text").fg, Some(Color::Cyan));
+        assert_eq!(
+            loader.load_ref("test.toml").unwrap().get("ui.text").fg,
+            Some(Color::Cyan)
+        );
+    }
+
+    #[test]
+    fn typed_roles_resolve_from_helix_scopes() {
+        let (_dir, loader) = test_loader(&[(
+            "test.toml",
+            r##""ui.text" = { fg = "text" }
+"ui.selection" = { bg = "selection" }
+"ui.menu.selected" = { fg = "text", bg = "menu_selected", modifiers = ["bold"] }
+
+[palette]
+text = "#111111"
+selection = "#222222"
+menu_selected = "#333333"
+"##,
+        )]);
+        let theme = loader.load("test").unwrap();
+        let styles = ThemeStyles::from_theme(&theme);
+
+        assert_eq!(styles.text.fg, Some(Color::Rgb(0x11, 0x11, 0x11)));
+        assert_eq!(styles.selection.bg, Some(Color::Rgb(0x22, 0x22, 0x22)));
+        assert_eq!(styles.menu_selected.bg, Some(Color::Rgb(0x33, 0x33, 0x33)));
+        assert!(styles.menu_selected.add_modifier.contains(Modifier::BOLD));
+    }
+
+    #[test]
+    fn theme_manager_refreshes_typed_styles_on_load_ref() {
+        let (_dir, loader) = test_loader(&[
+            (
+                "one.toml",
+                r##""ui.text" = { fg = "one" }
+[palette]
+one = "#111111"
+"##,
+            ),
+            (
+                "two.toml",
+                r##""ui.text" = { fg = "two" }
+[palette]
+two = "#222222"
+"##,
+            ),
+        ]);
+        let mut manager = ThemeManager::new(loader);
+
+        manager.load_ref("one").unwrap();
+        assert_eq!(manager.styles().text.fg, Some(Color::Rgb(0x11, 0x11, 0x11)));
+
+        manager.load_ref("two").unwrap();
+        assert_eq!(manager.styles().text.fg, Some(Color::Rgb(0x22, 0x22, 0x22)));
+        assert_eq!(manager.get(ThemeRole::Text).fg, Some(Color::Rgb(0x22, 0x22, 0x22)));
     }
 }

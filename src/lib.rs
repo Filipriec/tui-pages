@@ -36,7 +36,7 @@ pub use picker::{
 };
 
 #[cfg(feature = "tui")]
-pub use theme::{Theme, ThemeError, ThemeLoader};
+pub use theme::{Theme, ThemeError, ThemeLoader, ThemeManager, ThemeRole, ThemeStyles};
 
 #[cfg(feature = "canvas")]
 pub use crate::canvas::{
@@ -155,5 +155,5 @@ pub mod prelude {
     };
 
     #[cfg(feature = "tui")]
-    pub use crate::{Theme, ThemeError, ThemeLoader};
+    pub use crate::{Theme, ThemeError, ThemeLoader, ThemeManager, ThemeRole, ThemeStyles};
 }
