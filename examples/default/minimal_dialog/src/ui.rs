@@ -7,11 +7,13 @@ use ratatui::{
     Frame,
 };
 use tui_pages::prelude::*;
+use tui_pages::theme::ThemeStyles;
 
 use crate::app::{App, AppState};
 
 pub fn render(frame: &mut Frame, tui: &App, state: &AppState) {
     let area = frame.area();
+    let styles = state.theme.styles();
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -28,7 +30,7 @@ pub fn render(frame: &mut Frame, tui: &App, state: &AppState) {
     let items: Vec<ListItem> = state
         .items
         .iter()
-        .map(|i| ListItem::new(format!("• {i}")))
+        .map(|i| ListItem::new(format!(" {i}")))
         .collect();
     frame.render_widget(
         List::new(items).block(
@@ -39,19 +41,21 @@ pub fn render(frame: &mut Frame, tui: &App, state: &AppState) {
         rows[0],
     );
 
-    render_button(frame, rows[1], "Delete an item", &focus, 0);
-    render_button(frame, rows[2], "Quit", &focus, 1);
+    render_button(frame, rows[1], "Delete an item", &focus, 0, styles);
+    render_button(frame, rows[2], "Quit", &focus, 1, styles);
 
+    let message_fg = styles.warning.fg.unwrap_or(Color::Yellow);
     frame.render_widget(
         Paragraph::new(state.message.as_str())
             .alignment(Alignment::Center)
-            .style(Style::default().fg(Color::Yellow)),
+            .style(Style::default().fg(message_fg)),
         rows[3],
     );
+    let hint_fg = styles.muted.fg.unwrap_or(Color::DarkGray);
     frame.render_widget(
-        Paragraph::new("Tab move focus · Enter select · Ctrl+C quit")
+        Paragraph::new("Tab move focus   Enter select   Ctrl+C quit")
             .alignment(Alignment::Center)
-            .style(Style::default().fg(Color::DarkGray)),
+            .style(Style::default().fg(hint_fg)),
         rows[4],
     );
 
@@ -59,18 +63,29 @@ pub fn render(frame: &mut Frame, tui: &App, state: &AppState) {
     // open, draw it on top with the built-in renderer.
     if let Some(data) = dialog::current_dialog(&tui.focus) {
         let active = dialog::active_button(&tui.focus).unwrap_or(0);
-        render_dialog(frame, area, data, active, &DialogTheme::default());
+        let dialog_theme = DialogTheme::from_theme_styles(styles);
+        render_dialog(frame, area, data, active, &dialog_theme);
     }
 }
 
-fn render_button(frame: &mut Frame, area: Rect, label: &str, focus: &Option<FocusTarget>, index: usize) {
+fn render_button(
+    frame: &mut Frame,
+    area: Rect,
+    label: &str,
+    focus: &Option<FocusTarget>,
+    index: usize,
+    styles: &ThemeStyles,
+) {
     // While a dialog is open, focus is on a ModalItem, so neither page
     // button is highlighted — exactly what we want for a modal.
     let focused = matches!(focus, Some(FocusTarget::Button(i)) if *i == index);
     let style = if focused {
-        Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(styles.text_focus.fg.unwrap_or(Color::Green))
+            .add_modifier(Modifier::BOLD)
     } else {
-        Style::default().fg(Color::White)
+        Style::default()
+            .fg(styles.text.fg.unwrap_or(Color::White))
     };
     frame.render_widget(
         Paragraph::new(label)

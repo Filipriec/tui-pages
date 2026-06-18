@@ -19,14 +19,19 @@ Implement a small theme module that can:
 Example target API:
 
 ```rust
-use tui_pages::theme::{Theme, ThemeLoader};
+use tui_pages::theme::{ThemeManager, ThemeStyles};
 
-let loader = ThemeLoader::new(["/home/me/.config/helix/themes"]);
-let theme = loader.load("catppuccin_mocha")?;
+// Create a manager that searches app-themes/ first, then Helix user themes.
+let mut manager = ThemeManager::default_search_paths("themes");
+manager.load_ref("catppuccin_mocha")?;
 
-let text = theme.get("ui.text");
-let focused = theme.get("ui.text.focus");
-let border = theme.get("ui.border");
+// Typed role styles are cached and refreshed on every load.
+let styles: &ThemeStyles = manager.styles();
+let text = styles.text;
+let text_focus = styles.text_focus;
+
+// Or look up a specific role:
+let border = manager.get(ThemeRole::Muted);
 ```
 
 ## Dependencies
@@ -54,15 +59,15 @@ Recommended approach:
 
 1. Add `src/theme.rs`.
 2. In `src/lib.rs`, export it behind the existing `tui` feature first:
+In `src/lib.rs`, export them behind the existing `tui` feature first:
 
 ```rust
 #[cfg(feature = "tui")]
 pub mod theme;
 
 #[cfg(feature = "tui")]
-pub use theme::{Theme, ThemeError, ThemeLoader};
+pub use theme::{Theme, ThemeError, ThemeLoader, ThemeManager, ThemeRole, ThemeStyles};
 ```
-
 This is enough for now because the output type is `ratatui::style::Style`.
 
 Later, if needed, create a narrower `theme` feature:
@@ -73,6 +78,33 @@ tui = ["theme", ...]
 ```
 
 Do not do that extra feature split in the first implementation unless it is clearly needed.
+
+## Runtime Theme Management
+
+For apps that need hot reloading, `ThemeManager` owns the current theme and caches
+typed role styles:
+
+```rust
+pub struct ThemeManager { /* ... */ }
+pub struct ThemeStyles { /* role → Style */ }
+pub enum ThemeRole { Background, Text, TextFocus, /* ... */ }
+```
+
+`ThemeManager::default_search_paths(app_theme_dir)` creates a loader that looks in
+the app's themes directory first, then falls back to `$XDG_CONFIG_HOME/helix/themes`.
+Call `load_ref("name")` to switch themes — typed role styles are recalculated atomically.
+
+`ThemeStyles::from_theme(&theme)` resolves every `ThemeRole` against the raw theme.
+UI structs like `DialogTheme` and `PickerTheme` expose `from_theme_styles(&ThemeStyles)`
+so consuming code never touches raw scope strings.
+
+Example:
+
+```rust
+let mut manager = ThemeManager::default_search_paths("themes");
+manager.load_ref("catppuccin_mocha")?;
+let dialog = DialogTheme::from_theme_styles(manager.styles());
+```
 
 ## File Layout
 
@@ -484,39 +516,27 @@ pub fn try_get(&self, scope: &str) -> Option<Style> {
 
 The loader should parse pure Helix theme files first. Do not require app-specific scopes for the initial implementation.
 
-After the loader exists, map existing UI structs from Helix scopes:
+After the loader exists, map existing UI structs from Helix scopes via `ThemeStyles`:
 
-Dialog suggested mapping:
-
-```text
-DialogTheme.background    <- ui.background
-DialogTheme.border        <- ui.border
-DialogTheme.border_active <- ui.border.focus or ui.text.focus
-DialogTheme.title         <- ui.text.focus
-DialogTheme.text          <- ui.text
-DialogTheme.button        <- ui.text
-DialogTheme.button_active <- ui.text.focus
-```
-
-Picker suggested mapping:
+`DialogTheme::from_theme_styles` maps:
 
 ```text
-PickerTheme.background <- ui.background
-PickerTheme.foreground <- ui.text
-PickerTheme.secondary  <- ui.text.info or ui.text
-PickerTheme.border     <- ui.border
+DialogTheme.background    ← styles.background (bg)
+DialogTheme.border        ← styles.muted (fg), fallback styles.text (fg)
+DialogTheme.border_active ← styles.text_focus (fg)
+DialogTheme.title         ← styles.text_focus (fg)
+DialogTheme.text          ← styles.text (fg)
+DialogTheme.button        ← styles.text (fg)
+DialogTheme.button_active ← styles.selection (bg), fallback styles.text_focus (fg)
 ```
 
-Do this as separate conversion helpers later, not inside the loader:
+`PickerTheme::from_theme_styles` maps:
 
-```rust
-impl DialogTheme {
-    pub fn from_helix_theme(theme: &Theme) -> Self;
-}
-
-impl PickerTheme {
-    pub fn from_helix_theme(theme: &Theme) -> Self;
-}
+```text
+PickerTheme.background  ← styles.background (bg)
+PickerTheme.foreground  ← styles.text (fg)
+PickerTheme.secondary   ← styles.info (fg)
+PickerTheme.border      ← styles.muted (fg)
 ```
 
 ## Tests To Add

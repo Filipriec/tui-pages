@@ -2,6 +2,7 @@
 
 use crate::canvas::{DefaultCanvasTheme, TextInput, render_suggestions_dropdown};
 use crate::picker::state::{PickerData, PickerEntry, PickerHead, PickerHeadColumn, PickerLayout};
+use crate::theme::ThemeStyles;
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
@@ -32,6 +33,23 @@ impl Default for PickerTheme {
             foreground: Color::Reset,
             secondary: Color::Cyan,
             border: Color::DarkGray,
+        }
+    }
+}
+
+impl PickerTheme {
+    /// Derive picker colors from typed [`ThemeStyles`].
+    ///
+    /// Each field picks the most semantically appropriate color from the
+    /// theme role cache, falling back to the built-in default when a style
+    /// has no color set.
+    pub fn from_theme_styles(styles: &ThemeStyles) -> Self {
+        let default = Self::default();
+        Self {
+            background: styles.background.bg.unwrap_or(default.background),
+            foreground: styles.text.fg.unwrap_or(default.foreground),
+            secondary: styles.info.fg.unwrap_or(default.secondary),
+            border: styles.muted.fg.unwrap_or(default.border),
         }
     }
 }

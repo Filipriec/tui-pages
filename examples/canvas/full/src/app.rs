@@ -13,6 +13,7 @@
 
 use tui_pages::canvas;
 use tui_pages::prelude::*;
+use tui_pages::theme::ThemeManager;
 
 use crate::{editor, form, help};
 
@@ -135,6 +136,7 @@ pub struct AppState {
     pub message: String,
     pub palette_open: bool,
     pub palette_input: String,
+    pub theme: ThemeManager,
 }
 
 impl Default for AppState {
@@ -153,6 +155,7 @@ impl Default for AppState {
                 .to_string(),
             palette_open: false,
             palette_input: String::new(),
+            theme: ThemeManager::default_search_paths("themes"),
         }
     }
 }

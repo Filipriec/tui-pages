@@ -1,6 +1,7 @@
 //! Ratatui renderer for [`DialogData`].
 
 use crate::dialog::DialogData;
+use crate::theme::ThemeStyles;
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
@@ -68,6 +69,30 @@ impl DialogTheme {
             text: fg,
             button: fg,
             button_active,
+        }
+    }
+
+    /// Derive dialog colors from typed [`ThemeStyles`].
+    ///
+    /// Each field picks the most semantically appropriate color from the
+    /// theme role cache, falling back to the built-in default when a style
+    /// has no color set.
+    pub fn from_theme_styles(styles: &ThemeStyles) -> Self {
+        let default = Self::default();
+        Self {
+            background: styles.background.bg.unwrap_or(default.background),
+            border: styles
+                .muted
+                .fg
+                .unwrap_or(styles.text.fg.unwrap_or(default.border)),
+            border_active: styles.text_focus.fg.unwrap_or(default.border_active),
+            title: styles.text_focus.fg.unwrap_or(default.title),
+            text: styles.text.fg.unwrap_or(default.text),
+            button: styles.text.fg.unwrap_or(default.button),
+            button_active: styles
+                .selection
+                .bg
+                .unwrap_or(styles.text_focus.fg.unwrap_or(default.button_active)),
         }
     }
 

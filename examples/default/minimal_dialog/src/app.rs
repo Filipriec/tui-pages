@@ -6,6 +6,7 @@
 // using the `dialog::*` helpers.
 
 use tui_pages::prelude::*;
+use tui_pages::theme::ThemeManager;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum View {
@@ -36,6 +37,7 @@ impl From<NavigationAction> for Action {
 pub struct AppState {
     pub items: Vec<String>,
     pub message: String,
+    pub theme: ThemeManager,
 }
 
 impl Default for AppState {
@@ -43,6 +45,7 @@ impl Default for AppState {
         Self {
             items: vec!["Apples".into(), "Bananas".into(), "Cherries".into()],
             message: "Highlight \"Delete an item\" and press Enter.".into(),
+            theme: ThemeManager::default_search_paths("themes"),
         }
     }
 }

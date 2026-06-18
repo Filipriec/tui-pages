@@ -10,6 +10,7 @@ use ratatui::{
     Frame,
 };
 use tui_pages::prelude::*;
+use tui_pages::theme::ThemeStyles;
 
 use crate::app::{App, AppState, Overlay, View};
 use crate::{editor, form, help};
@@ -26,7 +27,7 @@ pub fn render(frame: &mut Frame, tui: &App, state: &mut AppState) {
         .split(area);
 
     let current = *tui.current_view();
-    render_tabs(frame, rows[0], current);
+    render_tabs(frame, rows[0], current, state.theme.styles());
 
     let focus = tui.focus.current();
     let focus = focus.as_ref();
@@ -36,7 +37,7 @@ pub fn render(frame: &mut Frame, tui: &App, state: &mut AppState) {
         View::Help => help::ui::render(frame, rows[1]),
     }
 
-    render_status(frame, rows[2], state, focus);
+    render_status(frame, rows[2], state, focus, state.theme.styles());
 
     if state.palette_open {
         render_palette(frame, area, &state.palette_input);
@@ -46,22 +47,25 @@ pub fn render(frame: &mut Frame, tui: &App, state: &mut AppState) {
     // is open, draw it on top with the built-in renderer.
     if let Some(data) = dialog::current_dialog(&tui.focus) {
         let active = dialog::active_button(&tui.focus).unwrap_or(0);
-        render_dialog(frame, area, data, active, &DialogTheme::default());
+        let dialog_theme = DialogTheme::from_theme_styles(state.theme.styles());
+        render_dialog(frame, area, data, active, &dialog_theme);
     }
 }
 
-fn render_tabs(frame: &mut Frame, area: Rect, current: View) {
+fn render_tabs(frame: &mut Frame, area: Rect, current: View, styles: &ThemeStyles) {
+    let active_fg = styles.text_focus.fg.unwrap_or(Color::Green);
+    let inactive_fg = styles.muted.fg.unwrap_or(Color::DarkGray);
     let tab = |name: &str, active: bool| {
         if active {
             Span::styled(
                 format!(" [{name}] "),
                 Style::default()
                     .fg(Color::Black)
-                    .bg(Color::Green)
+                    .bg(active_fg)
                     .add_modifier(Modifier::BOLD),
             )
         } else {
-            Span::styled(format!("  {name}  "), Style::default().fg(Color::DarkGray))
+            Span::styled(format!("  {name}  "), Style::default().fg(inactive_fg))
         }
     };
     frame.render_widget(
@@ -83,13 +87,15 @@ fn render_status(
     area: Rect,
     state: &AppState,
     focus: Option<&FocusTarget<Overlay>>,
+    styles: &ThemeStyles,
 ) {
+    let status_fg = styles.muted.fg.unwrap_or(Color::DarkGray);
     frame.render_widget(
         Paragraph::new(vec![
             Line::from(format!("focus: {focus:?}")),
             Line::from(state.message.as_str()),
         ])
-        .style(Style::default().fg(Color::DarkGray))
+        .style(Style::default().fg(status_fg))
         .block(Block::default().borders(Borders::ALL).title(" status ")),
         area,
     );
