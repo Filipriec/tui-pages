@@ -48,19 +48,21 @@ impl TuiActionHandler<View, Action, State> for Handler {
     }
 }
 
-fn page_spec(_view: &View, _state: &State, _focus: Option<&FocusTarget>) -> PageSpec {
-    PageSpec::new().focus(
-        PageFocusBuilder::new()
-            // Register one CanvasField per editor field so the two form fields
-            // are explicit in the focus list: [CanvasField(0), CanvasField(1),
-            // Button(0), Button(1)]. The editor still owns movement *between* the
-            // two fields (focus collapses all canvas targets into one stop and
-            // hands off at the boundary), so the editor remains the source of
-            // truth for which field is active.
-            .canvas_fields(2)
-            .button(0)
-            .button(1),
-    )
+fn page_spec(_view: &View, state: &State, _focus: Option<&FocusTarget>) -> PageSpec {
+    PageSpec::new()
+        .focus(
+            PageFocusBuilder::new()
+                // Register one CanvasField per editor field so the two form fields
+                // are explicit in the focus list: [CanvasField(0), CanvasField(1),
+                // Button(0), Button(1)]. The editor still owns movement *between* the
+                // two fields (focus collapses all canvas targets into one stop and
+                // hands off at the boundary), so the editor remains the source of
+                // truth for which field is active.
+                .canvas_fields(2)
+                .button(0)
+                .button(1),
+        )
+        .canvas_editor(&state.editor)
 }
 
 pub fn build() -> TuiApp<View, Action, State, Handler, (), (), CanvasHooks> {

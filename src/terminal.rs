@@ -33,8 +33,9 @@ use crossterm::{
 ///
 /// Bracketed paste makes the terminal deliver a paste as a single
 /// `Event::Paste(text)` rather than a flood of synthetic key presses, so a text
-/// widget can insert it in one shot. Forward that event to
-/// [`crate::runtime::TuiPages::handle_paste`].
+/// widget can insert it in one shot. Forward terminal events to
+/// [`crate::runtime::TuiPages::handle_event`] for the default key and paste
+/// routing.
 pub fn enter() -> io::Result<TerminalGuard> {
     enable_raw_mode()?;
     execute!(io::stderr(), EnterAlternateScreen, EnableBracketedPaste)?;

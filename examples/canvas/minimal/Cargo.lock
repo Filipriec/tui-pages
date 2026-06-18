@@ -1943,7 +1943,7 @@ dependencies = [
 
 [[package]]
 name = "tui-canvas"
-version = "0.8.5"
+version = "0.8.8"
 dependencies = [
  "anyhow",
  "arboard",
@@ -1966,7 +1966,7 @@ dependencies = [
 
 [[package]]
 name = "tui-canvas-validation-core"
-version = "0.8.2"
+version = "0.8.8"
 dependencies = [
  "regex",
  "serde",
@@ -1976,7 +1976,7 @@ dependencies = [
 
 [[package]]
 name = "tui-pages"
-version = "0.8.5"
+version = "0.8.8"
 dependencies = [
  "crossterm",
  "ratatui",

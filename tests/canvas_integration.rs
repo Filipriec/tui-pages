@@ -8,7 +8,7 @@
 //! re-export surface for every canvas capability — GUI, suggestions,
 //! validation, computed, textarea, textinput, keybindings, and cursor style.
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use tui_pages::{
     ActionContext, ActionOutcome, CanvasAction, CanvasDispatchOutcome, FocusIntent, FocusTarget,
     PageFocusBuilder, PageSpec, RuntimeContext, TuiActionHandler, TuiEffect, TuiPages,
@@ -1021,6 +1021,24 @@ fn canvas_form_editor_receives_bracketed_paste() {
     // The canvas field is focused by default, so a paste lands in the editor
     // in a single insert (no per-character key events needed).
     let out = app.handle_paste("pasted text", &mut state).unwrap();
+
+    assert_eq!(out.status, TuiPagesStatus::TextHandled);
+    assert_eq!(state.editor.data_provider().field_value(0), "pasted text");
+}
+
+#[test]
+fn canvas_form_editor_receives_bracketed_paste_through_event_api() {
+    let mut app = TuiPages::<View, WidgetAction>::builder(View::Form)
+        .page_fn(widget_page)
+        .handler(WidgetHandler)
+        .canvas_form_editor(0)
+        .build();
+    let mut state = WidgetState::default();
+    app.refresh_page(&state);
+
+    let out = app
+        .handle_event(Event::Paste("pasted text".to_string()), &mut state)
+        .unwrap();
 
     assert_eq!(out.status, TuiPagesStatus::TextHandled);
     assert_eq!(state.editor.data_provider().field_value(0), "pasted text");

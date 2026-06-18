@@ -6,7 +6,7 @@ use crate::keybindings::{
     NavigationAction,
 };
 use crate::navigation::{BufferState, PaneSplit};
-use crossterm::event::KeyEvent;
+use crossterm::event::{Event, KeyEvent};
 #[cfg(feature = "command-line")]
 use ratatui::layout::{Constraint, Layout, Rect};
 use std::borrow::Cow;
@@ -1449,6 +1449,22 @@ where
         self.handle_paste_inner(text, state)
     }
 
+    pub fn handle_event<S: ?Sized>(
+        &mut self,
+        event: Event,
+        state: &mut S,
+    ) -> TuiPagesResult<TuiPagesOutput<A>, Handler::Error>
+    where
+        Pages: PageProvider<V, S, O>,
+        Handler: TuiActionHandler<V, A, S, O, M>,
+    {
+        match event {
+            Event::Key(key) => self.handle_key_inner(key, state),
+            Event::Paste(text) => self.handle_paste_inner(&text, state),
+            _ => Ok(TuiPagesOutput::new(TuiPagesStatus::Cancelled, false)),
+        }
+    }
+
     pub fn submit_command<S: ?Sized>(
         &mut self,
         input: &str,
@@ -1511,6 +1527,23 @@ where
         Handler: TuiActionHandler<V, A, S, O, M>,
     {
         self.handle_paste_inner(text, state)
+    }
+
+    pub fn handle_event<S>(
+        &mut self,
+        event: Event,
+        state: &mut S,
+    ) -> TuiPagesResult<TuiPagesOutput<A>, Handler::Error>
+    where
+        S: crate::canvas::CanvasWidgetState + ?Sized,
+        Pages: PageProvider<V, S, O>,
+        Handler: TuiActionHandler<V, A, S, O, M>,
+    {
+        match event {
+            Event::Key(key) => self.handle_key_inner(key, state),
+            Event::Paste(text) => self.handle_paste_inner(&text, state),
+            _ => Ok(TuiPagesOutput::new(TuiPagesStatus::Cancelled, false)),
+        }
     }
 
     pub fn submit_command<S>(

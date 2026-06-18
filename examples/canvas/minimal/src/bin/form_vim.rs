@@ -1,5 +1,4 @@
 use anyhow::Result;
-use crossterm::event::Event;
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Layout},
@@ -99,8 +98,10 @@ impl TuiActionHandler<View, Action, State> for Handler {
     }
 }
 
-fn page_spec(_view: &View, _state: &State, _focus: Option<&FocusTarget>) -> PageSpec {
-    PageSpec::new().focus(PageFocusBuilder::new().canvas_fields(3))
+fn page_spec(_view: &View, state: &State, _focus: Option<&FocusTarget>) -> PageSpec {
+    PageSpec::new()
+        .focus(PageFocusBuilder::new().canvas_fields(3))
+        .canvas_editor(&state.editor)
 }
 
 fn build() -> TuiApp<View, Action, State, Handler, (), (), CanvasHooks> {
@@ -114,7 +115,7 @@ fn build() -> TuiApp<View, Action, State, Handler, (), (), CanvasHooks> {
 
 fn render(frame: &mut Frame, state: &State) {
     let chunks = Layout::vertical([Constraint::Min(5), Constraint::Length(3)]).split(frame.area());
-    canvas::render_canvas_default(frame, chunks[0], state.editor.core());
+    canvas::render_canvas_default(frame, chunks[0], &state.editor);
 
     let status = format!(
         "mode: {:?}  field: {}/{}  -  Vim form through tui-pages",
@@ -139,18 +140,11 @@ fn main() -> Result<()> {
     loop {
         terminal.draw(|frame| render(frame, &state))?;
 
-        match crossterm::event::read()? {
-            Event::Key(key) => {
-                if tui.handle_key(key, &mut state)?.quit_requested {
-                    break;
-                }
-            }
-            // Bracketed paste (enabled by `terminal::enter`) arrives as one
-            // event; hand it to the focused canvas widget in a single insert.
-            Event::Paste(text) => {
-                tui.handle_paste(&text, &mut state)?;
-            }
-            _ => {}
+        if tui
+            .handle_event(crossterm::event::read()?, &mut state)?
+            .quit_requested
+        {
+            break;
         }
     }
 

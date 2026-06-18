@@ -1,5 +1,4 @@
 use anyhow::Result;
-use crossterm::event::Event;
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Layout},
@@ -99,8 +98,10 @@ impl TuiActionHandler<View, Action, State> for Handler {
     }
 }
 
-fn page_spec(_view: &View, _state: &State, _focus: Option<&FocusTarget>) -> PageSpec {
-    PageSpec::new().focus(PageFocusBuilder::new().canvas_fields(3))
+fn page_spec(_view: &View, state: &State, _focus: Option<&FocusTarget>) -> PageSpec {
+    PageSpec::new()
+        .focus(PageFocusBuilder::new().canvas_fields(3))
+        .canvas_editor(&state.editor)
 }
 
 fn build() -> TuiApp<View, Action, State, Handler, (), (), CanvasHooks> {
@@ -114,7 +115,7 @@ fn build() -> TuiApp<View, Action, State, Handler, (), (), CanvasHooks> {
 
 fn render(frame: &mut Frame, state: &State) {
     let chunks = Layout::vertical([Constraint::Min(5), Constraint::Length(3)]).split(frame.area());
-    canvas::render_canvas_default(frame, chunks[0], state.editor.core());
+    canvas::render_canvas_default(frame, chunks[0], &state.editor);
 
     let status = format!(
         "mode: {:?}  field: {}/{}  -  Helix form through tui-pages",
@@ -139,10 +140,10 @@ fn main() -> Result<()> {
     loop {
         terminal.draw(|frame| render(frame, &state))?;
 
-        let Event::Key(key) = crossterm::event::read()? else {
-            continue;
-        };
-        if tui.handle_key(key, &mut state)?.quit_requested {
+        if tui
+            .handle_event(crossterm::event::read()?, &mut state)?
+            .quit_requested
+        {
             break;
         }
     }

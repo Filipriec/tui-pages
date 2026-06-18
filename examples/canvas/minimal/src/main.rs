@@ -3,7 +3,6 @@
 mod app;
 
 use anyhow::Result;
-use crossterm::event::Event;
 use ratatui::layout::{Alignment, Constraint, Layout};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::{Block, Borders, Paragraph};
@@ -140,10 +139,10 @@ fn main() -> Result<()> {
 
         terminal.draw(|frame| render(frame, focused_button, &state))?;
 
-        let Event::Key(key) = crossterm::event::read()? else {
-            continue;
-        };
-        if tui.handle_key(key, &mut state)?.quit_requested {
+        if tui
+            .handle_event(crossterm::event::read()?, &mut state)?
+            .quit_requested
+        {
             break;
         }
     }

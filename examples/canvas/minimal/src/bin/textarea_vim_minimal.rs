@@ -1,5 +1,4 @@
 use anyhow::Result;
-use crossterm::event::Event;
 use ratatui::{
     backend::CrosstermBackend,
     widgets::Block,
@@ -117,10 +116,10 @@ fn main() -> Result<()> {
     loop {
         terminal.draw(|frame| render(frame, &mut state))?;
 
-        let Event::Key(key) = crossterm::event::read()? else {
-            continue;
-        };
-        if tui.handle_key(key, &mut state)?.quit_requested {
+        if tui
+            .handle_event(crossterm::event::read()?, &mut state)?
+            .quit_requested
+        {
             break;
         }
     }
