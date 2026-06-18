@@ -532,9 +532,7 @@ where
     T: CanvasTheme,
     D: DataProvider,
 {
-    let active_rect = ::canvas::render_canvas(frame, area, editor, theme);
-    frame.set_cursor_position(editor.cursor(area, None));
-    active_rect
+    ::canvas::render_canvas(frame, area, editor, theme)
 }
 
 pub fn render_canvas_unmanaged_cursor<T, D>(
@@ -561,9 +559,7 @@ where
     T: CanvasTheme,
     D: DataProvider,
 {
-    let active_rect = ::canvas::render_canvas_with_options(frame, area, editor, theme, opts);
-    frame.set_cursor_position(editor.cursor(area, None));
-    active_rect
+    ::canvas::render_canvas_with_options(frame, area, editor, theme, opts)
 }
 
 pub fn render_canvas_with_options_unmanaged_cursor<T, D>(
