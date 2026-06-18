@@ -395,6 +395,15 @@ pub struct Theme {
 }
 
 impl Theme {
+    /// Create an empty theme with no styles. Useful as a placeholder for
+    /// built-in / fallback theme structs.
+    pub fn empty() -> Self {
+        Self {
+            name: String::new(),
+            styles: HashMap::new(),
+        }
+    }
+
     /// The theme name (filename stem, e.g. `"catppuccin_mocha"`).
     pub fn name(&self) -> &str {
         &self.name

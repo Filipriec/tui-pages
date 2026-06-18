@@ -26,7 +26,7 @@ pub mod terminal;
 pub mod theme;
 
 #[cfg(feature = "tui")]
-pub use dialog::{DialogData, DialogKey, DialogResult, DialogTheme, render_dialog};
+pub use dialog::{DialogData, DialogKey, DialogPurposeClass, DialogPurposeStyle, DialogResult, DialogTheme, render_dialog};
 
 #[cfg(feature = "tui")]
 pub use picker::{
@@ -141,7 +141,8 @@ pub mod prelude {
     };
     #[cfg(feature = "tui")]
     pub use crate::dialog::{
-        self, DialogData, DialogKey, DialogKeyBindings, DialogResult, DialogTheme,
+        self, DialogData, DialogKey, DialogKeyBindings, DialogPurposeClass,
+        DialogPurposeStyle, DialogResult, DialogTheme,
     };
     #[cfg(feature = "tui")]
     pub use crate::render_dialog;

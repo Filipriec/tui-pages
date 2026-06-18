@@ -22,6 +22,57 @@ pub struct DialogTheme {
     pub button_active: Color,
 }
 
+/// Classify a dialog purpose so [`DialogTheme::themed`] can pick semantic colors.
+pub enum DialogPurposeClass {
+    Success,
+    Failure,
+    Neutral,
+}
+
+/// Implement on your purpose type so the dialog theme can derive colors from it.
+///
+/// The default returns [`DialogPurposeClass::Neutral`] for all purposes —
+/// override [`class`](DialogPurposeStyle::class) to return
+/// [`DialogPurposeClass::Failure`] for error states.
+pub trait DialogPurposeStyle {
+    fn class(&self) -> DialogPurposeClass {
+        DialogPurposeClass::Neutral
+    }
+}
+
+impl DialogTheme {
+    /// Build a [`DialogTheme`] with colors driven by the dialog's purpose.
+    ///
+    /// `purpose` is classified via [`DialogPurposeStyle`]: `Failure` gets
+    /// `error_color`, `Success` gets `success_color`, `Neutral` and `None` get
+    /// `text_color`. The chosen foreground is applied to the dialog border,
+    /// title, text, and inactive buttons.
+    pub fn themed<D: DialogPurposeStyle>(
+        text_color: Color,
+        error_color: Color,
+        success_color: Color,
+        background: Color,
+        button_active: Color,
+        purpose: Option<D>,
+    ) -> Self {
+        let fg = match purpose.as_ref().map(|p| p.class()) {
+            Some(DialogPurposeClass::Success) => success_color,
+            Some(DialogPurposeClass::Failure) => error_color,
+            _ => text_color,
+        };
+        Self {
+            background,
+            border: fg,
+            border_active: fg,
+            title: fg,
+            text: fg,
+            button: fg,
+            button_active,
+        }
+    }
+
+}
+
 impl Default for DialogTheme {
     fn default() -> Self {
         Self {
