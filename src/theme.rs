@@ -605,10 +605,10 @@ fn parse_theme_root(name: &str, root: &toml::Value) -> Result<Theme, ThemeError>
         }
     }
 
-    // Parse scopes: every top-level key except `palette` and `inherits`.
+    // Parse scopes: every top-level key except Helix metadata.
     let mut styles = HashMap::new();
     for (key, value) in table {
-        if key == "palette" || key == "inherits" {
+        if is_theme_metadata_key(key) {
             continue;
         }
         let style = parse_style(key, value, &palette)?;
@@ -619,6 +619,10 @@ fn parse_theme_root(name: &str, root: &toml::Value) -> Result<Theme, ThemeError>
         name: name.into(),
         styles,
     })
+}
+
+fn is_theme_metadata_key(key: &str) -> bool {
+    matches!(key, "palette" | "inherits" | "rainbow")
 }
 
 // ---------------------------------------------------------------------------
@@ -1003,5 +1007,25 @@ fg = "#89b4fa"
             theme.get("ui.text").fg,
             Some(Color::Rgb(0x89, 0xb4, 0xfa))
         );
+    }
+
+    #[test]
+    fn ignores_helix_rainbow_metadata() {
+        let (_dir, loader) = test_loader(&[(
+            "test.toml",
+            r##""ui.text" = { fg = "fg" }
+rainbow = ["red", "yellow", "green"]
+
+[palette]
+fg = "#89b4fa"
+"##,
+        )]);
+        let theme = loader.load("test").unwrap();
+
+        assert_eq!(
+            theme.get("ui.text").fg,
+            Some(Color::Rgb(0x89, 0xb4, 0xfa))
+        );
+        assert!(theme.try_get_exact("rainbow").is_none());
     }
 }
