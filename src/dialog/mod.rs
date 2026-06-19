@@ -23,7 +23,9 @@ mod ui;
 
 pub use state::{DialogData, DialogResult};
 pub use ui::{
-    DialogButtonRenderer, DialogPurposeClass, DialogPurposeStyle, DialogTheme, render_dialog,
+    DialogButtonRenderer, DialogPurposeClass, DialogPurposeStyle, DialogTheme,
+    render_dialog, render_dialog_error, render_dialog_error_with_button_renderer,
+    render_dialog_success, render_dialog_success_with_button_renderer,
     render_dialog_with_button_renderer,
 };
 

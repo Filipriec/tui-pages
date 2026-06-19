@@ -99,6 +99,53 @@ impl DialogTheme {
         }
     }
 
+    /// Build a [`DialogTheme`] styled with the `error` role from [`ThemeStyles`].
+    ///
+    /// The error foreground colour is used for border, title, text, and
+    /// inactive buttons. Background and button-active colours follow the same
+    /// defaults as [`from_theme_styles`](Self::from_theme_styles).
+    pub fn error_styled(styles: &ThemeStyles) -> Self {
+        let default = Self::default();
+        let fg = styles.error.fg.unwrap_or(styles.text.fg.unwrap_or(default.text));
+        Self {
+            background: styles.background.bg.unwrap_or(default.background),
+            border: fg,
+            border_active: fg,
+            title: fg,
+            text: fg,
+            button: fg,
+            button_active: styles
+                .selection
+                .bg
+                .unwrap_or(styles.text_focus.fg.unwrap_or(default.button_active)),
+        }
+    }
+
+    /// Build a [`DialogTheme`] styled with the `success` role from [`ThemeStyles`].
+    ///
+    /// The success foreground colour is used for border, title, text, and
+    /// inactive buttons. Background and button-active colours follow the same
+    /// defaults as [`from_theme_styles`](Self::from_theme_styles).
+    pub fn success_styled(styles: &ThemeStyles) -> Self {
+        let default = Self::default();
+        let fg = styles
+            .success
+            .fg
+            .unwrap_or(styles.text.fg.unwrap_or(default.text));
+        Self {
+            background: styles.background.bg.unwrap_or(default.background),
+            border: fg,
+            border_active: fg,
+            title: fg,
+            text: fg,
+            button: fg,
+            button_active: styles
+                .selection
+                .bg
+                .unwrap_or(styles.text_focus.fg.unwrap_or(default.button_active)),
+        }
+    }
+
 }
 
 impl Default for DialogTheme {
@@ -134,6 +181,42 @@ pub fn render_dialog<D>(
         active_button,
         theme,
         &mut render_default_dialog_button,
+    );
+}
+
+/// Shorthand for [`render_dialog`] that uses the error semantic color from
+/// [`ThemeStyles`] for the dialog chrome.
+pub fn render_dialog_error<D>(
+    f: &mut Frame,
+    area: Rect,
+    data: &DialogData<D>,
+    active_button: usize,
+    styles: &ThemeStyles,
+) {
+    render_dialog(
+        f,
+        area,
+        data,
+        active_button,
+        &DialogTheme::error_styled(styles),
+    );
+}
+
+/// Shorthand for [`render_dialog`] that uses the success semantic color from
+/// [`ThemeStyles`] for the dialog chrome.
+pub fn render_dialog_success<D>(
+    f: &mut Frame,
+    area: Rect,
+    data: &DialogData<D>,
+    active_button: usize,
+    styles: &ThemeStyles,
+) {
+    render_dialog(
+        f,
+        area,
+        data,
+        active_button,
+        &DialogTheme::success_styled(styles),
     );
 }
 
@@ -223,6 +306,48 @@ pub fn render_dialog_with_button_renderer<D>(
         let active = i == active_button;
         render_button(f, button_chunks[i], label.as_str(), active, theme);
     }
+}
+
+/// Shorthand for [`render_dialog_with_button_renderer`] that uses the
+/// error semantic color from [`ThemeStyles`] for the dialog and custom button
+/// renderer theme.
+pub fn render_dialog_error_with_button_renderer<D>(
+    f: &mut Frame,
+    area: Rect,
+    data: &DialogData<D>,
+    active_button: usize,
+    styles: &ThemeStyles,
+    render_button: &mut DialogButtonRenderer<'_>,
+) {
+    render_dialog_with_button_renderer(
+        f,
+        area,
+        data,
+        active_button,
+        &DialogTheme::error_styled(styles),
+        render_button,
+    );
+}
+
+/// Shorthand for [`render_dialog_with_button_renderer`] that uses the
+/// success semantic color from [`ThemeStyles`] for the dialog and custom button
+/// renderer theme.
+pub fn render_dialog_success_with_button_renderer<D>(
+    f: &mut Frame,
+    area: Rect,
+    data: &DialogData<D>,
+    active_button: usize,
+    styles: &ThemeStyles,
+    render_button: &mut DialogButtonRenderer<'_>,
+) {
+    render_dialog_with_button_renderer(
+        f,
+        area,
+        data,
+        active_button,
+        &DialogTheme::success_styled(styles),
+        render_button,
+    );
 }
 
 fn render_default_dialog_button(

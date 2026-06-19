@@ -28,7 +28,9 @@ pub mod theme;
 #[cfg(feature = "tui")]
 pub use dialog::{
     DialogButtonRenderer, DialogData, DialogKey, DialogPurposeClass, DialogPurposeStyle,
-    DialogResult, DialogTheme, render_dialog, render_dialog_with_button_renderer,
+    DialogResult, DialogTheme, render_dialog, render_dialog_error,
+    render_dialog_error_with_button_renderer, render_dialog_success,
+    render_dialog_success_with_button_renderer, render_dialog_with_button_renderer,
 };
 
 #[cfg(feature = "tui")]
@@ -146,6 +148,8 @@ pub mod prelude {
     pub use crate::dialog::{
         self, DialogButtonRenderer, DialogData, DialogKey, DialogKeyBindings,
         DialogPurposeClass, DialogPurposeStyle, DialogResult, DialogTheme,
+        render_dialog_error, render_dialog_error_with_button_renderer,
+        render_dialog_success, render_dialog_success_with_button_renderer,
         render_dialog_with_button_renderer,
     };
     #[cfg(feature = "tui")]
