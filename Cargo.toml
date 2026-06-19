@@ -20,7 +20,7 @@ crossterm = { workspace = true }
 serde  = { workspace = true, optional = true }
 toml = { workspace = true }
 tracing = { workspace = true }
-canvas = { path = "../tui-canvas", package = "tui-canvas", version = "0.8.8", optional = true }
+canvas = { path = "../tui-canvas", package = "tui-canvas", version = "0.8.10", optional = true }
 nucleo = { workspace = true, optional = true }
 unicode-width = { workspace = true, optional = true }
 
