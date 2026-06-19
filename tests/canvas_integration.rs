@@ -1443,3 +1443,54 @@ fn canvas_suggestions_renderer_honors_per_row_input_width_options() {
 
     assert_eq!(active_rect.map(|rect| rect.width), Some(31));
 }
+
+#[test]
+fn theme_styles_render_current_form_label_with_selected_linenr_color() {
+    use ratatui::{Terminal, backend::TestBackend, layout::Rect, style::Color};
+    use std::fs;
+
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(
+        dir.path().join("test.toml"),
+        r##"
+"ui.linenr" = { fg = "line" }
+"ui.linenr.selected" = { fg = "line_selected" }
+"ui.cursorline.primary" = { bg = "cursorline" }
+
+[palette]
+line = "blue"
+line_selected = "yellow"
+cursorline = "light-gray"
+"##,
+    )
+    .unwrap();
+    let loader = tui_pages::ThemeLoader::new(vec![dir.path().to_path_buf()]);
+    let raw_theme = loader.load("test").unwrap();
+    let styles = tui_pages::ThemeStyles::from_theme(&raw_theme);
+    let mut editor = FormEditor::new(Provider::new(&["one", "two"]));
+    editor.exit_edit_mode().unwrap();
+
+    let backend = TestBackend::new(24, 4);
+    let mut terminal = Terminal::new(backend).unwrap();
+
+    terminal
+        .draw(|frame| {
+            canvas::render_canvas_with_options(
+                frame,
+                Rect::new(0, 0, 24, 4),
+                &editor,
+                &styles,
+                canvas::CanvasDisplayOptions {
+                    max_label_width: 8,
+                    max_input_width: None,
+                    row_input_width: None,
+                    ..Default::default()
+                },
+            );
+        })
+        .unwrap();
+
+    let buffer = terminal.backend().buffer();
+    assert_eq!(buffer[(0, 0)].fg, Color::Yellow);
+    assert_eq!(buffer[(0, 1)].fg, Color::Blue);
+}

@@ -454,7 +454,7 @@ impl Theme {
         let mut style = Style::default();
         for scope in scopes {
             if let Some(found) = self.try_get(scope) {
-                style = style.patch(found);
+                style = patch_missing_style(style, found);
                 if style.fg.is_some() && style.bg.is_some() {
                     break;
                 }
@@ -462,6 +462,20 @@ impl Theme {
         }
         style
     }
+}
+
+fn patch_missing_style(mut style: Style, fallback: Style) -> Style {
+    if style.fg.is_none() {
+        style.fg = fallback.fg;
+    }
+    if style.bg.is_none() {
+        style.bg = fallback.bg;
+    }
+    if style.add_modifier.is_empty() && style.sub_modifier.is_empty() {
+        style.add_modifier = fallback.add_modifier;
+        style.sub_modifier = fallback.sub_modifier;
+    }
+    style
 }
 
 // ---------------------------------------------------------------------------
@@ -479,6 +493,7 @@ pub enum ThemeRole {
     TextFocus,
     TextInactive,
     Muted,
+    LineNumberSelected,
     Selection,
     Menu,
     MenuSelected,
@@ -511,6 +526,7 @@ impl ThemeRole {
             Self::TextFocus => &["ui.text.focus", "ui.text"],
             Self::TextInactive => &["ui.text.inactive", "ui.virtual", "comment"],
             Self::Muted => &["ui.linenr", "ui.virtual", "comment"],
+            Self::LineNumberSelected => &["ui.linenr.selected", "ui.linenr", "ui.virtual", "comment"],
             Self::Selection => &["ui.selection"],
             Self::Menu => &["ui.menu", "ui.popup"],
             Self::MenuSelected => &["ui.menu.selected", "ui.selection"],
@@ -544,6 +560,7 @@ pub struct ThemeStyles {
     pub text_focus: Style,
     pub text_inactive: Style,
     pub muted: Style,
+    pub line_number_selected: Style,
     pub selection: Style,
     pub menu: Style,
     pub menu_selected: Style,
@@ -576,6 +593,7 @@ impl ThemeStyles {
             text_focus: theme.role(ThemeRole::TextFocus),
             text_inactive: theme.role(ThemeRole::TextInactive),
             muted: theme.role(ThemeRole::Muted),
+            line_number_selected: theme.role(ThemeRole::LineNumberSelected),
             selection: theme.role(ThemeRole::Selection),
             menu: theme.role(ThemeRole::Menu),
             menu_selected: theme.role(ThemeRole::MenuSelected),
@@ -608,6 +626,7 @@ impl ThemeStyles {
             ThemeRole::TextFocus => self.text_focus,
             ThemeRole::TextInactive => self.text_inactive,
             ThemeRole::Muted => self.muted,
+            ThemeRole::LineNumberSelected => self.line_number_selected,
             ThemeRole::Selection => self.selection,
             ThemeRole::Menu => self.menu,
             ThemeRole::MenuSelected => self.menu_selected,
@@ -1374,11 +1393,15 @@ fg = "#89b4fa"
             r##""ui.text" = { fg = "text" }
 "ui.selection" = { bg = "selection" }
 "ui.menu.selected" = { fg = "text", bg = "menu_selected", modifiers = ["bold"] }
+"ui.linenr" = { fg = "line" }
+"ui.linenr.selected" = { fg = "line_selected" }
 
 [palette]
 text = "#111111"
 selection = "#222222"
 menu_selected = "#333333"
+line = "#444444"
+line_selected = "#555555"
 "##,
         )]);
         let theme = loader.load("test").unwrap();
@@ -1388,6 +1411,11 @@ menu_selected = "#333333"
         assert_eq!(styles.selection.bg, Some(Color::Rgb(0x22, 0x22, 0x22)));
         assert_eq!(styles.menu_selected.bg, Some(Color::Rgb(0x33, 0x33, 0x33)));
         assert!(styles.menu_selected.add_modifier.contains(Modifier::BOLD));
+        assert_eq!(styles.muted.fg, Some(Color::Rgb(0x44, 0x44, 0x44)));
+        assert_eq!(
+            styles.line_number_selected.fg,
+            Some(Color::Rgb(0x55, 0x55, 0x55))
+        );
     }
 
     #[test]

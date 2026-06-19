@@ -86,7 +86,10 @@ impl CanvasTheme for crate::ThemeStyles {
         self.background
     }
     fn label(&self) -> Style {
-        self.text.patch(self.muted)
+        self.muted
+    }
+    fn label_active(&self) -> Style {
+        self.line_number_selected
     }
     fn input(&self) -> Style {
         self.text
