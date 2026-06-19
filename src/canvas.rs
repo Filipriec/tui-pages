@@ -97,6 +97,9 @@ impl CanvasTheme for crate::ThemeStyles {
     fn selection(&self) -> Style {
         self.selection
     }
+    fn cursorline(&self) -> Style {
+        self.cursorline
+    }
     fn completion(&self) -> Style {
         self.text_inactive
     }
