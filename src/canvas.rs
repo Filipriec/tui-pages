@@ -21,6 +21,8 @@ use crossterm::{
     execute,
 };
 use ratatui::{Frame, layout::Rect};
+#[cfg(feature = "tui")]
+use ratatui::style::Style;
 use std::io;
 use std::marker::PhantomData;
 
@@ -77,6 +79,52 @@ pub use ::canvas::{ComputedContext, ComputedProvider, ComputedState};
 pub use ::canvas::{
     CanvasDisplayOptions, CanvasTheme, DefaultCanvasTheme, OverflowMode,
 };
+
+#[cfg(feature = "tui")]
+impl CanvasTheme for crate::ThemeStyles {
+    fn background(&self) -> Style {
+        self.background
+    }
+    fn label(&self) -> Style {
+        self.text.patch(self.muted)
+    }
+    fn input(&self) -> Style {
+        self.text
+    }
+    fn input_active(&self) -> Style {
+        self.text.patch(self.cursorline).patch(self.text_focus)
+    }
+    fn selection(&self) -> Style {
+        self.selection
+    }
+    fn completion(&self) -> Style {
+        self.text_inactive
+    }
+    fn cursor_normal(&self) -> Style {
+        self.cursor_normal
+    }
+    fn cursor_insert(&self) -> Style {
+        self.cursor_insert
+    }
+    fn cursor_select(&self) -> Style {
+        self.cursor_select
+    }
+    fn suggestions(&self) -> Style {
+        self.menu
+    }
+    fn suggestion_selected(&self) -> Style {
+        self.menu_selected
+    }
+    fn warning(&self) -> Style {
+        self.warning
+    }
+    fn border(&self) -> Style {
+        self.window
+    }
+    fn border_active(&self) -> Style {
+        self.text_focus.patch(self.cursor_normal)
+    }
+}
 
 // Crossterm terminal-input session helpers (raw mode, bracketed paste, mouse
 // capture) — the canvas-side complement to [`crate::terminal`] for apps wiring
