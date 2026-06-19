@@ -22,7 +22,10 @@ mod state;
 mod ui;
 
 pub use state::{DialogData, DialogResult};
-pub use ui::{DialogPurposeClass, DialogPurposeStyle, DialogTheme, render_dialog};
+pub use ui::{
+    DialogButtonRenderer, DialogPurposeClass, DialogPurposeStyle, DialogTheme, render_dialog,
+    render_dialog_with_button_renderer,
+};
 
 use crate::focus::{FocusController, FocusIntent, FocusManager, OverlayFocus};
 use crate::input::{InputPipeline, InputRegistry, KeyMap, PipelineResponse};

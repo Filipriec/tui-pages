@@ -10,6 +10,9 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap},
 };
 
+pub type DialogButtonRenderer<'a> =
+    dyn FnMut(&mut Frame, Rect, &str, bool, &DialogTheme) + 'a;
+
 /// Colors used by [`render_dialog`]. `Default` uses terminal-neutral colors so
 /// the dialog looks reasonable on any theme; override fields to match your app.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -124,6 +127,24 @@ pub fn render_dialog<D>(
     active_button: usize,
     theme: &DialogTheme,
 ) {
+    render_dialog_with_button_renderer(
+        f,
+        area,
+        data,
+        active_button,
+        theme,
+        &mut render_default_dialog_button,
+    );
+}
+
+pub fn render_dialog_with_button_renderer<D>(
+    f: &mut Frame,
+    area: Rect,
+    data: &DialogData<D>,
+    active_button: usize,
+    theme: &DialogTheme,
+    render_button: &mut DialogButtonRenderer<'_>,
+) {
     let message_height = data.message.lines().count().max(1) as u16;
     let button_row_height = if data.buttons.is_empty() { 0 } else { 3 };
     // borders (2) + inner vertical margin (2) + message + buttons.
@@ -200,29 +221,39 @@ pub fn render_dialog<D>(
 
     for (i, label) in data.buttons.iter().enumerate() {
         let active = i == active_button;
-        let (text_style, border_style) = if active {
-            (
-                Style::default()
-                    .fg(theme.button_active)
-                    .add_modifier(Modifier::BOLD),
-                Style::default().fg(theme.border_active),
-            )
-        } else {
-            (
-                Style::default().fg(theme.button),
-                Style::default().fg(theme.border),
-            )
-        };
-        f.render_widget(
-            Paragraph::new(label.as_str())
-                .alignment(Alignment::Center)
-                .style(text_style)
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .border_style(border_style),
-                ),
-            button_chunks[i],
-        );
+        render_button(f, button_chunks[i], label.as_str(), active, theme);
     }
+}
+
+fn render_default_dialog_button(
+    f: &mut Frame,
+    area: Rect,
+    label: &str,
+    active: bool,
+    theme: &DialogTheme,
+) {
+    let (text_style, border_style) = if active {
+        (
+            Style::default()
+                .fg(theme.button_active)
+                .add_modifier(Modifier::BOLD),
+            Style::default().fg(theme.border_active),
+        )
+    } else {
+        (
+            Style::default().fg(theme.button),
+            Style::default().fg(theme.border),
+        )
+    };
+    f.render_widget(
+        Paragraph::new(label)
+            .alignment(Alignment::Center)
+            .style(text_style)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(border_style),
+            ),
+        area,
+    );
 }
