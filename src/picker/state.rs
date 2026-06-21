@@ -46,6 +46,7 @@ pub struct PickerScope {
     /// editing this scope's value. Use it for scopes whose value is free-form
     /// (e.g. a row search) rather than a known candidate to complete toward.
     pub suppress_value_completion: bool,
+    pub replace_value_with_completion: bool,
 }
 
 impl PickerScope {
@@ -63,6 +64,7 @@ impl PickerScope {
             value_token_limit: None,
             command_argument: PickerCommandArgument::None,
             suppress_value_completion: false,
+            replace_value_with_completion: false,
         }
     }
 
@@ -106,6 +108,11 @@ impl PickerScope {
         self
     }
 
+    pub fn with_value_replacement_completion(mut self) -> Self {
+        self.replace_value_with_completion = true;
+        self
+    }
+
     fn matches_token(&self, token: &str) -> bool {
         self.token == token || self.aliases.iter().any(|alias| alias == token)
     }
@@ -131,7 +138,7 @@ impl PickerScope {
             }
         }
 
-        Some(entry.label.as_str())
+        Some(default_completion_value(entry))
     }
 }
 
@@ -770,6 +777,13 @@ impl<M> PickerData<M> {
             }
         }
 
+        if let Some((text, cursor)) = self.scoped_value_completion_replacement() {
+            self.input.set_text(text);
+            self.input.set_cursor_position(cursor);
+            self.refresh_filter();
+            return TextInputEventOutcome::Handled;
+        }
+
         let outcome = self.input.accept_suggestion_suffix();
         if matches!(outcome, TextInputEventOutcome::Handled) {
             self.refresh_filter();
@@ -851,6 +865,13 @@ impl<M> PickerData<M> {
         } else {
             self.input.clear_suggestion_suffix();
         }
+    }
+
+    fn scoped_value_completion_replacement(&self) -> Option<(String, usize)> {
+        let query = self.input.text();
+        let cursor = self.input.cursor_position();
+        let entry = self.selected_entry()?;
+        replacement_for_active_scoped_value(&query, cursor, &self.scopes, entry)
     }
 
     fn rebuild_search_cache(&mut self) {
@@ -975,6 +996,13 @@ struct QuerySegment<'a> {
     kind: QuerySegmentKind<'a>,
     text: String,
     terms: Vec<QueryTerm>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct QueryTokenSpan {
+    text: String,
+    start_char: usize,
+    end_char: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -1114,17 +1142,13 @@ impl<'a> ParsedQuery<'a> {
         if cursor_chars == self.query_char_len {
             if let Some(QuerySegment {
                 kind: QuerySegmentKind::Scoped { scope, .. },
-                text,
                 ..
             }) = self.segments.last()
             {
-                let completed_required_argument =
-                    scope.command_argument == PickerCommandArgument::Required
-                        && self.ends_with_whitespace;
-                if scope.suppress_value_completion
-                    && !text.is_empty()
-                    && !completed_required_argument
-                {
+                let completed_required_argument = scope.command_argument
+                    == PickerCommandArgument::Required
+                    && self.ends_with_whitespace;
+                if scope.suppress_value_completion && !completed_required_argument {
                     return None;
                 }
             }
@@ -1133,9 +1157,9 @@ impl<'a> ParsedQuery<'a> {
         let Some(segment) = self.trailing_active_segment(cursor_chars) else {
             if cursor_chars == self.query_char_len
                 && self.query_char_len == 0
-                && !entry.label.is_empty()
+                && !default_completion_value(entry).is_empty()
             {
-                return Some(entry.label.clone());
+                return Some(default_completion_value(entry).to_string());
             }
 
             if cursor_chars == self.query_char_len
@@ -1144,15 +1168,15 @@ impl<'a> ParsedQuery<'a> {
                     .segments
                     .iter()
                     .any(|segment| matches!(segment.kind, QuerySegmentKind::Scoped { .. }))
-                && !entry.label.is_empty()
+                && !default_completion_value(entry).is_empty()
             {
-                return Some(entry.label.clone());
+                return Some(default_completion_value(entry).to_string());
             }
 
             return None;
         };
         let candidate = match &segment.kind {
-            QuerySegmentKind::Default => entry.label.as_str(),
+            QuerySegmentKind::Default => default_completion_value(entry),
             QuerySegmentKind::Scoped { scope, .. } => scope.completion_value(entry)?,
         };
 
@@ -1247,6 +1271,135 @@ fn push_default_segment<'a>(segments: &mut Vec<QuerySegment<'a>>, text: String) 
             text.trim().to_string(),
         ));
     }
+}
+
+fn default_completion_value(entry: &PickerEntry) -> &str {
+    entry
+        .fields
+        .iter()
+        .find(|field| field.key == "completion")
+        .map(|field| field.value.as_str())
+        .unwrap_or(entry.label.as_str())
+}
+
+fn replacement_for_active_scoped_value(
+    query: &str,
+    cursor_chars: usize,
+    scopes: &[PickerScope],
+    entry: &PickerEntry,
+) -> Option<(String, usize)> {
+    let query_char_len = query.chars().count();
+    if cursor_chars != query_char_len {
+        return None;
+    }
+
+    let tokens = query_token_spans(query);
+    let mut index = 0usize;
+    let mut active_replacement = None;
+
+    while index < tokens.len() {
+        let token = &tokens[index];
+        let Some(command) = token
+            .text
+            .strip_prefix('%')
+            .filter(|command| !command.is_empty())
+        else {
+            index += 1;
+            continue;
+        };
+        let Some(scope) = scopes.iter().find(|scope| scope.matches_token(command)) else {
+            index += 1;
+            continue;
+        };
+
+        index += 1;
+        let mut value_start = token.end_char;
+        let mut value_end = cursor_chars;
+        if scope.command_argument == PickerCommandArgument::Required
+            && index < tokens.len()
+            && !tokens[index].text.starts_with('%')
+        {
+            value_start = tokens[index].start_char;
+            index += 1;
+        } else if scope.command_argument == PickerCommandArgument::None
+            && index < tokens.len()
+            && !tokens[index].text.starts_with('%')
+        {
+            value_start = tokens[index].start_char;
+        }
+
+        while index < tokens.len() && !tokens[index].text.starts_with('%') {
+            value_end = tokens[index].end_char;
+            index += 1;
+        }
+
+        if index == tokens.len() {
+            active_replacement = Some((scope, value_start, value_end.max(cursor_chars)));
+        }
+    }
+
+    let (scope, start, end) = active_replacement?;
+    if !scope.replace_value_with_completion {
+        return None;
+    }
+
+    let candidate = scope.completion_value(entry)?.trim();
+    if candidate.is_empty() {
+        return None;
+    }
+
+    let replacement = if start == end || query_char_slice(query, start, end).trim().is_empty() {
+        format!(" {}", candidate)
+    } else {
+        candidate.to_string()
+    };
+    let updated = replace_query_char_range(query, start, end, &replacement);
+    let cursor = start + replacement.chars().count();
+
+    Some((updated, cursor))
+}
+
+fn query_token_spans(query: &str) -> Vec<QueryTokenSpan> {
+    let chars = query.chars().collect::<Vec<_>>();
+    let mut tokens = Vec::new();
+    let mut index = 0usize;
+
+    while index < chars.len() {
+        while index < chars.len() && chars[index].is_whitespace() {
+            index += 1;
+        }
+        if index >= chars.len() {
+            break;
+        }
+
+        let start = index;
+        while index < chars.len() && !chars[index].is_whitespace() {
+            index += 1;
+        }
+        let end = index;
+        tokens.push(QueryTokenSpan {
+            text: chars[start..end].iter().collect(),
+            start_char: start,
+            end_char: end,
+        });
+    }
+
+    tokens
+}
+
+fn query_char_slice(query: &str, start: usize, end: usize) -> String {
+    query.chars().skip(start).take(end - start).collect()
+}
+
+fn replace_query_char_range(query: &str, start: usize, end: usize, replacement: &str) -> String {
+    let chars = query.chars().collect::<Vec<_>>();
+    let start = start.min(chars.len());
+    let end = end.min(chars.len()).max(start);
+    let mut updated = String::new();
+    updated.extend(chars[..start].iter());
+    updated.push_str(replacement);
+    updated.extend(chars[end..].iter());
+    updated
 }
 
 fn command_specs_for_scopes(scopes: &[PickerScope]) -> Vec<PickerCommandSpec> {
@@ -1529,6 +1682,15 @@ mod tests {
     }
 
     #[test]
+    fn default_inline_suffix_prefers_completion_field() {
+        let entries = vec![PickerEntry::new("very long database row label", vec![])
+            .with_fields(vec![PickerField::new("completion", "very long database...")])];
+        let picker = PickerData::<()>::with_entries(entries);
+
+        assert_eq!(picker.input.suggestion_suffix(), Some("very long database..."));
+    }
+
+    #[test]
     fn empty_query_exposes_selected_entry_as_initial_suffix() {
         let picker = build_picker();
 
@@ -1767,6 +1929,7 @@ mod tests {
         picker.set_scopes(vec![
             PickerScope::new("target", "Target", vec!["target".to_string()])
                 .with_completion_key("target")
+                .with_command_argument()
                 .with_suppressed_value_completion(),
         ]);
 
@@ -1775,10 +1938,10 @@ mod tests {
         picker.refresh_filter();
         assert_eq!(picker.input.suggestion_suffix(), None);
 
-        // Trailing space after the value is still suppressed.
+        // Trailing space after a required argument starts final-option completion.
         picker.input.set_text("%target customer_id ".to_string());
         picker.refresh_filter();
-        assert_eq!(picker.input.suggestion_suffix(), None);
+        assert_eq!(picker.input.suggestion_suffix(), Some("customer:1"));
 
         // The bare scope token (no value yet) still completes.
         picker.input.set_text("%target ".to_string());
@@ -1804,6 +1967,56 @@ mod tests {
         picker.refresh_filter();
 
         assert_eq!(picker.input.suggestion_suffix(), Some("customer:1"));
+    }
+
+    #[test]
+    fn replacement_scope_autocomplete_replaces_freeform_value() {
+        let entries = vec![PickerEntry::new("customer:3", vec![]).with_fields(vec![
+            PickerField::new("record_id", "3"),
+            PickerField::new("data", "Acme Bratislava"),
+        ])];
+        let mut picker = PickerData::<()>::with_entries(entries);
+        picker.set_scopes(vec![
+            PickerScope::new("data", "Data", vec!["data".to_string()])
+                .with_completion_key("record_id")
+                .with_suppressed_value_completion()
+                .with_value_replacement_completion(),
+        ]);
+
+        picker.input.set_text("%data Acme".to_string());
+        picker.refresh_filter();
+
+        assert_eq!(picker.input.suggestion_suffix(), None);
+        assert_eq!(picker.autocomplete_selected(), TextInputEventOutcome::Handled);
+        assert_eq!(picker.input.text(), "%data 3");
+    }
+
+    #[test]
+    fn replacement_scope_autocomplete_preserves_previous_scopes() {
+        let entries = vec![PickerEntry::new("customer:3", vec![]).with_fields(vec![
+            PickerField::new("record_id", "3"),
+            PickerField::new("target", "customer_id"),
+            PickerField::new("data", "Acme Bratislava"),
+        ])];
+        let mut picker = PickerData::<()>::with_entries(entries);
+        picker.set_scopes(vec![
+            PickerScope::new("target", "Target", vec!["target".to_string()])
+                .with_completion_key("target")
+                .with_command_argument()
+                .with_suppressed_value_completion(),
+            PickerScope::new("data", "Data", vec!["data".to_string()])
+                .with_completion_key("record_id")
+                .with_suppressed_value_completion()
+                .with_value_replacement_completion(),
+        ]);
+
+        picker
+            .input
+            .set_text("%target customer_id %data Acme".to_string());
+        picker.refresh_filter();
+
+        assert_eq!(picker.autocomplete_selected(), TextInputEventOutcome::Handled);
+        assert_eq!(picker.input.text(), "%target customer_id %data 3");
     }
 
     #[test]
