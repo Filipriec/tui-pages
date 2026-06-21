@@ -637,6 +637,11 @@ impl<M> PickerData<M> {
         self.apply_selection_change();
     }
 
+    pub fn set_selected_filtered_index(&mut self, filtered_index: Option<usize>) {
+        self.selected_filtered_index = filtered_index;
+        self.apply_selection_change();
+    }
+
     pub fn push_char(&mut self, ch: char) {
         self.input.enter_edit_mode();
         let _ = self.input.insert_char(ch);
@@ -1537,6 +1542,62 @@ mod tests {
         assert_eq!(outcome, TextInputEventOutcome::Handled);
         assert_eq!(picker.input.text(), "invoice");
         assert_eq!(picker.input.suggestion_suffix(), None);
+    }
+
+    #[test]
+    fn moving_selection_updates_inline_suffix() {
+        let entries = vec![PickerEntry::new("apple", vec![]), PickerEntry::new("ananas", vec![])];
+        let mut picker = PickerData::<()>::with_entries(entries);
+        picker.input.set_text("a");
+        picker.refresh_filter();
+
+        assert_eq!(picker.input.suggestion_suffix(), Some("pple"));
+
+        picker.move_down();
+
+        assert_eq!(
+            picker.selected_entry().map(|entry| entry.label.as_str()),
+            Some("ananas")
+        );
+        assert_eq!(picker.input.suggestion_suffix(), Some("nanas"));
+    }
+
+    #[test]
+    fn setting_filtered_selection_updates_inline_suffix() {
+        let entries = vec![PickerEntry::new("apple", vec![]), PickerEntry::new("ananas", vec![])];
+        let mut picker = PickerData::<()>::with_entries(entries);
+        picker.input.set_text("a");
+        picker.refresh_filter();
+
+        picker.set_selected_filtered_index(Some(1));
+
+        assert_eq!(
+            picker.selected_entry().map(|entry| entry.label.as_str()),
+            Some("ananas")
+        );
+        assert_eq!(picker.input.suggestion_suffix(), Some("nanas"));
+    }
+
+    #[test]
+    fn deleting_accepted_completion_recomputes_inline_suffix() {
+        let entries = vec![PickerEntry::new("apple", vec![]), PickerEntry::new("ananas", vec![])];
+        let mut picker = PickerData::<()>::with_entries(entries);
+        picker.input.set_text("app");
+        picker.refresh_filter();
+
+        assert_eq!(picker.autocomplete_selected(), TextInputEventOutcome::Handled);
+        assert_eq!(picker.input.text(), "apple");
+
+        for _ in 0..4 {
+            picker.pop_char();
+        }
+
+        assert_eq!(picker.input.text(), "a");
+        assert_eq!(picker.input.suggestion_suffix(), Some("pple"));
+
+        picker.move_down();
+
+        assert_eq!(picker.input.suggestion_suffix(), Some("nanas"));
     }
 
     #[test]
