@@ -1105,7 +1105,7 @@ impl<'a> ParsedQuery<'a> {
     ) -> Option<String> {
         // A scope can opt out of inline value completion (e.g. a free-form row
         // search). Suppress the suffix while the cursor is editing such a
-        // scope's non-empty value, including a trailing space after it.
+        // scope's non-empty value.
         if cursor_chars == self.query_char_len {
             if let Some(QuerySegment {
                 kind: QuerySegmentKind::Scoped { scope, .. },
@@ -1113,7 +1113,13 @@ impl<'a> ParsedQuery<'a> {
                 ..
             }) = self.segments.last()
             {
-                if scope.suppress_value_completion && !text.is_empty() {
+                let completed_required_argument =
+                    scope.command_argument == PickerCommandArgument::Required
+                        && self.ends_with_whitespace;
+                if scope.suppress_value_completion
+                    && !text.is_empty()
+                    && !completed_required_argument
+                {
                     return None;
                 }
             }
@@ -1683,6 +1689,26 @@ mod tests {
         picker.input.set_text("%target ".to_string());
         picker.refresh_filter();
         assert_eq!(picker.input.suggestion_suffix(), Some("customer_id"));
+    }
+
+    #[test]
+    fn suppressed_required_scope_allows_option_suffix_after_argument_space() {
+        let entries = vec![
+            PickerEntry::new("customer:1", vec![])
+                .with_fields(vec![PickerField::new("target", "customer_id")]),
+        ];
+        let mut picker = PickerData::<()>::with_entries(entries);
+        picker.set_scopes(vec![
+            PickerScope::new("target", "Target", vec!["target".to_string()])
+                .with_completion_key("target")
+                .with_command_argument()
+                .with_suppressed_value_completion(),
+        ]);
+
+        picker.input.set_text("%target customer_id ".to_string());
+        picker.refresh_filter();
+
+        assert_eq!(picker.input.suggestion_suffix(), Some("customer:1"));
     }
 
     #[test]
