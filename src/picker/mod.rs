@@ -25,9 +25,14 @@
 //! [`PickerFieldWeights::with_override`] and
 //! [`PickerData::with_field_weights`].
 
+mod query;
 mod state;
 mod ui;
 
+pub use query::{
+    PickerCommandArgument, PickerCommandClause, PickerCommandQuery, PickerCommandSpec,
+    parse_picker_command_query, parse_picker_command_query_with_specs,
+};
 pub use state::{
     PickerData, PickerEntry, PickerField, PickerFieldWeights, PickerHead, PickerHeadColumn,
     PickerHeadColumnBuilder, PickerInputProvider, PickerLayout, PickerScope,

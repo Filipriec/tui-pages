@@ -12,6 +12,7 @@ use crate::canvas::{
     DataProvider, SuggestionItem, SuggestionQuery, SuggestionTrigger, TextInputDataProvider,
     TextInputEventOutcome, TextInputState,
 };
+use super::query::{PickerCommandArgument, PickerCommandQuery, PickerCommandSpec};
 use nucleo::{
     Config as NucleoConfig, Matcher, Utf32String,
     pattern::{CaseMatching, Normalization, Pattern},
@@ -40,6 +41,7 @@ pub struct PickerScope {
     pub field_keys: Vec<String>,
     pub completion_key: Option<String>,
     pub value_token_limit: Option<usize>,
+    pub command_argument: PickerCommandArgument,
     /// When set, the inline completion suffix is suppressed while the cursor is
     /// editing this scope's value. Use it for scopes whose value is free-form
     /// (e.g. a row search) rather than a known candidate to complete toward.
@@ -59,6 +61,7 @@ impl PickerScope {
             field_keys,
             completion_key: None,
             value_token_limit: None,
+            command_argument: PickerCommandArgument::None,
             suppress_value_completion: false,
         }
     }
@@ -79,6 +82,21 @@ impl PickerScope {
 
     pub fn with_value_token_limit(mut self, limit: usize) -> Self {
         self.value_token_limit = Some(limit);
+        if limit == 1 {
+            self.command_argument = PickerCommandArgument::Required;
+        }
+        self
+    }
+
+    pub fn with_command_argument(mut self) -> Self {
+        self.command_argument = PickerCommandArgument::Required;
+        self.value_token_limit = Some(1);
+        self
+    }
+
+    pub fn without_command_argument(mut self) -> Self {
+        self.command_argument = PickerCommandArgument::None;
+        self.value_token_limit = None;
         self
     }
 
@@ -445,6 +463,45 @@ fn sanitize_picker_input(text: String) -> String {
         .collect()
 }
 
+// Experimental picker-query whitespace normalization. Keep this isolated so the
+// behavior can be removed if command-query editing should return to raw input.
+fn normalize_picker_input_whitespace_experimental(text: &str, cursor: usize) -> (String, usize) {
+    let normalized = normalize_picker_input_text_whitespace_experimental(text);
+    let prefix = text.chars().take(cursor).collect::<String>();
+    let normalized_cursor = normalize_picker_input_text_whitespace_experimental(&prefix)
+        .chars()
+        .count()
+        .min(normalized.chars().count());
+
+    (normalized, normalized_cursor)
+}
+
+fn normalize_picker_input_text_whitespace_experimental(text: &str) -> String {
+    let mut normalized = String::new();
+    let mut pending_separator = false;
+
+    for ch in text.chars() {
+        if ch.is_whitespace() {
+            if !normalized.is_empty() {
+                pending_separator = true;
+            }
+            continue;
+        }
+
+        if pending_separator {
+            normalized.push(' ');
+            pending_separator = false;
+        }
+        normalized.push(ch);
+    }
+
+    if pending_separator && !normalized.is_empty() {
+        normalized.push(' ');
+    }
+
+    normalized
+}
+
 impl<M> PickerData<M> {
     pub fn new() -> Self {
         Self::default()
@@ -606,6 +663,7 @@ impl<M> PickerData<M> {
     }
 
     pub fn refresh_filter(&mut self) {
+        self.normalize_input_whitespace_experimental();
         self.apply_query_change();
     }
 
@@ -724,6 +782,17 @@ impl<M> PickerData<M> {
     fn apply_selection_change(&mut self) {
         self.normalize_selection();
         self.recompute_inline_suggestion();
+    }
+
+    fn normalize_input_whitespace_experimental(&mut self) {
+        let text = self.input.text();
+        let cursor = self.input.cursor_position();
+        let (normalized, normalized_cursor) =
+            normalize_picker_input_whitespace_experimental(&text, cursor);
+        if normalized != text {
+            self.input.set_text(normalized);
+            self.input.set_cursor_position(normalized_cursor);
+        }
     }
 
     fn rebuild_filtered_indices(&mut self) {
@@ -881,14 +950,6 @@ impl<M: std::fmt::Debug> std::fmt::Debug for PickerData<M> {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-struct QueryToken<'a> {
-    text: &'a str,
-    byte_start: usize,
-    byte_end: usize,
-    char_end: usize,
-}
-
 #[derive(Debug, Clone)]
 struct QueryTerm {
     text: String,
@@ -953,49 +1014,37 @@ struct ParsedQuery<'a> {
 
 impl<'a> ParsedQuery<'a> {
     fn parse(query: &'a str, scopes: &'a [PickerScope]) -> Self {
-        let tokens = tokenize_query(query);
         let mut segments = Vec::new();
-        let mut default_tokens: Vec<QueryToken<'a>> = Vec::new();
-        let mut pending_scope: Option<PendingScope<'a>> = None;
         let query_char_len = query.chars().count();
+        let command_specs = command_specs_for_scopes(scopes);
+        let parsed = PickerCommandQuery::parse_with_specs(query, &command_specs);
 
-        for token in tokens {
-            if let Some(scope_name) = token.text.strip_prefix('%') {
-                if let Some(scope) = scopes.iter().find(|scope| scope.matches_token(scope_name)) {
-                    if let Some(pending) = pending_scope.take() {
-                        segments.push(pending.finish(query));
-                    }
-                    if !default_tokens.is_empty() {
-                        segments.push(QuerySegment::from_default(query, &default_tokens));
-                        default_tokens.clear();
-                    }
+        for clause in parsed.clauses() {
+            let Some(command) = clause.command() else {
+                push_default_segment(&mut segments, clause.selection_query_text());
+                continue;
+            };
 
-                    pending_scope = Some(PendingScope::new(scope, token.char_end));
-                    continue;
+            let Some(scope) = scopes.iter().find(|scope| scope.matches_token(command)) else {
+                let mut text = format!("%{}", command);
+                let terms = clause.terms();
+                if !terms.is_empty() {
+                    text.push(' ');
+                    text.push_str(&terms.join(" "));
                 }
+                push_default_segment(&mut segments, text);
+                continue;
+            };
+
+            let scoped_text = match scope.command_argument {
+                PickerCommandArgument::Required => clause.argument_or_empty().to_string(),
+                PickerCommandArgument::None => clause.selection_query_text(),
+            };
+            segments.push(QuerySegment::from_scoped_text(scope, scoped_text));
+
+            if scope.command_argument == PickerCommandArgument::Required {
+                push_default_segment(&mut segments, clause.selection_query_text());
             }
-
-            if let Some(pending) = pending_scope.as_mut() {
-                if pending.accepts_more_values() {
-                    pending.push_value_token(token);
-                } else {
-                    let pending = pending_scope
-                        .take()
-                        .expect("pending scope should exist after mutable borrow");
-                    segments.push(pending.finish(query));
-                    default_tokens.push(token);
-                }
-            } else {
-                default_tokens.push(token);
-            }
-        }
-
-        if let Some(pending) = pending_scope {
-            segments.push(pending.finish(query));
-        }
-
-        if !default_tokens.is_empty() {
-            segments.push(QuerySegment::from_default(query, &default_tokens));
         }
 
         Self {
@@ -1149,75 +1198,47 @@ impl<'a> ParsedQuery<'a> {
     }
 }
 
-#[derive(Debug, Clone)]
-struct PendingScope<'a> {
-    scope: &'a PickerScope,
-    scope_token_char_end: usize,
-    value_tokens: Vec<QueryToken<'a>>,
-}
-
-impl<'a> PendingScope<'a> {
-    fn new(scope: &'a PickerScope, scope_token_char_end: usize) -> Self {
-        Self {
-            scope,
-            scope_token_char_end,
-            value_tokens: Vec::new(),
-        }
-    }
-
-    fn push_value_token(&mut self, token: QueryToken<'a>) {
-        self.value_tokens.push(token);
-    }
-
-    fn accepts_more_values(&self) -> bool {
-        self.scope
-            .value_token_limit
-            .is_none_or(|limit| self.value_tokens.len() < limit)
-    }
-
-    fn finish(self, query: &str) -> QuerySegment<'a> {
-        let text = if let (Some(first), Some(last)) =
-            (self.value_tokens.first(), self.value_tokens.last())
-        {
-            query[first.byte_start..last.byte_end].trim().to_string()
-        } else {
-            String::new()
-        };
-
-        QuerySegment {
-            kind: QuerySegmentKind::Scoped {
-                scope: self.scope,
-                scope_token_char_end: self.scope_token_char_end,
-            },
-            terms: split_terms(&text),
-            text,
-        }
-    }
-}
-
 impl<'a> QuerySegment<'a> {
-    fn from_default(query: &str, tokens: &[QueryToken<'a>]) -> Self {
-        let first = tokens.first().expect("default segment needs tokens");
-        let last = tokens.last().expect("default segment needs tokens");
-        let text = query[first.byte_start..last.byte_end].trim().to_string();
-
+    fn from_text(kind: QuerySegmentKind<'a>, text: String) -> Self {
         Self {
-            kind: QuerySegmentKind::Default,
+            kind,
             terms: split_terms(&text),
             text,
         }
     }
 
-    fn from_scoped_value(scope: &'a PickerScope, text: String) -> Self {
-        Self {
-            kind: QuerySegmentKind::Scoped {
+    fn from_scoped_text(scope: &'a PickerScope, text: String) -> Self {
+        Self::from_text(
+            QuerySegmentKind::Scoped {
                 scope,
                 scope_token_char_end: 0,
             },
-            terms: split_terms(&text),
             text,
-        }
+        )
     }
+
+    fn from_scoped_value(scope: &'a PickerScope, text: String) -> Self {
+        Self::from_scoped_text(scope, text)
+    }
+}
+
+fn push_default_segment<'a>(segments: &mut Vec<QuerySegment<'a>>, text: String) {
+    if !text.trim().is_empty() {
+        segments.push(QuerySegment::from_text(
+            QuerySegmentKind::Default,
+            text.trim().to_string(),
+        ));
+    }
+}
+
+fn command_specs_for_scopes(scopes: &[PickerScope]) -> Vec<PickerCommandSpec> {
+    scopes
+        .iter()
+        .map(|scope| {
+            PickerCommandSpec::new(scope.token.clone(), scope.command_argument)
+                .with_aliases(scope.aliases.clone())
+        })
+        .collect()
 }
 
 impl QuerySegment<'_> {
@@ -1380,40 +1401,6 @@ fn case_insensitive_prefix_boundary(candidate: &str, typed: &str) -> Option<usiz
     }
 
     None
-}
-
-fn tokenize_query(query: &str) -> Vec<QueryToken<'_>> {
-    let mut tokens = Vec::new();
-    let mut token_byte_start = None;
-    let mut char_pos = 0usize;
-
-    for (byte_idx, ch) in query.char_indices() {
-        if ch.is_whitespace() {
-            if let Some(start) = token_byte_start.take() {
-                tokens.push(QueryToken {
-                    text: &query[start..byte_idx],
-                    byte_start: start,
-                    byte_end: byte_idx,
-                    char_end: char_pos,
-                });
-            }
-        } else if token_byte_start.is_none() {
-            token_byte_start = Some(byte_idx);
-        }
-
-        char_pos += 1;
-    }
-
-    if let Some(start) = token_byte_start {
-        tokens.push(QueryToken {
-            text: &query[start..],
-            byte_start: start,
-            byte_end: query.len(),
-            char_end: char_pos,
-        });
-    }
-
-    tokens
 }
 
 #[cfg(test)]
@@ -1593,6 +1580,38 @@ mod tests {
         picker.refresh_filter();
 
         assert_eq!(picker.input.suggestion_suffix(), Some("finance"));
+
+        let outcome = picker.autocomplete_selected();
+
+        assert_eq!(outcome, TextInputEventOutcome::Handled);
+        assert_eq!(picker.input.text(), "%profile finance");
+    }
+
+    #[test]
+    fn refresh_filter_experimentally_normalizes_picker_query_spaces() {
+        let mut picker = build_picker();
+        picker.input.set_text("  invoice   %profile   finance  ");
+        picker.refresh_filter();
+
+        assert_eq!(picker.input.text(), "invoice %profile finance ");
+    }
+
+    #[test]
+    fn experimental_space_normalization_keeps_cursor_in_logical_position() {
+        let mut picker = build_picker();
+        picker.input.set_text("invoice  %profile");
+        picker.input.set_cursor_position(9);
+        picker.refresh_filter();
+
+        assert_eq!(picker.input.text(), "invoice %profile");
+        assert_eq!(picker.input.cursor_position(), 8);
+    }
+
+    #[test]
+    fn autocomplete_after_extra_spaces_uses_normalized_query() {
+        let mut picker = build_picker();
+        picker.input.set_text("%profile  ");
+        picker.refresh_filter();
 
         let outcome = picker.autocomplete_selected();
 
