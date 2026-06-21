@@ -1132,6 +1132,13 @@ impl<'a> ParsedQuery<'a> {
 
         let Some(segment) = self.trailing_active_segment(cursor_chars) else {
             if cursor_chars == self.query_char_len
+                && self.query_char_len == 0
+                && !entry.label.is_empty()
+            {
+                return Some(entry.label.clone());
+            }
+
+            if cursor_chars == self.query_char_len
                 && self.ends_with_whitespace
                 && self
                     .segments
@@ -1522,6 +1529,17 @@ mod tests {
     }
 
     #[test]
+    fn empty_query_exposes_selected_entry_as_initial_suffix() {
+        let picker = build_picker();
+
+        assert_eq!(
+            picker.selected_entry().map(|entry| entry.label.as_str()),
+            Some("invoice")
+        );
+        assert_eq!(picker.input.suggestion_suffix(), Some("invoice"));
+    }
+
+    #[test]
     fn inline_suffix_uses_unicode_boundary_after_case_folded_prefix() {
         let entries = vec![PickerEntry::new("İstanbul", vec![])];
         let mut picker = PickerData::<()>::with_entries(entries);
@@ -1560,6 +1578,22 @@ mod tests {
             Some("ananas")
         );
         assert_eq!(picker.input.suggestion_suffix(), Some("nanas"));
+    }
+
+    #[test]
+    fn moving_selection_updates_initial_inline_suffix() {
+        let entries = vec![PickerEntry::new("apple", vec![]), PickerEntry::new("ananas", vec![])];
+        let mut picker = PickerData::<()>::with_entries(entries);
+
+        assert_eq!(picker.input.suggestion_suffix(), Some("apple"));
+
+        picker.move_down();
+
+        assert_eq!(
+            picker.selected_entry().map(|entry| entry.label.as_str()),
+            Some("ananas")
+        );
+        assert_eq!(picker.input.suggestion_suffix(), Some("ananas"));
     }
 
     #[test]
