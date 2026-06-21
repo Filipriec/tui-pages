@@ -269,7 +269,7 @@ fn render_query_line<M>(
 fn render_results_list<M>(f: &mut Frame, area: Rect, theme: &PickerTheme, picker: &PickerData<M>) {
     let mut list_inner = area.inner(Margin {
         horizontal: 1,
-        vertical: 1,
+        vertical: 0,
     });
     if list_inner.width == 0 || list_inner.height == 0 {
         return;
