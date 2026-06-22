@@ -599,7 +599,20 @@ where
     T: CanvasTheme,
     D: DataProvider,
 {
-    ::canvas::render_canvas(frame, area, editor, theme)
+    render_canvas_without_cursor(frame, area, editor, theme)
+}
+
+pub fn render_canvas_without_cursor<T, D>(
+    frame: &mut Frame,
+    area: Rect,
+    editor: &FormEditor<D>,
+    theme: &T,
+) -> Option<Rect>
+where
+    T: CanvasTheme,
+    D: DataProvider,
+{
+    ::canvas::render_canvas_without_cursor(frame, area, editor, theme)
 }
 
 pub fn render_canvas_with_options<T, D>(
@@ -627,7 +640,21 @@ where
     T: CanvasTheme,
     D: DataProvider,
 {
-    ::canvas::render_canvas_with_options(frame, area, editor, theme, opts)
+    render_canvas_with_options_without_cursor(frame, area, editor, theme, opts)
+}
+
+pub fn render_canvas_with_options_without_cursor<T, D>(
+    frame: &mut Frame,
+    area: Rect,
+    editor: &FormEditor<D>,
+    theme: &T,
+    opts: CanvasDisplayOptions,
+) -> Option<Rect>
+where
+    T: CanvasTheme,
+    D: DataProvider,
+{
+    ::canvas::render_canvas_with_options_without_cursor(frame, area, editor, theme, opts)
 }
 
 pub fn render_canvas_default<D>(

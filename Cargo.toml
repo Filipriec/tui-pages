@@ -1,6 +1,6 @@
 [package]
 name = "tui-pages"
-# version = "0.8.5"
+# version = "0.8.12"
 version.workspace = true
 edition.workspace = true
 license = "MIT"
@@ -20,7 +20,7 @@ crossterm = { workspace = true }
 serde  = { workspace = true, optional = true }
 toml = { workspace = true }
 tracing = { workspace = true }
-canvas = { path = "../tui-canvas", package = "tui-canvas", version = "0.8.11", optional = true }
+canvas = { path = "../tui-canvas", package = "tui-canvas", version = "0.8.12", optional = true }
 nucleo = { workspace = true, optional = true }
 unicode-width = { workspace = true, optional = true }
 

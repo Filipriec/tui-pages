@@ -32,6 +32,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Picker value-replacement autocomplete preserves previous scope clauses in multi-scope queries
 - Cursor behavior made terminal-agnostic, avoiding visibility inconsistencies across terminals
 
+## [0.8.12] - 2026-06-22
+
+### Changed
+
+- **Canvas render functions now render without cursor by default**: `render_canvas()` and `render_canvas_with_options()` no longer draw the canvas-owned cursor cell — they delegate to the new `_without_cursor` variants; callers that need cursor rendering should use the upstream `tui-canvas` functions directly or handle cursor management themselves
+- Added `render_canvas_without_cursor()` and `render_canvas_with_options_without_cursor()` as explicit public wrappers for rendering without canvas cursor cells
+
 ## [Unreleased]
 
 ### Added
@@ -193,6 +200,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial port from the client library
 - Core TUI multi-page navigation system
 
+[0.8.12]: https://gitlab.com/filipriec/tui-pages/-/compare/v0.8.11...v0.8.12
 [0.8.11]: https://gitlab.com/filipriec/tui-pages/-/compare/v0.8.10...v0.8.11
 [0.8.10]: https://gitlab.com/filipriec/tui-pages/-/compare/v0.8.9...v0.8.10
 [0.8.9]: https://gitlab.com/filipriec/tui-pages/-/compare/v0.8.8...v0.8.9
@@ -201,7 +209,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [0.8.5]: https://gitlab.com/filipriec/tui-pages/-/compare/v0.8.4...v0.8.5
 [0.8.4]: https://gitlab.com/filipriec/tui-pages/-/compare/v0.8.3...v0.8.4
 [0.8.3]: https://gitlab.com/filipriec/tui-pages/-/compare/v0.8.2...v0.8.3
-[Unreleased]: https://gitlab.com/filipriec/tui-pages/-/compare/v0.8.11...HEAD
+[Unreleased]: https://gitlab.com/filipriec/tui-pages/-/compare/v0.8.12...HEAD
 [0.8.2]: https://gitlab.com/filipriec/tui-pages/-/compare/v0.8.1...v0.8.2
 [0.8.1]: https://gitlab.com/filipriec/tui-pages/-/compare/v0.7.5...v0.8.1
 [0.7.5]: https://gitlab.com/filipriec/tui-pages/-/compare/v0.7.4...v0.7.5
