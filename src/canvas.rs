@@ -729,9 +729,8 @@ pub fn update_cursor_style_for_mode(mode: AppMode) -> std::io::Result<()> {
 pub fn update_default_cursor_style(behavior: DefaultCursorBehavior) -> std::io::Result<()> {
     match behavior {
         DefaultCursorBehavior::Hidden => execute!(io::stdout(), crossterm::cursor::Hide),
-        DefaultCursorBehavior::Active { mode } => {
-            execute!(io::stdout(), crossterm::cursor::Show)?;
-            update_cursor_style_for_mode(mode)
+        DefaultCursorBehavior::Active { mode: _ } => {
+            execute!(io::stdout(), crossterm::cursor::Hide)
         }
         DefaultCursorBehavior::InactiveUnderscore => {
             execute!(io::stdout(), crossterm::cursor::Show)?;
