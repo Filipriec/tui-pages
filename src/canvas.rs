@@ -95,7 +95,7 @@ impl CanvasTheme for crate::ThemeStyles {
         self.text
     }
     fn input_active(&self) -> Style {
-        self.text.patch(self.cursorline).patch(self.text_focus)
+        self.text.patch(self.cursorline)
     }
     fn selection(&self) -> Style {
         self.selection
