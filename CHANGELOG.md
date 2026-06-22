@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.11] - 2026-06-22
+
+### Added
+- `DialogTheme::error_styled()` and `DialogTheme::success_styled()` — semantic error/success dialog themes using the `error` and `success` role colors from `ThemeStyles`, with background and button-active colors falling back to built-in defaults
+- `render_dialog_error()`, `render_dialog_success()`, `render_dialog_error_with_button_renderer()`, `render_dialog_success_with_button_renderer()` — convenience render functions for error- and success-styled dialogs, with and without custom button renderers
+- `PickerCommandQuery`, `PickerCommandClause`, `PickerCommandArgument`, `PickerCommandSpec` — structured command-query types for the picker, splitting input into scoped commands with typed arguments and selection queries
+- `parse_picker_command_query()` and `parse_picker_command_query_with_specs()` — public API for parsing picker command queries with optional command specs
+- `PickerScope::with_suppressed_value_completion()` — suppress value autocompletion for scopes where the typed value is already a known identifier
+- `PickerScope::with_value_replacement_completion()` — autocomplete replaces the freeform value text with the completion key value rather than appending as a suffix
+- `PickerScope::with_command_argument()` — mark a scope as requiring a command argument for accurate scope-boundary detection
+
+### Changed
+- **Picker query parsing refactored**: picker command parsing, scope-based autocomplete, and query handling moved into a new `src/picker/query.rs` module, replacing ad-hoc string splitting with the structured `PickerCommandQuery` parser
+- `ThemeRole::Selection` fallback chain now includes `ui.selection.primary` before `ui.selection` for improved Helix theme compatibility
+- `CanvasTheme` for `ThemeStyles`: `input_active()` no longer patches `text_focus` on top of `cursorline` — uses only `cursorline` for cleaner input highlight
+- `update_default_cursor_style()` for `Active` mode now hides the cursor instead of showing it, making cursor visibility terminal-agnostic
+- Picker results list vertical margin reduced from 1 to 0 for tighter rendering
+- Canvas dependency bumped to `0.8.11`
+- Error/success dialog render functions re-exported from crate root and prelude (behind `tui` feature)
+
+### Fixed
+- Selection highlight (`ui.selection.primary`) and normal text highlight resolved correctly for Helix-compatible themes
+- Cursor highlight on canvas input no longer double-patches with `text_focus`, fixing contrast issues
+- Picker autocomplete correctly handles suppressed-value scopes with optional suffix completion after argument-space boundaries
+- Picker value-replacement autocomplete preserves previous scope clauses in multi-scope queries
+- Cursor behavior made terminal-agnostic, avoiding visibility inconsistencies across terminals
+
 ## [Unreleased]
 
 ### Added
@@ -166,7 +193,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial port from the client library
 - Core TUI multi-page navigation system
 
-[Unreleased]: https://gitlab.com/filipriec/tui-pages/-/compare/v0.8.2...HEAD
+[0.8.11]: https://gitlab.com/filipriec/tui-pages/-/compare/v0.8.10...v0.8.11
+[0.8.10]: https://gitlab.com/filipriec/tui-pages/-/compare/v0.8.9...v0.8.10
+[0.8.9]: https://gitlab.com/filipriec/tui-pages/-/compare/v0.8.8...v0.8.9
+[0.8.8]: https://gitlab.com/filipriec/tui-pages/-/compare/v0.8.6...v0.8.8
+[0.8.6]: https://gitlab.com/filipriec/tui-pages/-/compare/v0.8.5...v0.8.6
+[0.8.5]: https://gitlab.com/filipriec/tui-pages/-/compare/v0.8.4...v0.8.5
+[0.8.4]: https://gitlab.com/filipriec/tui-pages/-/compare/v0.8.3...v0.8.4
+[0.8.3]: https://gitlab.com/filipriec/tui-pages/-/compare/v0.8.2...v0.8.3
+[Unreleased]: https://gitlab.com/filipriec/tui-pages/-/compare/v0.8.11...HEAD
 [0.8.2]: https://gitlab.com/filipriec/tui-pages/-/compare/v0.8.1...v0.8.2
 [0.8.1]: https://gitlab.com/filipriec/tui-pages/-/compare/v0.7.5...v0.8.1
 [0.7.5]: https://gitlab.com/filipriec/tui-pages/-/compare/v0.7.4...v0.7.5
