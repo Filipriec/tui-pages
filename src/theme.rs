@@ -527,7 +527,7 @@ impl ThemeRole {
             Self::TextInactive => &["ui.text.inactive", "ui.virtual", "comment"],
             Self::Muted => &["ui.linenr", "ui.virtual", "comment"],
             Self::LineNumberSelected => &["ui.linenr.selected", "ui.linenr", "ui.virtual", "comment"],
-            Self::Selection => &["ui.selection"],
+            Self::Selection => &["ui.selection.primary", "ui.selection"],
             Self::Menu => &["ui.menu", "ui.popup"],
             Self::MenuSelected => &["ui.menu.selected", "ui.selection"],
             Self::Window => &["ui.window"],
